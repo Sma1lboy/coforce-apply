@@ -3,6 +3,7 @@ import Discover from './tabs/Discover.jsx';
 import Board from './tabs/Board.jsx';
 import Profile from './tabs/Profile.jsx';
 import Instructions from './tabs/Instructions.jsx';
+import Settings from './tabs/Settings.jsx';
 import { api } from './lib/api.js';
 
 const TABS = [
@@ -10,6 +11,7 @@ const TABS = [
   ['profile', 'Profile'],
   ['board', 'Board'],
   ['instructions', 'Instructions'],
+  ['settings', '⚙ Settings'],
 ];
 
 export default function App() {
@@ -61,6 +63,16 @@ export default function App() {
         {tab === 'board' && <Board state={state} onChanged={reload} />}
         {tab === 'profile' && <Profile state={state} onChanged={reload} />}
         {tab === 'instructions' && <Instructions state={state} onChanged={reload} />}
+        {tab === 'settings' && (
+          <Settings
+            state={state}
+            onChanged={reload}
+            goWizard={() => {
+              sessionStorage.setItem('coforce-wizard', '1');
+              setTab('discover');
+            }}
+          />
+        )}
       </main>
     </div>
   );

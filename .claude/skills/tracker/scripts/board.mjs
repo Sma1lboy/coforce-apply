@@ -88,11 +88,14 @@ const applyLogsDir = () => {
 const APPLY_STATUS_RE = /COFORCE_STATUS:\s*(READY_TO_SUBMIT|SUBMITTED|FAILED)/g;
 
 function applyJobStatus(job) {
+  // judge only the CURRENT run's segment — old sentinels from before a
+  // confirm/retry must not leak into the new run's status
   const log = readText(job.logPath);
-  const marks = [...log.matchAll(APPLY_STATUS_RE)].map(m => m[1]);
+  const segment = log.split('[user confirmed — submitting]').at(-1);
+  const marks = [...segment.matchAll(APPLY_STATUS_RE)].map(m => m[1]);
   const last = marks.at(-1);
   if (last === 'SUBMITTED') return 'submitted';
-  if (last === 'FAILED') return 'failed';
+  if (last === 'FAILED') return job.exited ? 'failed' : 'running';
   if (last === 'READY_TO_SUBMIT' && !job.confirming) return 'awaiting_confirm';
   if (job.exited && !job.confirming) return last ? 'awaiting_confirm' : 'error';
   return 'running';
@@ -1443,6 +1446,29 @@ if (serve) {
       const job = applyJobs.get(req.url.split('/')[3]);
       if (job?.child && !job.exited) job.child.kill();
       res.writeHead(204).end();
+      return;
+    }
+    if (req.url === '/api/config' && req.method === 'GET') {
+      res.writeHead(200, { 'content-type': 'application/json' });
+      res.end(JSON.stringify(readJsonSafe(join(dataDir, 'apply-config.json')) ?? {}));
+      return;
+    }
+    if (req.url === '/api/config' && req.method === 'POST') {
+      let body = '';
+      req.on('data', chunk => { body += chunk; });
+      req.on('end', () => {
+        try {
+          const patch = JSON.parse(body);
+          if (!patch || typeof patch !== 'object' || Array.isArray(patch))
+            throw new Error('expected a JSON object');
+          const merged = { ...(readJsonSafe(join(dataDir, 'apply-config.json')) ?? {}), ...patch };
+          writeFileSync(join(dataDir, 'apply-config.json'), `${JSON.stringify(merged, null, 2)}\n`);
+          res.writeHead(204).end();
+        } catch (err) {
+          res.writeHead(400, { 'content-type': 'text/plain' });
+          res.end(String(err.message));
+        }
+      });
       return;
     }
     if (req.url === '/api/prefs' && req.method === 'GET') {

@@ -72,7 +72,10 @@ export default function Discover({ state, onChanged }) {
   const [dirs, setDirs] = useState(new Set(state.prefs?.directions || []));
   const [sources, setSources] = useState(new Set());
   const [q, setQ] = useState('');
-  const [wizard, setWizard] = useState(!state.prefs);
+  const [wizard, setWizard] = useState(
+    !state.prefs || sessionStorage.getItem('coforce-wizard') === '1'
+  );
+  useEffect(() => { sessionStorage.removeItem('coforce-wizard'); }, []);
   const [applying, setApplying] = useState(null);
 
   const load = async () => {
