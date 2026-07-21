@@ -40,6 +40,12 @@ How to use it depends on its type:
      JD-relevant ones lead; drop the weakest bullets if over one page. Respect
      `weight` fields (higher = keep first) when present.
    - Summary: 2–3 sentences positioning the user for THIS role, facts only.
+   - Custom sections (`customSections[]`: Awards, Publications, Leadership…):
+     include after Education as `\section{<title>}` — entries use
+     `\resumeSubheading` (heading/date/subheading) with `\resumeItem` bullets.
+     Include only when JD-relevant or high-`weight`; they are the FIRST cut in
+     the one-page gate unless the JD asks for them (e.g. research roles keep
+     Publications).
 3. Render to `~/.coforce/out/resume-<company>-<role>.<ext>` (kebab-case):
    - **tex/pdf** (default): write `.tex`, escape LaTeX-special characters
      (`& % $ # _ { } ~ ^`), compile with `pdflatex -interaction=nonstopmode`

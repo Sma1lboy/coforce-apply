@@ -90,5 +90,23 @@
       "language": "Spanish",
       "proficiency": "Intermediate"
     }
+  ],
+  "customSections": [
+    {
+      "title": "Awards",
+      "weight": 4,
+      "entries": [
+        {
+          "heading": "ACM Regional Finalist",
+          "subheading": "International Collegiate Programming Contest",
+          "date": "2014",
+          "description": [
+            {
+              "text": "Top-10 finish among 120 university teams"
+            }
+          ]
+        }
+      ]
+    }
   ]
 }

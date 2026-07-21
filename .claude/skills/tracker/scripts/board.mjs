@@ -51,7 +51,8 @@ const COLUMNS = [
 
 // Prompt for the headless-Claude resume import (POST /api/import)
 const IMPORT_PROMPT = `Parse the resume text from stdin into a JSON object with exactly this shape (all fields optional, omit anything absent):
-{"name","title","email","phone","location","linkedin","github","website","summary","skills":[string],"education":[{"institution","degree","date","location"}],"experience":[{"company","title","date","location","description":[{"text"}]}],"projects":[{"name","technologies","dateRange","description":[{"text"}]}]}
+{"name","title","email","phone","location","linkedin","github","website","summary","skills":[string],"education":[{"institution","degree","date","location"}],"experience":[{"company","title","date","location","description":[{"text"}]}],"projects":[{"name","technologies","dateRange","description":[{"text"}]}],"customSections":[{"title","entries":[{"heading","subheading","date","description":[{"text"}]}]}]}
+Sections that are not Experience/Projects/Education/Skills (Awards, Publications, Certifications, Leadership, Volunteering…) go into customSections with their original section title.
 Rules: linkedin/github are bare handles, not URLs; keep bullet text verbatim; dates verbatim; never invent data that is not in the text. Output ONLY the JSON object, no markdown fences, no commentary.`;
 
 // migration shim for entries saved before failed/fallback became history events
@@ -137,6 +138,21 @@ function renderProfile(p) {
   const edu = (p.education || [])
     .map(e => entry(e.institution, e.date, e.degree))
     .join('');
+  const custom = (p.customSections || [])
+    .map(
+      s =>
+        `<h3>${esc(s.title)}</h3>${(s.entries || [])
+          .map(e =>
+            entry(
+              e.heading || '',
+              e.date,
+              e.subheading,
+              e.description?.length ? `<ul>${bullets(e.description)}</ul>` : ''
+            )
+          )
+          .join('')}`
+    )
+    .join('');
   return `<div class="resume">
     <h2 class="r-name">${esc(p.name || '')}</h2>
     <div class="r-title">${esc(p.title || '')}</div>
@@ -146,6 +162,7 @@ function renderProfile(p) {
     ${exp ? `<h3>Experience</h3>${exp}` : ''}
     ${proj ? `<h3>Projects</h3>${proj}` : ''}
     ${edu ? `<h3>Education</h3>${edu}` : ''}
+    ${custom}
   </div>`;
 }
 
@@ -608,6 +625,33 @@ function renderForm() {
       ).join('') +
       '<button class="mini add" type="button" data-add-entry="' + key + '">' + addLabel + '</button>';
   }
+  html += '<h3>Custom sections</h3>' +
+    (P.customSections || []).map((s, i) => {
+      const base = 'customSections.' + i;
+      return '<div class="ecard">' +
+        '<div class="grid2">' + field('Section title (e.g. Awards, Publications)', base + '.title', s.title, true) + '</div>' +
+        (s.entries || []).map((e, j) => {
+          const eb = base + '.entries.' + j;
+          return '<div class="ecard">' +
+            '<div class="grid2">' +
+            field('Heading', eb + '.heading', e.heading) +
+            field('Date', eb + '.date', e.date) +
+            field('Subheading', eb + '.subheading', e.subheading, true) +
+            '</div>' +
+            (e.description || []).map((b, k) =>
+              '<div class="bullet"><textarea data-path="' + eb + '.description.' + k + '.text" rows="2">' + escHtml(b.text) + '</textarea>' +
+              '<button class="mini" type="button" data-del-cbullet="' + i + '.' + j + '.' + k + '" title="Remove bullet">✕</button></div>').join('') +
+            '<div class="card-actions">' +
+            '<button class="mini" type="button" data-add-cbullet="' + i + '.' + j + '">+ Bullet</button>' +
+            '<button class="mini" type="button" data-del-centry="' + i + '.' + j + '" style="margin-left:6px">Remove entry</button>' +
+            '</div></div>';
+        }).join('') +
+        '<div class="card-actions">' +
+        '<button class="mini" type="button" data-add-centry="' + i + '">+ Entry</button>' +
+        '<button class="mini" type="button" data-del-csection="' + i + '" style="margin-left:6px">Remove section</button>' +
+        '</div></div>';
+    }).join('') +
+    '<button class="mini add" type="button" data-add-csection="1">+ Add custom section</button>';
   FORM.innerHTML = html;
 }
 renderForm();
@@ -635,6 +679,12 @@ FORM.addEventListener('click', e => {
   else if (d.delEntry) { const [k, i] = d.delEntry.split('.'); P[k].splice(Number(i), 1); renderForm(); }
   else if (d.addBullet) { const [k, i] = d.addBullet.split('.'); (P[k][Number(i)].description ??= []).push({ text: '' }); renderForm(); }
   else if (d.delBullet) { const [k, i, j] = d.delBullet.split('.'); P[k][Number(i)].description.splice(Number(j), 1); renderForm(); }
+  else if (d.addCsection) { (P.customSections ??= []).push({ title: '', entries: [{ heading: '', subheading: '', date: '', description: [] }] }); renderForm(); }
+  else if (d.delCsection !== undefined) { P.customSections.splice(Number(d.delCsection), 1); renderForm(); }
+  else if (d.addCentry !== undefined) { (P.customSections[Number(d.addCentry)].entries ??= []).push({ heading: '', subheading: '', date: '', description: [] }); renderForm(); }
+  else if (d.delCentry) { const [i, j] = d.delCentry.split('.'); P.customSections[Number(i)].entries.splice(Number(j), 1); renderForm(); }
+  else if (d.addCbullet) { const [i, j] = d.addCbullet.split('.'); (P.customSections[Number(i)].entries[Number(j)].description ??= []).push({ text: '' }); renderForm(); }
+  else if (d.delCbullet) { const [i, j, k] = d.delCbullet.split('.'); P.customSections[Number(i)].entries[Number(j)].description.splice(Number(k), 1); renderForm(); }
 });
 
 function pruneProfile(p) {
@@ -647,6 +697,17 @@ function pruneProfile(p) {
     }
     if (!clean[k].length) delete clean[k];
   }
+  clean.customSections = (clean.customSections || [])
+    .map(s => ({
+      ...s,
+      entries: (s.entries || []).map(e => ({
+        ...e,
+        description: (e.description || []).filter(b => b.text?.trim()),
+      })).filter(e =>
+        [e.heading, e.subheading, e.date].some(v => v?.trim()) || e.description.length),
+    }))
+    .filter(s => s.title?.trim() && s.entries.length);
+  if (!clean.customSections.length) delete clean.customSections;
   for (const [k, v] of Object.entries(clean)) {
     if (v === '' || v == null) delete clean[k];
   }

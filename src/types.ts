@@ -43,6 +43,17 @@ export interface UserProfile {
     dateRange?: string;
     weight?: number;
   }[];
+  /** User-defined resume sections (Awards, Publications, Leadership, …) */
+  customSections?: {
+    title: string;
+    weight?: number;
+    entries: {
+      heading?: string;
+      subheading?: string;
+      date?: string;
+      description?: { text: string; weight?: number }[];
+    }[];
+  }[];
 }
 
 // A tracked job application. Status is the pipeline stage only; HOW delivery

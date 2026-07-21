@@ -138,9 +138,14 @@ try {
   assert.ok(page.includes('id="view-instructions"'), 'instructions view present');
   assert.ok(page.includes('never-apply'), 'instructions content loaded');
 
+  // custom sections render in the preview and survive the round-trip
+  assert.ok(page.includes('ACM Regional Finalist'), 'custom section in preview');
+  assert.ok(page.includes('Custom sections'), 'custom-section editor present');
+
   // profile API round-trip
   const prof = await (await fetch(`${base}/api/profile`)).json();
   assert.equal(prof.name, 'John Doe', 'profile GET');
+  assert.equal(prof.customSections[0].title, 'Awards', 'custom section GET');
   const postProf = await fetch(`${base}/api/profile`, {
     method: 'POST',
     headers: { 'content-type': 'application/json' },

@@ -13,7 +13,10 @@ Shape (all fields optional): `name`, `title`, `email`, `phone`, `location`,
 `experience[] {company, title, date, location?, description[{text, weight?}], weight?}`,
 `education[] {institution, degree, date, location?, relevantCourses?}`,
 `projects[] {name, description[{text, weight?}], technologies?, dateRange?, weight?}`,
-`certifications[] {name, issuer, date}`, `languages[] {language, proficiency}`.
+`certifications[] {name, issuer, date}`, `languages[] {language, proficiency}`,
+`customSections[] {title, weight?, entries[{heading?, subheading?, date?, description?[{text, weight?}]}]}`
+— user-defined resume sections (Awards, Publications, Leadership, Open Source…)
+that tailor renders as additional sections when relevant.
 `weight` (higher = more important) drives what gets picked when tailoring a resume
 to a JD — set it when the user signals importance, otherwise omit.
 
