@@ -166,16 +166,22 @@ try {
   const badProf = await fetch(`${base}/api/profile`, { method: 'POST', body: '[1,2]' });
   assert.equal(badProf.status, 400, 'non-object profile rejected');
 
-  // discovery preferences round-trip (first-run wizard persistence)
-  assert.equal(await (await fetch(`${base}/api/prefs`)).json(), null, 'prefs empty at first');
+  // discovery preferences round-trip (first-run wizard persistence);
+  // idempotent — asserts save/overwrite, not initial absence, since
+  // harness/out keeps files between runs
   const prefPost = await fetch(`${base}/api/prefs`, {
     method: 'POST',
     headers: { 'content-type': 'application/json' },
     body: JSON.stringify({ level: 'internship', directions: ['backend', 'general'] }),
   });
   assert.equal(prefPost.status, 204, 'prefs saved');
-  const prefs = await (await fetch(`${base}/api/prefs`)).json();
-  assert.equal(prefs.level, 'internship', 'prefs persisted');
+  assert.equal((await (await fetch(`${base}/api/prefs`)).json()).level, 'internship', 'prefs persisted');
+  await fetch(`${base}/api/prefs`, {
+    method: 'POST',
+    headers: { 'content-type': 'application/json' },
+    body: JSON.stringify({ level: 'any', directions: [] }),
+  });
+  assert.equal((await (await fetch(`${base}/api/prefs`)).json()).level, 'any', 'prefs overwrite');
 
   // AI import: stubbed claude CLI parses pasted text into a profile object
   const imp = await fetch(`${base}/api/import`, {
