@@ -37,7 +37,7 @@ Or the equivalent one-liner:
 ```sh
 git clone --depth 1 https://github.com/Sma1lboy/coforce-apply /tmp/coforce-apply && \
   mkdir -p ~/.claude/skills && \
-  for s in setup start profile repo-bullets tailor apply tracker; do \
+  for s in setup start profile repo-bullets tailor apply tracker shushu-internship-tool; do \
     cp -R "/tmp/coforce-apply/.claude/skills/$s" ~/.claude/skills/; done
 ```
 
@@ -67,7 +67,8 @@ runtime dependency is Node ≥ 22. All your data lives in `~/.coforce/`.
 | `tailor` | JD → tailored one-page resume (LaTeX/PDF/docx, template or reference-guided) |
 | `apply` | Browser-use application: fills forms, registers ATS accounts (Workday & co., passwords in macOS Keychain), stops before submit for your confirmation |
 | `tracker` | Application tracker + kanban board + per-application file archive |
-| `harness` | Mock-environment E2E test of the whole pipeline |
+| `harness` | Mock-environment E2E test of the whole pipeline (repo-dev only) |
+| `shushu-internship-tool` | *Third-party sample* ([upstream](https://github.com/LiuMengxuan04/shushu-internship-tool), Apache-2.0): JD → find/adapt a real GitHub project → STAR resume lines + interview pack, wired into the CoForce profile/tracker. Review: [docs/third-party/shushu-judge.md](docs/third-party/shushu-judge.md) |
 
 **The board** (http://localhost:4517, served by the tracker skill) is a
 kobe-Hallmark-themed kanban over `~/.coforce/applications.json`: five pipeline

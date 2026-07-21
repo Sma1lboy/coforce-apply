@@ -32,6 +32,11 @@ Reference implementation in this repo: `.claude/skills/repo-bullets` — point i
 git repo, it reads the user's actual commits/code and produces STAR bullets, then
 merges them into the profile's `projects` section.
 
+First real third-party adoption: `shushu-internship-tool` (Apache-2.0,
+vendored with an appended CoForce integration layer; judged in
+`docs/third-party/shushu-judge.md`) — JD → adapt a real GitHub project →
+STAR lines + interview pack, complementing `repo-bullets`.
+
 ## Phase 3 — Auto-apply (extension as delivery manager) ✅ (v1)
 
 The extension stops being the generator and becomes the **application manager**:
