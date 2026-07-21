@@ -1,4 +1,4 @@
-# CoForce Apply (repo: jd-resume-fitter, pending rename)
+# CoForce Apply
 
 Skill-first resume tooling; the Chrome extension is the application-delivery
 manager (Apply tab: tier-1 scripted auto-fill, tier-2 `claude "/apply <url>"`

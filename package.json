@@ -3,7 +3,7 @@
   "version": "2.0.0",
   "description": "CoForce Apply — skill-first job application agent: discover, tailor, apply, track. Your job hunt on autopilot.",
   "private": true,
-  "repository": "https://github.com/Sma1lboy/jd-resume-fitter.git",
+  "repository": "https://github.com/Sma1lboy/coforce-apply.git",
   "author": {
     "name": "Sma1lboy"
   },

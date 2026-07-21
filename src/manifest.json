@@ -9,7 +9,7 @@
     "128": "assets/icons/android-chrome-512x512.png"
   },
   "description": "CoForce Apply's in-browser hands: auto-fill applications from your local profile, track every submission, and hand stubborn forms to Claude browser-use",
-  "homepage_url": "https://github.com/Sma1lboy/jd-resume-fitter",
+  "homepage_url": "https://github.com/Sma1lboy/coforce-apply",
   "short_name": "CoForce",
   "permissions": [
     "activeTab",
@@ -30,9 +30,9 @@
       ]
     }
   ],
-  "__chrome|firefox__author": "abhijithvijayan",
+  "__chrome|firefox__author": "Sma1lboy",
   "__opera__developer": {
-    "name": "abhijithvijayan"
+    "name": "Sma1lboy"
   },
   "__firefox__applications": {
     "gecko": {

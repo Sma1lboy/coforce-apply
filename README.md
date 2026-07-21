@@ -25,7 +25,7 @@ sources (GitHub job lists)          profile/ (local, gitignored)
 ## Quick start
 
 ```sh
-git clone https://github.com/Sma1lboy/jd-resume-fitter.git && cd jd-resume-fitter
+git clone https://github.com/Sma1lboy/coforce-apply.git && cd coforce-apply
 yarn install
 claude   # then:
 ```

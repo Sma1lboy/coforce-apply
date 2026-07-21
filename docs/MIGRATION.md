@@ -4,17 +4,10 @@ Phase 4 of the [roadmap](ROADMAP.md). In-repo rebrand (name, logo, manifest,
 README) is done. The two remaining steps touch GitHub / another repo, so they are
 run by the owner, not automated:
 
-## 1. Rename the GitHub repo
+## 1. Rename the GitHub repo ✅ (done 2026-07-20)
 
-```sh
-gh repo rename coforce-apply --repo Sma1lboy/jd-resume-fitter
-```
-
-GitHub redirects the old URL. Then update the local remote:
-
-```sh
-git remote set-url origin https://github.com/Sma1lboy/coforce-apply.git
-```
+Repo is now `Sma1lboy/coforce-apply`; GitHub redirects the old
+`jd-resume-fitter` URLs. Local remote already points at the new URL.
 
 ## 2. Merge into the CoForce repo (once it exists)
 
