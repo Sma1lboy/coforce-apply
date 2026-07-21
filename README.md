@@ -70,11 +70,15 @@ runtime dependency is Node ≥ 22. All your data lives in `~/.coforce/`.
 | `harness` | Mock-environment E2E test of the whole pipeline (repo-dev only) |
 | `shushu-internship-tool` | *Third-party sample* ([upstream](https://github.com/LiuMengxuan04/shushu-internship-tool), Apache-2.0): JD → find/adapt a real GitHub project → STAR resume lines + interview pack, wired into the CoForce profile/tracker. Review: [docs/third-party/shushu-judge.md](docs/third-party/shushu-judge.md) |
 
-**The board** (http://localhost:4517, served by the tracker skill) is a
+**The console** (http://localhost:4517, served by the tracker skill) is a
 kobe-Hallmark-themed kanban over `~/.coforce/applications.json`: five pipeline
 columns (To Apply → Applied → Interviewing → Offer / Rejected), drag & drop
 persists status changes, cards open a detail view with the JD link, saved
-info, delivery history timeline, archived files, and job description.
+info, delivery history timeline, archived files, and job description. The
+**Discover** tab lists fresh postings from your sources (speedyapply, vanshb03,
+jobright-ai out of the box) with one-click Apply that queues them into the
+tracker and hands you the claude command for the full flow; **Profile** and
+**Instructions** tabs edit your data with forms and AI import — no raw JSON.
 
 **Your instructions rule everything.** `~/.coforce/instructions.md` is standing
 user instruction — preferences, caps, and a `## never-apply` company list that

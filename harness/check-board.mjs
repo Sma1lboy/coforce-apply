@@ -116,7 +116,11 @@ copyFileSync(
 );
 const server = spawn(process.execPath, ['.claude/skills/tracker/scripts/board.mjs', live, '--serve', '0'], {
   cwd: root,
-  env: { ...process.env, COFORCE_CLAUDE_BIN: join(here, 'fixtures/claude-stub.sh') },
+  env: {
+    ...process.env,
+    COFORCE_CLAUDE_BIN: join(here, 'fixtures/claude-stub.sh'),
+    COFORCE_SOURCE_FILE: join(here, 'fixtures/source-jobs.md'),
+  },
 });
 try {
   const port = await new Promise((resolve, reject) => {
@@ -205,6 +209,29 @@ try {
   const evil = await fetch(`${base}/files/..%2Fapps-live.json`);
   assert.equal(evil.status, 404, 'path traversal blocked');
   console.log('board: serve-mode persistence + archive files ✓');
+
+  // discover + one-click apply queue
+  const disc = await (await fetch(`${base}/api/discover`)).json();
+  assert.ok(disc.new.length >= 1, 'discovery returns new postings');
+  const job = disc.new[0];
+  const q1 = await fetch(`${base}/api/queue`, {
+    method: 'POST',
+    headers: { 'content-type': 'application/json' },
+    body: JSON.stringify(job),
+  });
+  assert.equal(q1.status, 200, 'queue accepted');
+  const afterQueue = JSON.parse(readFileSync(live, 'utf8'));
+  const queued = afterQueue.find(a => a.url === job.url);
+  assert.ok(queued, 'queued job tracked');
+  assert.equal(queued.status, 'pending');
+  assert.ok(queued.history[0].event.includes('queued for apply'), 'queue history event');
+  const q2 = await fetch(`${base}/api/queue`, {
+    method: 'POST',
+    headers: { 'content-type': 'application/json' },
+    body: JSON.stringify(job),
+  });
+  assert.equal(q2.status, 409, 'duplicate queue rejected');
+  console.log('board: discover + apply queue ✓');
 } finally {
   server.kill();
 }

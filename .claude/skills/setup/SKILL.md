@@ -25,8 +25,16 @@ sponsorship. Seed job sources with the defaults (user can add/remove):
   { "name": "2027-SWE-College-Jobs",
     "url": "https://raw.githubusercontent.com/speedyapply/2027-SWE-College-Jobs/main/README.md" },
   { "name": "Summer2027-Internships",
-    "url": "https://raw.githubusercontent.com/vanshb03/Summer2027-Internships/main/README.md" }
+    "url": "https://raw.githubusercontent.com/vanshb03/Summer2027-Internships/main/README.md" },
+  { "name": "jobright-SWE-Internship",
+    "url": "https://raw.githubusercontent.com/jobright-ai/2026-Software-Engineer-Internship/master/README.md" }
 ]
+```
+
+jobright-ai has one repo per track (2026-Software-Engineer-Internship,
+2026-Engineer-Internship, 2026-Product-Management-New-Grad, Daily-H1B-Jobs-In-
+Tech…) — swap/add the ones matching the user's target roles.
+```json
 ```
 
 ## 3. Standing instructions → `~/.coforce/instructions.md`

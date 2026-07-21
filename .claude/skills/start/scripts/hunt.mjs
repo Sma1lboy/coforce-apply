@@ -49,6 +49,10 @@ const DEFAULT_SOURCES = [
     name: 'Summer2027-Internships',
     url: 'https://raw.githubusercontent.com/vanshb03/Summer2027-Internships/main/README.md',
   },
+  {
+    name: 'jobright-SWE-Internship',
+    url: 'https://raw.githubusercontent.com/jobright-ai/2026-Software-Engineer-Internship/master/README.md',
+  },
 ];
 
 const config = readJson(configPath, {});

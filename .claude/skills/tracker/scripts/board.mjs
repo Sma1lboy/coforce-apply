@@ -22,6 +22,13 @@ import { execFileSync } from 'node:child_process';
 import { createServer } from 'node:http';
 import { homedir } from 'node:os';
 import { dirname, extname, join, resolve, sep } from 'node:path';
+import { fileURLToPath } from 'node:url';
+
+// hunt.mjs lives in the sibling start skill (all skills install together)
+const huntScript = join(
+  dirname(fileURLToPath(import.meta.url)),
+  '../../start/scripts/hunt.mjs'
+);
 
 const HOME = join(homedir(), '.coforce');
 const args = process.argv.slice(2);
@@ -347,6 +354,27 @@ function render(apps, profile = loadProfile(), instructions = readText(instructi
     border-radius: var(--radius-chip); padding: 6px 14px; cursor: pointer; white-space: nowrap;
   }
   .pane-empty { color: var(--dim); text-align: center; margin: auto; }
+  .discover-wrap {
+    flex: 1; min-height: 0; display: flex; flex-direction: column; gap: 10px;
+    padding: clamp(16px, 3vw, 28px); max-width: 980px; width: 100%; margin: 0 auto;
+  }
+  .drow {
+    display: flex; align-items: center; gap: 14px;
+    background: var(--paper-2); border: 1px solid var(--rule);
+    border-radius: var(--radius-chip); padding: 10px 14px; margin-bottom: 8px;
+    transition: border-color 180ms var(--ease-out);
+  }
+  .drow:hover { border-color: var(--rule-2); }
+  .dmain { flex: 1; min-width: 0; }
+  .dtitle { color: var(--accent-soft); font-weight: 500; text-decoration: none; word-break: break-word; }
+  .dtitle:hover { color: var(--accent-2); text-decoration: underline; }
+  .dsource { color: var(--dim); }
+  .dapply {
+    font: 500 .75rem var(--font-body); color: var(--accent-soft);
+    background: var(--accent-wash); border: 1px solid var(--accent);
+    border-radius: var(--radius-chip); padding: 6px 14px; cursor: pointer; white-space: nowrap;
+  }
+  .dapply:disabled { color: var(--ok, #9c6); background: none; border-color: var(--rule-2); cursor: default; }
   .resume { max-width: 640px; }
   .resume .r-name { font: 600 1.5rem var(--font-display); margin: 0; }
   .resume .r-title { color: var(--accent-soft); margin-top: 2px; }
@@ -462,6 +490,7 @@ function render(apps, profile = loadProfile(), instructions = readText(instructi
   <h1>CoForce</h1>
   <nav id="tabs">
     <button data-view="board" class="active" type="button">Board</button>
+    <button data-view="discover" type="button">Discover</button>
     <button data-view="profile" type="button">Profile</button>
     <button data-view="instructions" type="button">Instructions</button>
   </nav>
@@ -471,6 +500,15 @@ function render(apps, profile = loadProfile(), instructions = readText(instructi
 <main class="views">
   <div class="view active" id="view-board">
     <div class="board">${columns}
+    </div>
+  </div>
+  <div class="view" id="view-discover">
+    <div class="discover-wrap">
+      <div class="editor-toolbar">
+        <button id="discover-refresh" type="button" class="ghost">↻ Refresh sources</button>
+        <span id="discover-status" class="hint"></span>
+      </div>
+      <div id="discover-list" class="form-scroll"></div>
     </div>
   </div>
   <div class="view" id="view-profile">
@@ -543,12 +581,71 @@ document.getElementById('copyjson').addEventListener('click', async () => {
 });
 
 // --- header tabs ---
+let queuedDirty = false;
 document.querySelectorAll('#tabs button').forEach(btn => {
   btn.addEventListener('click', () => {
+    if (btn.dataset.view === 'board' && queuedDirty) { location.reload(); return; }
     document.querySelectorAll('#tabs button').forEach(b => b.classList.toggle('active', b === btn));
     document.querySelectorAll('.view').forEach(v =>
       v.classList.toggle('active', v.id === 'view-' + btn.dataset.view));
+    if (btn.dataset.view === 'discover' && !discoverLoaded) loadDiscover();
   });
+});
+
+// --- discover: local job discovery with one-click apply queue ---
+let discoverLoaded = false;
+let DISCOVER = [];
+const dList = document.getElementById('discover-list');
+const dStatus = document.getElementById('discover-status');
+async function loadDiscover() {
+  if (!SERVE) { dStatus.textContent = 'static file — discovery needs the served console'; return; }
+  dStatus.textContent = 'Fetching job sources…';
+  dStatus.classList.add('busy');
+  dList.innerHTML = '';
+  try {
+    const res = await fetch('/api/discover');
+    if (!res.ok) throw new Error(await res.text() || res.status);
+    const d = await res.json();
+    discoverLoaded = true;
+    DISCOVER = d.new;
+    dStatus.textContent = d.new.length + ' new · ' + d.skipped.tracked + ' already tracked · ' +
+      d.skipped.blocked + ' blocked by never-apply · ' +
+      d.sources.map(s => s.name + (s.error ? ' ⚠' : ' (' + s.listings + ')')).join(' · ');
+    dList.innerHTML = d.new.map((j, i) =>
+      '<div class="drow">' +
+      '<div class="dmain"><a class="dtitle" href="' + escHtml(j.url) + '" target="_blank" rel="noreferrer">' +
+      escHtml(j.role) + '</a>' +
+      '<div class="meta">' + escHtml(j.company) + (j.location ? ' · ' + escHtml(j.location) : '') +
+      ' · <span class="dsource">' + escHtml(j.source) + '</span></div></div>' +
+      '<button class="dapply" type="button" data-i="' + i + '">Apply ⇢</button></div>'
+    ).join('') || '<div class="pane-empty">No new postings — everything is already tracked or filtered.</div>';
+  } catch (e) {
+    dStatus.textContent = 'Discovery failed: ' + e.message;
+  } finally {
+    dStatus.classList.remove('busy');
+  }
+}
+document.getElementById('discover-refresh').addEventListener('click', () => { discoverLoaded = false; loadDiscover(); });
+dList.addEventListener('click', async e => {
+  const btn = e.target.closest('.dapply');
+  if (!btn || btn.disabled) return;
+  const job = DISCOVER[Number(btn.dataset.i)];
+  btn.textContent = 'Queuing…';
+  try {
+    const res = await fetch('/api/queue', {
+      method: 'POST',
+      headers: { 'content-type': 'application/json' },
+      body: JSON.stringify(job),
+    });
+    if (!res.ok && res.status !== 409) throw new Error(await res.text() || res.status);
+    btn.textContent = res.status === 409 ? 'Already tracked' : '✓ Queued';
+    btn.disabled = true;
+    queuedDirty = true;
+    try { await navigator.clipboard.writeText('claude "/apply ' + job.url + '"'); } catch {}
+    dStatus.textContent = 'Queued "' + job.role + '" — claude "/apply …" copied; paste it in Claude Code to run the full flow, or let /start pick it up.';
+  } catch (err) {
+    btn.textContent = 'Failed: ' + err.message;
+  }
 });
 
 // --- profile form editor + AI import (serve mode only) ---
@@ -898,6 +995,69 @@ if (serve) {
           types[extname(target).toLowerCase()] || 'application/octet-stream',
       });
       createReadStream(target).pipe(res);
+      return;
+    }
+    if (req.url === '/api/discover' && req.method === 'GET') {
+      if (!existsSync(huntScript)) {
+        res.writeHead(501, { 'content-type': 'text/plain' });
+        res.end('start skill not installed next to tracker — discovery needs its hunt.mjs');
+        return;
+      }
+      const extra = process.env.COFORCE_SOURCE_FILE
+        ? ['--source-file', process.env.COFORCE_SOURCE_FILE]
+        : [];
+      const out = execFileSync(
+        process.execPath,
+        [
+          huntScript,
+          '--config', join(dataDir, 'apply-config.json'),
+          '--apps', input,
+          '--instructions', instructionsPath,
+          ...extra,
+        ],
+        { encoding: 'utf8', timeout: 60_000, maxBuffer: 20 * 1024 * 1024 }
+      );
+      res.writeHead(200, { 'content-type': 'application/json' });
+      res.end(out);
+      return;
+    }
+    if (req.url === '/api/queue' && req.method === 'POST') {
+      let body = '';
+      req.on('data', chunk => { body += chunk; });
+      req.on('end', () => {
+        try {
+          const job = JSON.parse(body);
+          if (!job?.url || !job?.role || !job?.company)
+            throw new Error('need url, role, company');
+          const apps = loadApps();
+          if (apps.some(a => a.url === job.url)) {
+            res.writeHead(409, { 'content-type': 'text/plain' });
+            res.end('already tracked');
+            return;
+          }
+          const now = new Date().toISOString();
+          apps.unshift({
+            id: `${Date.now()}`,
+            url: job.url,
+            title: `${job.role} — ${job.company}`,
+            status: 'pending',
+            createdAt: now,
+            updatedAt: now,
+            company: job.company,
+            position: job.role,
+            ...(job.location ? { notes: job.location } : {}),
+            history: [
+              { date: now, event: `discovered via console (${job.source || 'manual'}) — queued for apply` },
+            ],
+          });
+          writeFileSync(input, `${JSON.stringify(apps, null, 2)}\n`);
+          res.writeHead(200, { 'content-type': 'application/json' });
+          res.end(JSON.stringify({ id: apps[0].id }));
+        } catch (err) {
+          res.writeHead(400, { 'content-type': 'text/plain' });
+          res.end(String(err.message));
+        }
+      });
       return;
     }
     if (req.url === '/api/profile' && req.method === 'GET') {

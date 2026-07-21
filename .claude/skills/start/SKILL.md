@@ -9,6 +9,10 @@ Setup must exist (`~/.coforce/apply-config.json`); missing → run the `setup`
 skill first. **Read `~/.coforce/instructions.md` before anything else** — it
 overrides every default below.
 
+The console's **Discover** tab is the interactive twin of this cycle: postings
+queued there land as `pending` entries with a "queued for apply" history event
+— treat them as first in line in step 3.
+
 ## Cycle
 
 1. **Discover** (the script ships with this skill, path relative to this
