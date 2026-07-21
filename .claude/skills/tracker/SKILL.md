@@ -38,7 +38,11 @@ One kobe-Hallmark-themed local site, three tabs:
   application (appends a history event, saves to the JSON), cards open a
   detail view (JD link, saved info, files, history timeline, description).
 - **Profile** — resume-style live preview of `~/.coforce/profile.json` beside
-  a JSON editor with save (`POST /api/profile`).
+  a structured form editor (basics, skill chips, add/remove
+  experience/project/education cards and bullets — no raw JSON), plus
+  "Import resume (AI)": pasted text is parsed by local headless Claude
+  (`claude -p`, override binary via `COFORCE_CLAUDE_BIN`) and fills the form
+  for review before Save.
 - **Instructions** — edit `~/.coforce/instructions.md` in place.
 
 **Launch it at the start of every working session** (any tracker/apply/start

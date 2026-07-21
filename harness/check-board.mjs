@@ -116,6 +116,7 @@ copyFileSync(
 );
 const server = spawn(process.execPath, ['.claude/skills/tracker/scripts/board.mjs', live, '--serve', '0'], {
   cwd: root,
+  env: { ...process.env, COFORCE_CLAUDE_BIN: join(here, 'fixtures/claude-stub.sh') },
 });
 try {
   const port = await new Promise((resolve, reject) => {
@@ -153,6 +154,22 @@ try {
   );
   const badProf = await fetch(`${base}/api/profile`, { method: 'POST', body: '[1,2]' });
   assert.equal(badProf.status, 400, 'non-object profile rejected');
+
+  // AI import: stubbed claude CLI parses pasted text into a profile object
+  const imp = await fetch(`${base}/api/import`, {
+    method: 'POST',
+    headers: { 'content-type': 'application/json' },
+    body: JSON.stringify({ text: 'Stub Person — Engineer at Stub Corp' }),
+  });
+  assert.equal(imp.status, 200, 'import accepted');
+  const imported = await imp.json();
+  assert.equal(imported.name, 'Stub Person', 'import parsed via CLI stub');
+  const impEmpty = await fetch(`${base}/api/import`, {
+    method: 'POST',
+    headers: { 'content-type': 'application/json' },
+    body: JSON.stringify({ text: '  ' }),
+  });
+  assert.equal(impEmpty.status, 500, 'empty import rejected');
 
   const apps = await (await fetch(`${base}/api/apps`)).json();
   const moved = apps.map(a =>

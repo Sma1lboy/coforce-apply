@@ -18,6 +18,7 @@ import {
   statSync,
   writeFileSync,
 } from 'node:fs';
+import { execFileSync } from 'node:child_process';
 import { createServer } from 'node:http';
 import { homedir } from 'node:os';
 import { dirname, extname, join, resolve, sep } from 'node:path';
@@ -47,6 +48,11 @@ const COLUMNS = [
   ['offer', 'Offer', 'oklch(84% 0.12 136)'],
   ['rejected', 'Rejected', 'oklch(49.5% 0.014 90)'],
 ];
+
+// Prompt for the headless-Claude resume import (POST /api/import)
+const IMPORT_PROMPT = `Parse the resume text from stdin into a JSON object with exactly this shape (all fields optional, omit anything absent):
+{"name","title","email","phone","location","linkedin","github","website","summary","skills":[string],"education":[{"institution","degree","date","location"}],"experience":[{"company","title","date","location","description":[{"text"}]}],"projects":[{"name","technologies","dateRange","description":[{"text"}]}]}
+Rules: linkedin/github are bare handles, not URLs; keep bullet text verbatim; dates verbatim; never invent data that is not in the text. Output ONLY the JSON object, no markdown fences, no commentary.`;
 
 // migration shim for entries saved before failed/fallback became history events
 const normalize = app =>
@@ -266,6 +272,56 @@ function render(apps, profile = loadProfile(), instructions = readText(instructi
     padding: 14px 16px; outline: none;
   }
   .pane.editor textarea:focus { border-color: var(--accent); }
+  .editor-toolbar { display: flex; align-items: center; gap: 10px; }
+  .editor-toolbar #profile-status { flex: 1; text-align: right; }
+  .editor-toolbar button, .editor-bar button {
+    font: 500 .75rem var(--font-body); color: var(--accent-soft);
+    background: var(--accent-wash); border: 1px solid var(--accent);
+    border-radius: var(--radius-chip); padding: 6px 14px; cursor: pointer; white-space: nowrap;
+  }
+  .editor-toolbar button.ghost { background: none; border-color: var(--rule-2); color: var(--muted); }
+  .editor-toolbar button.ghost:hover { border-color: var(--accent); color: var(--accent-soft); }
+  .form-scroll { flex: 1; min-height: 0; overflow-y: auto; padding-right: 6px; }
+  .f { display: flex; flex-direction: column; gap: 3px; }
+  .f > span { font-size: .6875rem; color: var(--faint); text-transform: uppercase; letter-spacing: .06em; }
+  .f input, .f textarea, .bullet textarea {
+    font: 400 12.5px/1.5 var(--font-body); color: var(--ink);
+    background: var(--well); border: 1px solid var(--rule);
+    border-radius: var(--radius-chip); padding: 7px 10px; outline: none; width: 100%;
+  }
+  .f input:focus, .f textarea:focus, .bullet textarea:focus { border-color: var(--accent); }
+  .grid2 { display: grid; grid-template-columns: 1fr 1fr; gap: 10px; margin-bottom: 10px; }
+  .form-scroll h3 {
+    font: 600 .6875rem var(--font-display); text-transform: uppercase;
+    letter-spacing: .1em; color: var(--accent); margin: 18px 0 8px;
+    padding-bottom: 5px; border-bottom: 1px solid var(--rule-2);
+  }
+  .chips-edit { display: flex; flex-wrap: wrap; gap: 6px; align-items: center; }
+  .chips-edit .chip-s { display: inline-flex; align-items: center; gap: 5px; }
+  .chips-edit .chip-s button { background: none; border: none; color: var(--dim); cursor: pointer; padding: 0; font-size: .75rem; }
+  .chips-edit .chip-s button:hover { color: var(--accent-2); }
+  .chips-edit input { width: 130px; font: 400 12px var(--font-body); color: var(--ink);
+    background: var(--well); border: 1px dashed var(--rule-2); border-radius: 999px; padding: 3px 10px; outline: none; }
+  .ecard {
+    background: var(--paper-3); border: 1px solid var(--rule);
+    border-radius: var(--radius-chip); padding: 12px; margin-bottom: 10px;
+  }
+  .ecard .grid2 { margin-bottom: 6px; }
+  .bullet { display: flex; gap: 6px; align-items: flex-start; margin-top: 6px; }
+  .bullet textarea { min-height: 34px; resize: vertical; }
+  .mini {
+    background: none; border: 1px solid var(--rule-2); color: var(--dim);
+    border-radius: var(--radius-chip); font: 500 .6875rem var(--font-body);
+    padding: 4px 9px; cursor: pointer; white-space: nowrap;
+  }
+  .mini:hover { color: var(--accent-soft); border-color: var(--accent); }
+  .mini.add { margin-top: 8px; }
+  .card-actions { display: flex; justify-content: flex-end; margin-top: 6px; }
+  #import-dlg textarea { width: 100%; min-height: 260px; resize: vertical; font: 400 12px/1.5 var(--font-body);
+    color: var(--ink-2); background: var(--well); border: 1px solid var(--rule);
+    border-radius: var(--radius-chip); padding: 10px 12px; outline: none; margin-bottom: 10px; }
+  #import-dlg .dlg-body { max-height: none; }
+  .busy { color: var(--accent-soft) !important; }
   .editor-bar { display: flex; align-items: center; justify-content: space-between; gap: 10px; }
   .editor-bar .hint { color: var(--dim); font-size: .6875rem; word-break: break-all; }
   .editor-bar button {
@@ -404,8 +460,12 @@ function render(apps, profile = loadProfile(), instructions = readText(instructi
     <div class="panes">
       <div class="pane preview">${renderProfile(profile)}</div>
       <div class="pane editor">
-        <textarea id="profile-json" spellcheck="false">${esc(profile ? JSON.stringify(profile, null, 2) : '{\n}')}</textarea>
-        <div class="editor-bar"><span class="hint">${esc(profilePath)}</span><button id="save-profile" type="button">Save profile</button></div>
+        <div class="editor-toolbar">
+          <button id="import-open" type="button" class="ghost">⇪ Import resume (AI)</button>
+          <span id="profile-status" class="hint"></span>
+          <button id="save-profile" type="button">Save profile</button>
+        </div>
+        <div id="profile-form" class="form-scroll"></div>
       </div>
     </div>
   </div>
@@ -419,8 +479,21 @@ function render(apps, profile = loadProfile(), instructions = readText(instructi
   </div>
 </main>
 <dialog id="detail"></dialog>
+<dialog id="import-dlg">
+  <div class="dlg-head"><h3>Import resume with AI</h3><button class="close" type="button" aria-label="Close">✕</button></div>
+  <div class="dlg-body">
+    <p class="hint" style="margin-top:0">Paste your resume text (from PDF, Word, LinkedIn — anything). A local
+    headless Claude parses it into your profile; nothing is saved until you review and hit Save.</p>
+    <textarea id="import-text" spellcheck="false" placeholder="Paste resume text here…"></textarea>
+    <div class="editor-bar">
+      <span id="import-status" class="hint"></span>
+      <button id="import-run" type="button">Parse with Claude</button>
+    </div>
+  </div>
+</dialog>
 <script>
 const APPS = ${payload};
+const PROFILE = ${JSON.stringify(profile).replaceAll('<', '\\u003c')};
 const GLOBAL_FILES = ${globalFiles};
 const SERVE = ${JSON.stringify(serve)};
 const FILES_ROOT = ${JSON.stringify(filesRoot).replaceAll('<', '\\u003c')};
@@ -461,30 +534,167 @@ document.querySelectorAll('#tabs button').forEach(btn => {
   });
 });
 
-// --- profile & instructions editors (serve mode only) ---
+// --- profile form editor + AI import (serve mode only) ---
 async function postTo(url, body, contentType) {
   const res = await fetch(url, { method: 'POST', headers: { 'content-type': contentType }, body });
   if (!res.ok) throw new Error(await res.text() || res.status);
+  return res;
 }
+let P = PROFILE || {};
+const FORM = document.getElementById('profile-form');
+const statusEl = document.getElementById('profile-status');
+const setPath = (obj, path, value) => {
+  const keys = path.split('.');
+  let o = obj;
+  for (let i = 0; i < keys.length - 1; i += 1) o = o[keys[i]];
+  o[keys.at(-1)] = value;
+};
+const field = (label, path, value, wide) =>
+  '<label class="f"' + (wide ? ' style="grid-column:1/-1"' : '') + '><span>' + label + '</span>' +
+  '<input data-path="' + path + '" value="' + escHtml(value ?? '') + '"></label>';
+const area = (label, path, value) =>
+  '<label class="f" style="grid-column:1/-1"><span>' + label + '</span>' +
+  '<textarea data-path="' + path + '" rows="3">' + escHtml(value ?? '') + '</textarea></label>';
+
+// [section key, heading, add-label, entry renderer]
+const SECTIONS = [
+  ['experience', 'Experience', '+ Add experience', (e, i) =>
+    '<div class="grid2">' +
+    field('Company', 'experience.' + i + '.company', e.company) +
+    field('Title', 'experience.' + i + '.title', e.title) +
+    field('Date', 'experience.' + i + '.date', e.date) +
+    field('Location', 'experience.' + i + '.location', e.location) +
+    '</div>' + bulletsHtml('experience', i, e.description)],
+  ['projects', 'Projects', '+ Add project', (e, i) =>
+    '<div class="grid2">' +
+    field('Name', 'projects.' + i + '.name', e.name) +
+    field('Technologies', 'projects.' + i + '.technologies', e.technologies) +
+    field('Date range', 'projects.' + i + '.dateRange', e.dateRange) +
+    '</div>' + bulletsHtml('projects', i, e.description)],
+  ['education', 'Education', '+ Add education', (e, i) =>
+    '<div class="grid2">' +
+    field('Institution', 'education.' + i + '.institution', e.institution) +
+    field('Degree', 'education.' + i + '.degree', e.degree, true) +
+    field('Date', 'education.' + i + '.date', e.date) +
+    field('Location', 'education.' + i + '.location', e.location) +
+    '</div>'],
+];
+
+function bulletsHtml(section, i, bullets) {
+  return (bullets || []).map((b, j) =>
+    '<div class="bullet"><textarea data-path="' + section + '.' + i + '.description.' + j + '.text" rows="2">' +
+    escHtml(b.text) + '</textarea>' +
+    '<button class="mini" type="button" data-del-bullet="' + section + '.' + i + '.' + j + '" title="Remove bullet">✕</button></div>'
+  ).join('') +
+  '<div class="card-actions"><button class="mini" type="button" data-add-bullet="' + section + '.' + i + '">+ Bullet</button></div>';
+}
+
+function renderForm() {
+  let html = '<h3>Basics</h3><div class="grid2">' +
+    field('Name', 'name', P.name) + field('Title', 'title', P.title) +
+    field('Email', 'email', P.email) + field('Phone', 'phone', P.phone) +
+    field('Location', 'location', P.location) + field('LinkedIn (handle)', 'linkedin', P.linkedin) +
+    field('GitHub (handle)', 'github', P.github) + field('Website', 'website', P.website) +
+    area('Summary', 'summary', P.summary) + '</div>';
+  html += '<h3>Skills</h3><div class="chips-edit">' +
+    (P.skills || []).map((s, i) =>
+      '<span class="chip-s">' + escHtml(s) + '<button type="button" data-del-skill="' + i + '">✕</button></span>').join('') +
+    '<input id="skill-add" placeholder="+ add skill ⏎"></div>';
+  for (const [key, heading, addLabel, entry] of SECTIONS) {
+    html += '<h3>' + heading + '</h3>' +
+      (P[key] || []).map((e, i) =>
+        '<div class="ecard">' + entry(e, i) +
+        '<div class="card-actions"><button class="mini" type="button" data-del-entry="' + key + '.' + i + '">Remove</button></div></div>'
+      ).join('') +
+      '<button class="mini add" type="button" data-add-entry="' + key + '">' + addLabel + '</button>';
+  }
+  FORM.innerHTML = html;
+}
+renderForm();
+
+FORM.addEventListener('input', e => {
+  const path = e.target.dataset.path;
+  if (path) setPath(P, path, e.target.value);
+});
+FORM.addEventListener('keydown', e => {
+  if (e.target.id === 'skill-add' && e.key === 'Enter' && e.target.value.trim()) {
+    (P.skills ??= []).push(e.target.value.trim());
+    renderForm();
+    document.getElementById('skill-add').focus();
+  }
+});
+const EMPTY_ENTRY = {
+  experience: () => ({ company: '', title: '', date: '', location: '', description: [{ text: '' }] }),
+  projects: () => ({ name: '', technologies: '', dateRange: '', description: [{ text: '' }] }),
+  education: () => ({ institution: '', degree: '', date: '', location: '' }),
+};
+FORM.addEventListener('click', e => {
+  const d = e.target.dataset;
+  if (d.delSkill !== undefined) { P.skills.splice(Number(d.delSkill), 1); renderForm(); }
+  else if (d.addEntry) { (P[d.addEntry] ??= []).push(EMPTY_ENTRY[d.addEntry]()); renderForm(); }
+  else if (d.delEntry) { const [k, i] = d.delEntry.split('.'); P[k].splice(Number(i), 1); renderForm(); }
+  else if (d.addBullet) { const [k, i] = d.addBullet.split('.'); (P[k][Number(i)].description ??= []).push({ text: '' }); renderForm(); }
+  else if (d.delBullet) { const [k, i, j] = d.delBullet.split('.'); P[k][Number(i)].description.splice(Number(j), 1); renderForm(); }
+});
+
+function pruneProfile(p) {
+  const clean = JSON.parse(JSON.stringify(p));
+  for (const k of ['experience', 'projects', 'education']) {
+    clean[k] = (clean[k] || []).filter(e =>
+      Object.values(e).some(v => typeof v === 'string' && v.trim()));
+    for (const e of clean[k]) {
+      if (e.description) e.description = e.description.filter(b => b.text?.trim());
+    }
+    if (!clean[k].length) delete clean[k];
+  }
+  for (const [k, v] of Object.entries(clean)) {
+    if (v === '' || v == null) delete clean[k];
+  }
+  return clean;
+}
+
 const saveProfileBtn = document.getElementById('save-profile');
 const saveInstrBtn = document.getElementById('save-instructions');
+const importOpenBtn = document.getElementById('import-open');
 if (!SERVE) {
-  saveProfileBtn.disabled = saveInstrBtn.disabled = true;
-  saveProfileBtn.textContent = saveInstrBtn.textContent = 'static file — read-only';
+  saveProfileBtn.disabled = saveInstrBtn.disabled = importOpenBtn.disabled = true;
+  saveProfileBtn.textContent = 'static — read-only';
 }
 saveProfileBtn.addEventListener('click', async () => {
-  const raw = document.getElementById('profile-json').value;
-  try { JSON.parse(raw); } catch (e) { saveProfileBtn.textContent = 'Invalid JSON: ' + e.message; return; }
   try {
-    await postTo('/api/profile', raw, 'application/json');
+    await postTo('/api/profile', JSON.stringify(pruneProfile(P)), 'application/json');
     location.reload();
-  } catch (e) { saveProfileBtn.textContent = 'Save failed: ' + e.message; }
+  } catch (e) { statusEl.textContent = 'Save failed: ' + e.message; }
 });
 saveInstrBtn.addEventListener('click', async () => {
   try {
     await postTo('/api/instructions', document.getElementById('instructions-md').value, 'text/plain');
     location.reload();
   } catch (e) { saveInstrBtn.textContent = 'Save failed: ' + e.message; }
+});
+
+// --- AI import dialog ---
+const importDlg = document.getElementById('import-dlg');
+const importStatus = document.getElementById('import-status');
+importOpenBtn.addEventListener('click', () => importDlg.showModal());
+importDlg.querySelector('.close').addEventListener('click', () => importDlg.close());
+importDlg.addEventListener('click', e => { if (e.target === importDlg) importDlg.close(); });
+document.getElementById('import-run').addEventListener('click', async () => {
+  const text = document.getElementById('import-text').value;
+  if (!text.trim()) { importStatus.textContent = 'Paste some resume text first.'; return; }
+  importStatus.textContent = 'Claude is reading your resume… (~30s)';
+  importStatus.classList.add('busy');
+  try {
+    const res = await postTo('/api/import', JSON.stringify({ text }), 'application/json');
+    P = await res.json();
+    renderForm();
+    importDlg.close();
+    statusEl.textContent = 'Imported — review below, then Save profile.';
+  } catch (e) {
+    importStatus.textContent = 'Import failed: ' + e.message;
+  } finally {
+    importStatus.classList.remove('busy');
+  }
 });
 
 // --- drag & drop between columns ---
@@ -647,6 +857,37 @@ if (serve) {
         } catch (err) {
           res.writeHead(400, { 'content-type': 'text/plain' });
           res.end(String(err.message));
+        }
+      });
+      return;
+    }
+    if (req.url === '/api/import' && req.method === 'POST') {
+      let body = '';
+      req.on('data', chunk => { body += chunk; });
+      req.on('end', () => {
+        try {
+          const { text } = JSON.parse(body);
+          if (!text?.trim()) throw new Error('empty resume text');
+          // headless local Claude; COFORCE_CLAUDE_BIN overrides for the harness stub
+          const bin = process.env.COFORCE_CLAUDE_BIN || 'claude';
+          const out = execFileSync(bin, ['-p', IMPORT_PROMPT], {
+            input: text,
+            encoding: 'utf8',
+            timeout: 180_000,
+            maxBuffer: 10 * 1024 * 1024,
+          });
+          const jsonText = out.slice(out.indexOf('{'), out.lastIndexOf('}') + 1);
+          const profile = JSON.parse(jsonText);
+          if (!profile || typeof profile !== 'object' || Array.isArray(profile))
+            throw new Error('parser returned a non-object');
+          res.writeHead(200, { 'content-type': 'application/json' });
+          res.end(JSON.stringify(profile));
+        } catch (err) {
+          const hint = /ENOENT/.test(String(err.message))
+            ? 'claude CLI not found — run /profile inside Claude Code instead'
+            : err.message;
+          res.writeHead(500, { 'content-type': 'text/plain' });
+          res.end(String(hint));
         }
       });
       return;

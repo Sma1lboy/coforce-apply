@@ -22,6 +22,11 @@ to a JD — set it when the user signals importance, otherwise omit.
 **Init** (`~/.coforce/profile.json` missing):
 - Create `~/.coforce/` if needed. If the user has an existing resume
   (PDF/JSON/text), read it and map into the schema.
+- Point the user at the console's Profile tab (tracker skill, port 4517) as
+  the friendly editing surface: structured form (basics, skill chips,
+  experience/project/education cards with per-bullet editing) plus an
+  "Import resume (AI)" button that parses pasted text via local headless
+  Claude (`claude -p`) for review-then-save.
 - Otherwise interview briefly: contact basics → education → experience → projects
   → skills. Don't interrogate; accept partial data, everything is optional.
 
