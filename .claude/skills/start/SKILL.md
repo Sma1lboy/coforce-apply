@@ -28,8 +28,9 @@ overrides every default below.
    apply-skill confirmation gate still applies — batch the confirmations
    ("apply to these 3?") instead of asking one by one. Update statuses +
    history as each finishes.
-4. **Show the board** (per tracker skill rules): regenerate/serve and open,
-   with a one-line cycle summary.
+4. **Show the console** (per tracker skill rules): ensure it's serving on
+   4517, open it, give a one-line cycle summary. Launch it at cycle start too
+   if it isn't up — the user should watch the cycle land on the board live.
 
 ## Recurring
 

@@ -57,7 +57,26 @@ const normalize = app =>
 // Per-application archive: <dir-of-input>/applications/<id>/ holds that
 // application's files (interview prep, offer letter, tailored resume);
 // files directly in applications/ are global (shared prep, salary research).
-const filesRoot = join(dirname(input), 'applications');
+const dataDir = dirname(input);
+const filesRoot = join(dataDir, 'applications');
+const profilePath = join(dataDir, 'profile.json');
+const instructionsPath = join(dataDir, 'instructions.md');
+
+const readText = path => {
+  try {
+    return readFileSync(path, 'utf8');
+  } catch {
+    return '';
+  }
+};
+
+const loadProfile = () => {
+  try {
+    return JSON.parse(readFileSync(profilePath, 'utf8'));
+  } catch {
+    return null;
+  }
+};
 
 function listFiles(dir) {
   try {
@@ -92,7 +111,43 @@ const esc = s =>
     .replaceAll('>', '&gt;')
     .replaceAll('"', '&quot;');
 
-function render(apps) {
+// Resume-style preview of ~/.coforce/profile.json for the Profile pane
+function renderProfile(p) {
+  if (!p)
+    return '<div class="pane-empty">No profile yet — run /profile or /setup to create it</div>';
+  const contact = [p.email, p.phone, p.location, p.linkedin, p.github, p.website]
+    .filter(Boolean)
+    .map(esc)
+    .join(' · ');
+  const bullets = d =>
+    (d || [])
+      .map(b => `<li>${esc(typeof b === 'string' ? b : b.text)}</li>`)
+      .join('');
+  const entry = (head, date, sub, body = '') => `
+    <div class="entry"><div class="entry-head"><strong>${esc(head)}</strong><span>${esc(date || '')}</span></div>
+    ${sub ? `<em>${esc(sub)}</em>` : ''}${body}</div>`;
+  const exp = (p.experience || [])
+    .map(e => entry(e.company, e.date, e.title, `<ul>${bullets(e.description)}</ul>`))
+    .join('');
+  const proj = (p.projects || [])
+    .map(e => entry(e.name, e.dateRange, e.technologies, `<ul>${bullets(e.description)}</ul>`))
+    .join('');
+  const edu = (p.education || [])
+    .map(e => entry(e.institution, e.date, e.degree))
+    .join('');
+  return `<div class="resume">
+    <h2 class="r-name">${esc(p.name || '')}</h2>
+    <div class="r-title">${esc(p.title || '')}</div>
+    <div class="r-contact">${contact}</div>
+    ${p.summary ? `<h3>Summary</h3><p>${esc(p.summary)}</p>` : ''}
+    ${p.skills?.length ? `<h3>Skills</h3><div class="chips">${p.skills.map(s => `<span class="chip-s">${esc(s)}</span>`).join('')}</div>` : ''}
+    ${exp ? `<h3>Experience</h3>${exp}` : ''}
+    ${proj ? `<h3>Projects</h3>${proj}` : ''}
+    ${edu ? `<h3>Education</h3>${edu}` : ''}
+  </div>`;
+}
+
+function render(apps, profile = loadProfile(), instructions = readText(instructionsPath)) {
   const card = a => `
         <div class="card" draggable="true" data-id="${esc(a.id)}" tabindex="0">
           <div class="card-title">${esc(a.title)}</div>
@@ -126,7 +181,7 @@ function render(apps) {
 <head>
 <meta charset="utf-8">
 <meta name="viewport" content="width=device-width, initial-scale=1">
-<title>Application Board — CoForce Apply</title>
+<title>CoForce Console</title>
 <style>
   /* Hallmark tokens (kobe brand): terracotta on warm dark paper */
   :root {
@@ -178,10 +233,70 @@ function render(apps) {
     border-radius: var(--radius-chip); padding: 4px 10px; cursor: pointer;
   }
 
+  nav#tabs { display: flex; gap: 4px; margin-left: 18px; }
+  nav#tabs button {
+    font: 500 .8125rem var(--font-display); letter-spacing: .02em;
+    color: var(--muted); background: none; border: 1px solid transparent;
+    border-radius: var(--radius-chip); padding: 5px 14px; cursor: pointer;
+  }
+  nav#tabs button:hover { color: var(--ink-2); }
+  nav#tabs button.active {
+    color: var(--accent-soft); background: var(--accent-wash);
+    border-color: var(--accent);
+  }
+  main.views { flex: 1; min-height: 0; display: flex; flex-direction: column; }
+  .view { flex: 1; min-height: 0; display: none; flex-direction: column; }
+  .view.active { display: flex; }
   .board {
     flex: 1; min-height: 0;
     display: flex; gap: 14px; align-items: stretch;
     padding: clamp(16px, 3vw, 28px); overflow-x: auto;
+  }
+  .panes {
+    flex: 1; min-height: 0; display: flex; gap: 16px;
+    padding: clamp(16px, 3vw, 28px); overflow: hidden;
+  }
+  .pane { min-height: 0; display: flex; flex-direction: column; }
+  .pane.preview {
+    flex: 1.2; overflow-y: auto; background: var(--paper-2);
+    border: 1px solid var(--rule); border-radius: var(--radius-card);
+    padding: clamp(20px, 3vw, 36px);
+  }
+  .pane.editor { flex: 1; gap: 10px; }
+  .pane.editor textarea {
+    flex: 1; resize: none; font: 400 12.5px/1.55 var(--font-body);
+    color: var(--ink-2); background: var(--well);
+    border: 1px solid var(--rule); border-radius: var(--radius-card);
+    padding: 14px 16px; outline: none;
+  }
+  .pane.editor textarea:focus { border-color: var(--accent); }
+  .editor-bar { display: flex; align-items: center; justify-content: space-between; gap: 10px; }
+  .editor-bar .hint { color: var(--dim); font-size: .6875rem; word-break: break-all; }
+  .editor-bar button {
+    font: 500 .75rem var(--font-body); color: var(--accent-soft);
+    background: var(--accent-wash); border: 1px solid var(--accent);
+    border-radius: var(--radius-chip); padding: 6px 14px; cursor: pointer; white-space: nowrap;
+  }
+  .pane-empty { color: var(--dim); text-align: center; margin: auto; }
+  .resume { max-width: 640px; }
+  .resume .r-name { font: 600 1.5rem var(--font-display); margin: 0; }
+  .resume .r-title { color: var(--accent-soft); margin-top: 2px; }
+  .resume .r-contact { color: var(--faint); font-size: .75rem; margin-top: 6px; }
+  .resume h3 {
+    font: 600 .6875rem var(--font-display); text-transform: uppercase;
+    letter-spacing: .1em; color: var(--accent); margin: 20px 0 8px;
+    padding-bottom: 5px; border-bottom: 1px solid var(--rule-2);
+  }
+  .resume p, .resume li { color: var(--ink-2); font-size: .8125rem; }
+  .resume ul { margin: 6px 0 0; padding-left: 18px; }
+  .resume .entry { margin-bottom: 12px; }
+  .resume .entry-head { display: flex; justify-content: space-between; }
+  .resume .entry-head span { color: var(--dim); font-size: .75rem; }
+  .resume em { color: var(--muted); font-style: normal; font-size: .78rem; }
+  .resume .chips { display: flex; flex-wrap: wrap; gap: 6px; }
+  .resume .chip-s {
+    font-size: .6875rem; color: var(--ink-2); background: var(--paper-3);
+    border: 1px solid var(--rule-2); border-radius: 999px; padding: 2px 10px;
   }
   .col {
     display: flex; flex-direction: column; min-height: 0;
@@ -275,12 +390,38 @@ function render(apps) {
 </head>
 <body>
 <header>
-  <h1>Application Board</h1>
+  <h1>CoForce</h1>
+  <nav id="tabs">
+    <button data-view="board" class="active" type="button">Board</button>
+    <button data-view="profile" type="button">Profile</button>
+    <button data-view="instructions" type="button">Instructions</button>
+  </nav>
   <span class="tracked">${apps.length} tracked</span>
   <div id="savebar"><span class="state"></span><button id="copyjson" type="button">Copy JSON</button></div>
 </header>
-<div class="board">${columns}
-</div>
+<main class="views">
+  <div class="view active" id="view-board">
+    <div class="board">${columns}
+    </div>
+  </div>
+  <div class="view" id="view-profile">
+    <div class="panes">
+      <div class="pane preview">${renderProfile(profile)}</div>
+      <div class="pane editor">
+        <textarea id="profile-json" spellcheck="false">${esc(profile ? JSON.stringify(profile, null, 2) : '{\n}')}</textarea>
+        <div class="editor-bar"><span class="hint">${esc(profilePath)}</span><button id="save-profile" type="button">Save profile</button></div>
+      </div>
+    </div>
+  </div>
+  <div class="view" id="view-instructions">
+    <div class="panes">
+      <div class="pane editor">
+        <textarea id="instructions-md" spellcheck="false" placeholder="# My Application Instructions&#10;&#10;## never-apply&#10;&#10;- Company A">${esc(instructions)}</textarea>
+        <div class="editor-bar"><span class="hint">${esc(instructionsPath)} — standing rules every skill obeys</span><button id="save-instructions" type="button">Save instructions</button></div>
+      </div>
+    </div>
+  </div>
+</main>
 <dialog id="detail"></dialog>
 <script>
 const APPS = ${payload};
@@ -313,6 +454,41 @@ async function save() {
 document.getElementById('copyjson').addEventListener('click', async () => {
   await navigator.clipboard.writeText(JSON.stringify(APPS, null, 2));
   stateEl.textContent = 'copied — paste into profile/applications.json';
+});
+
+// --- header tabs ---
+document.querySelectorAll('#tabs button').forEach(btn => {
+  btn.addEventListener('click', () => {
+    document.querySelectorAll('#tabs button').forEach(b => b.classList.toggle('active', b === btn));
+    document.querySelectorAll('.view').forEach(v =>
+      v.classList.toggle('active', v.id === 'view-' + btn.dataset.view));
+  });
+});
+
+// --- profile & instructions editors (serve mode only) ---
+async function postTo(url, body, contentType) {
+  const res = await fetch(url, { method: 'POST', headers: { 'content-type': contentType }, body });
+  if (!res.ok) throw new Error(await res.text() || res.status);
+}
+const saveProfileBtn = document.getElementById('save-profile');
+const saveInstrBtn = document.getElementById('save-instructions');
+if (!SERVE) {
+  saveProfileBtn.disabled = saveInstrBtn.disabled = true;
+  saveProfileBtn.textContent = saveInstrBtn.textContent = 'static file — read-only';
+}
+saveProfileBtn.addEventListener('click', async () => {
+  const raw = document.getElementById('profile-json').value;
+  try { JSON.parse(raw); } catch (e) { saveProfileBtn.textContent = 'Invalid JSON: ' + e.message; return; }
+  try {
+    await postTo('/api/profile', raw, 'application/json');
+    location.reload();
+  } catch (e) { saveProfileBtn.textContent = 'Save failed: ' + e.message; }
+});
+saveInstrBtn.addEventListener('click', async () => {
+  try {
+    await postTo('/api/instructions', document.getElementById('instructions-md').value, 'text/plain');
+    location.reload();
+  } catch (e) { saveInstrBtn.textContent = 'Save failed: ' + e.message; }
 });
 
 // --- drag & drop between columns ---
@@ -449,6 +625,37 @@ if (serve) {
       createReadStream(target).pipe(res);
       return;
     }
+    if (req.url === '/api/profile' && req.method === 'GET') {
+      res.writeHead(200, { 'content-type': 'application/json' });
+      res.end(JSON.stringify(loadProfile()));
+      return;
+    }
+    if (req.url === '/api/profile' && req.method === 'POST') {
+      let body = '';
+      req.on('data', chunk => { body += chunk; });
+      req.on('end', () => {
+        try {
+          const profile = JSON.parse(body);
+          if (!profile || typeof profile !== 'object' || Array.isArray(profile))
+            throw new Error('expected a JSON object');
+          writeFileSync(profilePath, `${JSON.stringify(profile, null, 2)}\n`);
+          res.writeHead(204).end();
+        } catch (err) {
+          res.writeHead(400, { 'content-type': 'text/plain' });
+          res.end(String(err.message));
+        }
+      });
+      return;
+    }
+    if (req.url === '/api/instructions' && req.method === 'POST') {
+      let body = '';
+      req.on('data', chunk => { body += chunk; });
+      req.on('end', () => {
+        writeFileSync(instructionsPath, body);
+        res.writeHead(204).end();
+      });
+      return;
+    }
     if (req.url === '/api/apps' && req.method === 'GET') {
       res.writeHead(200, { 'content-type': 'application/json' });
       res.end(JSON.stringify(loadApps()));
@@ -474,7 +681,7 @@ if (serve) {
   });
   server.listen(port, () => {
     const actual = server.address().port;
-    console.log(`board server: http://localhost:${actual} (writes ${input})`);
+    console.log(`console: http://localhost:${actual} (writes ${input})`);
   });
 } else {
   const apps = loadApps();

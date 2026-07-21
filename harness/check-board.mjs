@@ -91,10 +91,16 @@ console.log('board: escaping probe + legacy migration ✓');
 // --- 3. serve mode: drag persistence writes back to the JSON file ---
 const live = join(outDir, 'apps-live.json');
 copyFileSync(join(here, 'fixtures/applications.json'), live);
-// mirror the archive folder next to the live JSON so /files/ serving is testable
+// mirror the archive folder + profile + instructions next to the live JSON so
+// the console's /files/ and profile/instructions panes are testable
 cpSync(join(here, 'fixtures/applications'), join(outDir, 'applications'), {
   recursive: true,
 });
+copyFileSync(join(here, 'fixtures/profile.json'), join(outDir, 'profile.json'));
+copyFileSync(
+  join(here, 'fixtures/instructions.md'),
+  join(outDir, 'instructions.md')
+);
 const server = spawn(process.execPath, ['.claude/skills/tracker/scripts/board.mjs', live, '--serve', '0'], {
   cwd: root,
 });
@@ -112,7 +118,28 @@ try {
 
   const base = `http://localhost:${port}`;
   const page = await (await fetch(base)).text();
-  assert.ok(page.includes('Application Board'), 'serve renders board');
+  assert.ok(page.includes('id="view-board"'), 'console renders board view');
+  // profile pane: resume preview + editor payload from fixture profile
+  assert.ok(page.includes('John Doe'), 'profile preview rendered');
+  assert.ok(page.includes('id="view-instructions"'), 'instructions view present');
+  assert.ok(page.includes('never-apply'), 'instructions content loaded');
+
+  // profile API round-trip
+  const prof = await (await fetch(`${base}/api/profile`)).json();
+  assert.equal(prof.name, 'John Doe', 'profile GET');
+  const postProf = await fetch(`${base}/api/profile`, {
+    method: 'POST',
+    headers: { 'content-type': 'application/json' },
+    body: JSON.stringify({ ...prof, title: 'Staff Engineer' }),
+  });
+  assert.equal(postProf.status, 204, 'profile POST accepted');
+  assert.equal(
+    JSON.parse(readFileSync(join(outDir, 'profile.json'), 'utf8')).title,
+    'Staff Engineer',
+    'profile save persisted'
+  );
+  const badProf = await fetch(`${base}/api/profile`, { method: 'POST', body: '[1,2]' });
+  assert.equal(badProf.status, 400, 'non-object profile rejected');
 
   const apps = await (await fetch(`${base}/api/apps`)).json();
   const moved = apps.map(a =>

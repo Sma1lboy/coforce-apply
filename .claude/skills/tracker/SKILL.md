@@ -26,19 +26,25 @@ change appends to `history`: `{date, event}` (e.g.
 `"status: applied → interviewing — recruiter email"`); record submissions and
 interviews there too.
 
-**Board (看板)** — the renderer ships with this skill at `scripts/board.mjs`
+**Console (看板 + 面板)** — ships with this skill at `scripts/board.mjs`
 (relative to this skill's base directory, shown when the skill loads). Prefer
 serve mode; it's interactive and persists:
 ```sh
 node "<skill-dir>/scripts/board.mjs" --serve   # http://localhost:4517
 open http://localhost:4517
 ```
-Kobe-Hallmark-themed kanban: full-height status columns, drag & drop moves an
-application (appends a history event and saves to the JSON), clicking a card
-opens its detail view (JD link, saved info, notes, history timeline,
-description). Without `--serve` it renders a static `~/.coforce/out/board.html`
-instead; drags there can't save — the board shows a "Copy JSON" bar to paste
-back manually.
+One kobe-Hallmark-themed local site, three tabs:
+- **Board** — kanban: full-height status columns, drag & drop moves an
+  application (appends a history event, saves to the JSON), cards open a
+  detail view (JD link, saved info, files, history timeline, description).
+- **Profile** — resume-style live preview of `~/.coforce/profile.json` beside
+  a JSON editor with save (`POST /api/profile`).
+- **Instructions** — edit `~/.coforce/instructions.md` in place.
+
+**Launch it at the start of every working session** (any tracker/apply/start
+activity): if port 4517 isn't already serving, start it and `open` the URL —
+the console is how the user watches everything. Without `--serve` it renders a
+static read-only `~/.coforce/out/board.html` (drags show a "Copy JSON" bar).
 
 **Always end a mutation by showing the board.** After any add / status change /
 import — even when the user didn't ask for the board — regenerate it and `open`

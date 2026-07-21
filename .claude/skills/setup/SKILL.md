@@ -50,7 +50,8 @@ apply to, location/role preferences, anything else they want respected. Write:
 
 ## 4. Done — show, don't tell
 
-Serve and open the (empty) board per the `tracker` skill, and explain the
-loop: `/start` runs one discover→apply cycle; `/loop 30m /start` keeps it
-running; individual skills (`/tailor`, `/apply`, `/tracker`) work standalone
-too.
+Serve and open the console per the `tracker` skill — the Profile tab should
+now show the freshly built profile as a resume preview, Instructions the rules
+just written. Explain the loop: `/start` runs one discover→apply cycle;
+`/loop 30m /start` keeps it running; individual skills (`/tailor`, `/apply`,
+`/tracker`) work standalone too.
