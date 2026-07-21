@@ -263,6 +263,39 @@ try {
   });
   assert.equal(q2.status, 409, 'duplicate queue rejected');
   console.log('board: discover + apply queue ✓');
+
+  // headless apply lifecycle: consent gate → fill → confirm → submitted
+  writeFileSync(join(outDir, 'apply-config.json'), JSON.stringify({ headlessApply: false }));
+  const denied = await fetch(`${base}/api/apply`, {
+    method: 'POST',
+    headers: { 'content-type': 'application/json' },
+    body: JSON.stringify({ url: 'https://jobs.example.com/x' }),
+  });
+  assert.equal(denied.status, 403, 'headless apply gated on consent');
+
+  writeFileSync(join(outDir, 'apply-config.json'), JSON.stringify({ headlessApply: true }));
+  const started = await fetch(`${base}/api/apply`, {
+    method: 'POST',
+    headers: { 'content-type': 'application/json' },
+    body: JSON.stringify({ url: 'https://jobs.example.com/x' }),
+  });
+  assert.equal(started.status, 200, 'headless apply started');
+  const { id: applyId } = await started.json();
+
+  const waitFor = async want => {
+    for (let i = 0; i < 40; i += 1) {
+      const s = await (await fetch(`${base}/api/apply/${applyId}`)).json();
+      if (s.status === want) return s;
+      await new Promise(r => setTimeout(r, 250));
+    }
+    throw new Error(`apply job never reached ${want}`);
+  };
+  const ready = await waitFor('awaiting_confirm');
+  assert.ok(ready.tail.includes('READY_TO_SUBMIT'), 'fill run stopped before submit');
+
+  await fetch(`${base}/api/apply/${applyId}/confirm`, { method: 'POST' });
+  await waitFor('submitted');
+  console.log('board: headless apply lifecycle ✓');
 } finally {
   server.kill();
 }

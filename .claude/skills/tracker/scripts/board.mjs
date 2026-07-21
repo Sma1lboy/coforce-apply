@@ -10,6 +10,7 @@
 // Theme: kobe "Hallmark" tokens (terracotta on warm dark) — the CoForce brand look.
 
 import {
+  appendFileSync,
   createReadStream,
   existsSync,
   mkdirSync,
@@ -18,7 +19,8 @@ import {
   statSync,
   writeFileSync,
 } from 'node:fs';
-import { execFileSync } from 'node:child_process';
+import { execFileSync, spawn } from 'node:child_process';
+import { randomUUID } from 'node:crypto';
 import { createServer } from 'node:http';
 import { homedir } from 'node:os';
 import { dirname, extname, join, resolve, sep } from 'node:path';
@@ -69,6 +71,53 @@ const COLUMNS = [
   ['rejected', 'Rejected', 'oklch(49.5% 0.014 90)'],
 ];
 
+// --- headless apply job runner -------------------------------------------
+// POST /api/apply spawns `claude -p "/apply <url>"` in the background with a
+// fixed --session-id; the skill's headless protocol stops BEFORE the final
+// submit and prints COFORCE_STATUS: READY_TO_SUBMIT. The user confirms in the
+// console dialog → POST .../confirm resumes the same session to submit.
+// Gated on the user's standing consent (headlessApply in apply-config.json).
+const applyJobs = new Map(); // id → {url, sessionId, logPath, child}
+
+const applyLogsDir = () => {
+  const dir = join(dataDir, 'out', 'apply-logs');
+  mkdirSync(dir, { recursive: true });
+  return dir;
+};
+
+const APPLY_STATUS_RE = /COFORCE_STATUS:\s*(READY_TO_SUBMIT|SUBMITTED|FAILED)/g;
+
+function applyJobStatus(job) {
+  const log = readText(job.logPath);
+  const marks = [...log.matchAll(APPLY_STATUS_RE)].map(m => m[1]);
+  const last = marks.at(-1);
+  if (last === 'SUBMITTED') return 'submitted';
+  if (last === 'FAILED') return 'failed';
+  if (last === 'READY_TO_SUBMIT' && !job.confirming) return 'awaiting_confirm';
+  if (job.exited && !job.confirming) return last ? 'awaiting_confirm' : 'error';
+  return 'running';
+}
+
+function spawnClaude(job, args, extraLog) {
+  const bin = process.env.COFORCE_CLAUDE_BIN || 'claude';
+  appendFileSync(job.logPath, extraLog);
+  const child = spawn(bin, args, { stdio: ['ignore', 'pipe', 'pipe'] });
+  const append = d => appendFileSync(job.logPath, d);
+  child.stdout.on('data', append);
+  child.stderr.on('data', append);
+  child.on('exit', code => {
+    job.exited = true;
+    job.confirming = false;
+    append(`\n[claude exited ${code}]\n`);
+  });
+  job.child = child;
+  job.exited = false;
+  return child;
+}
+
+const HEADLESS_APPLY_PROMPT = url =>
+  `/apply ${url}\n\nHEADLESS MODE: no interactive user is attached. Follow the apply skill's headless protocol exactly: read ~/.coforce data, complete the entire application (registering an ATS account only if apply-config consents), but STOP BEFORE the final submit. Then print exactly "COFORCE_STATUS: READY_TO_SUBMIT" followed by a short summary of what was filled. If you hit an unrecoverable blocker (captcha, missing required info), print "COFORCE_STATUS: FAILED" plus the reason. Never submit in this run.`;
+
 // Prompt for the headless-Claude resume import (POST /api/import)
 const IMPORT_PROMPT = `Parse the resume text from stdin into a JSON object with exactly this shape (all fields optional, omit anything absent):
 {"name","title","email","phone","location","linkedin","github","website","summary","skills":[string],"education":[{"institution","degree","date","location"}],"experience":[{"company","title","date","location","description":[{"text"}]}],"projects":[{"name","technologies","dateRange","description":[{"text"}]}],"customSections":[{"title","entries":[{"heading","subheading","date","description":[{"text"}]}]}]}
@@ -95,6 +144,14 @@ const readText = path => {
     return readFileSync(path, 'utf8');
   } catch {
     return '';
+  }
+};
+
+const readJsonSafe = path => {
+  try {
+    return JSON.parse(readFileSync(path, 'utf8'));
+  } catch {
+    return null;
   }
 };
 
@@ -1221,6 +1278,9 @@ if (serve) {
             ? JSON.parse(readFileSync(prefsPath, 'utf8'))
             : null,
           globalFiles: listFiles(filesRoot),
+          applyMode: readJsonSafe(join(dataDir, 'apply-config.json'))?.headlessApply
+            ? 'headless'
+            : 'manual',
         })
       );
       return;
@@ -1317,6 +1377,72 @@ if (serve) {
           res.end(String(err.message));
         }
       });
+      return;
+    }
+    if (req.url === '/api/apply' && req.method === 'POST') {
+      let body = '';
+      req.on('data', chunk => { body += chunk; });
+      req.on('end', () => {
+        try {
+          const config = readJsonSafe(join(dataDir, 'apply-config.json'));
+          if (!config?.headlessApply) {
+            res.writeHead(403, { 'content-type': 'text/plain' });
+            res.end('headless apply not enabled — set "headlessApply": true in ~/.coforce/apply-config.json (asked during /setup)');
+            return;
+          }
+          const { url } = JSON.parse(body);
+          if (!url) throw new Error('need url');
+          const id = `${Date.now()}`;
+          const job = {
+            id,
+            url,
+            sessionId: randomUUID(),
+            logPath: join(applyLogsDir(), `apply-${id}.log`),
+          };
+          writeFileSync(job.logPath, '');
+          spawnClaude(
+            job,
+            ['-p', '--session-id', job.sessionId, '--dangerously-skip-permissions', HEADLESS_APPLY_PROMPT(url)],
+            `[headless apply started for ${url}]\n`
+          );
+          applyJobs.set(id, job);
+          res.writeHead(200, { 'content-type': 'application/json' });
+          res.end(JSON.stringify({ id }));
+        } catch (err) {
+          res.writeHead(400, { 'content-type': 'text/plain' });
+          res.end(String(err.message));
+        }
+      });
+      return;
+    }
+    if (req.url?.startsWith('/api/apply/') && req.method === 'GET') {
+      const job = applyJobs.get(req.url.split('/')[3]);
+      if (!job) { res.writeHead(404).end(); return; }
+      const log = readText(job.logPath);
+      res.writeHead(200, { 'content-type': 'application/json' });
+      res.end(JSON.stringify({
+        status: applyJobStatus(job),
+        tail: log.split('\n').slice(-14).join('\n'),
+      }));
+      return;
+    }
+    if (req.url?.startsWith('/api/apply/') && req.url.endsWith('/confirm') && req.method === 'POST') {
+      const job = applyJobs.get(req.url.split('/')[3]);
+      if (!job) { res.writeHead(404).end(); return; }
+      job.confirming = true;
+      spawnClaude(
+        job,
+        ['-p', '--resume', job.sessionId, '--dangerously-skip-permissions',
+          'User confirmed in the CoForce console — submit the application now. After the submission is verifiably in, print exactly "COFORCE_STATUS: SUBMITTED" and update ~/.coforce/applications.json (status applied + history event). If submission fails print "COFORCE_STATUS: FAILED" plus the reason.'],
+        '\n[user confirmed — submitting]\n'
+      );
+      res.writeHead(204).end();
+      return;
+    }
+    if (req.url?.startsWith('/api/apply/') && req.url.endsWith('/cancel') && req.method === 'POST') {
+      const job = applyJobs.get(req.url.split('/')[3]);
+      if (job?.child && !job.exited) job.child.kill();
+      res.writeHead(204).end();
       return;
     }
     if (req.url === '/api/prefs' && req.method === 'GET') {

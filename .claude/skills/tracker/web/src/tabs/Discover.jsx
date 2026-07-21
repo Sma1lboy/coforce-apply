@@ -215,7 +215,7 @@ export default function Discover({ state, onChanged }) {
           }}
         />
       )}
-      <ApplyDialog job={applying} onClose={() => setApplying(null)} onQueued={onChanged} />
+      <ApplyDialog job={applying} mode={state.applyMode} onClose={() => setApplying(null)} onQueued={onChanged} />
     </div>
   );
 }

@@ -84,6 +84,31 @@ When the ATS requires an account and `autoRegister` is consented:
    history. On later applications to the same tenant, log in with the stored
    credentials instead of re-registering.
 
+## Headless protocol (spawned by the console, no interactive user)
+
+The console's Apply button spawns this skill via `claude -p` with a fixed
+`--session-id` when the user granted the standing `headlessApply` consent in
+apply-config.json. In that mode:
+
+1. Run the normal flow (profile, instructions, registration, filling,
+   uploads) without asking questions — use apply-config answers; anything
+   unanswerable is a blocker.
+2. **Never submit in the first run.** When everything is filled, print exactly
+   `COFORCE_STATUS: READY_TO_SUBMIT` plus a short summary of what was entered
+   (fields, resume used, screening answers). The console shows this to the
+   user with a Confirm button.
+3. On an unrecoverable blocker (captcha, login wall needing the user, missing
+   required data), print `COFORCE_STATUS: FAILED` plus the reason, and record
+   `needsFallback` + a history event in the tracker.
+4. The user's confirmation resumes THIS session (`claude -p --resume`) with a
+   submit instruction: submit, verify (confirmation page/email), print
+   `COFORCE_STATUS: SUBMITTED`, and update `~/.coforce/applications.json`
+   (status `applied` + history event). If submission fails, print
+   `COFORCE_STATUS: FAILED` with the reason.
+
+The sentinels must be printed verbatim on their own line — the console parses
+them mechanically.
+
 ## Rules
 
 - Never fabricate answers to screening questions (visa, years of experience,

@@ -18,7 +18,11 @@ import an existing resume PDF/JSON).
 
 Ask once: account email (Gmail) for ATS registrations · `autoRegister` consent
 · `mailboxAccess` (`browser`/`paste`) · resume PDF path · work authorization /
-sponsorship. Seed job sources with the defaults (user can add/remove):
+sponsorship · **`headlessApply` consent** — "may the console's Apply button run
+Claude headlessly on your machine (fills everything, always stops for your
+confirmation before submitting)?" This is what makes one-click Apply work; it
+runs `claude -p --dangerously-skip-permissions` locally, so it needs an
+explicit yes. Seed job sources with the defaults (user can add/remove):
 
 ```json
 "sources": [
