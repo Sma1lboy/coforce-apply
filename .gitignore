@@ -1,8 +1,8 @@
 # ignore haters
 haters/
 
-# personal career data (profile, tracker, per-application archives)
-profile/
+# personal career data (profile, tracker, per-application archives) — root only
+/profile/
 
 # generated resumes and harness run artifacts
 out/
