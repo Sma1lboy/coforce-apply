@@ -16,6 +16,7 @@ export interface UserProfile {
     company: string;
     title: string;
     date: string;
+    location?: string;
     description: { text: string; weight?: number }[];
     weight?: number;
   }[];
@@ -23,6 +24,7 @@ export interface UserProfile {
     institution: string;
     degree: string;
     date: string;
+    location?: string;
     relevantCourses?: string;
   }[];
   certifications?: {
@@ -122,6 +124,10 @@ export const userProfileSchema = z.object({
         date: z
           .string()
           .describe('Employment period (e.g., "Jan 2020 - Present")'),
+        location: z
+          .string()
+          .optional()
+          .describe('Job location (e.g., "Sunnyvale, CA" or "Remote")'),
         description: z
           .array(
             z.object({
@@ -149,6 +155,10 @@ export const userProfileSchema = z.object({
         institution: z.string().describe('Educational institution name'),
         degree: z.string().describe('Degree or certification'),
         date: z.string().describe('Period of study (e.g., "2015 - 2019")'),
+        location: z
+          .string()
+          .optional()
+          .describe('Institution location (e.g., "Madison, WI")'),
         relevantCourses: z
           .string()
           .optional()

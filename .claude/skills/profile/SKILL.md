@@ -10,8 +10,8 @@ repo). The authoritative schema is the shape below. Never invent fields.
 
 Shape (all fields optional): `name`, `title`, `email`, `phone`, `location`,
 `linkedin`, `github`, `website`, `summary`, `skills[]`, `courses[]`,
-`experience[] {company, title, date, description[{text, weight?}], weight?}`,
-`education[] {institution, degree, date, relevantCourses?}`,
+`experience[] {company, title, date, location?, description[{text, weight?}], weight?}`,
+`education[] {institution, degree, date, location?, relevantCourses?}`,
 `projects[] {name, description[{text, weight?}], technologies?, dateRange?, weight?}`,
 `certifications[] {name, issuer, date}`, `languages[] {language, proficiency}`.
 `weight` (higher = more important) drives what gets picked when tailoring a resume

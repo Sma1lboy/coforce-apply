@@ -17,7 +17,10 @@ Profile source: `~/.coforce/profile.json` (fall back to asking the user to run t
 1. A file the user names explicitly.
 2. Files in `~/.coforce/templates/` (may carry personal style or data). If
    several, ask once which to use.
-3. Default: `assets/resume_template.tex` inside this skill's base directory.
+3. Default: `assets/resume_template.tex` inside this skill's base directory —
+   Jake's-resume style (letterpaper 11pt, `\resumeSubheading` macros, section
+   order Education → Experience → Projects → Skills). Keep its macros and
+   spacing intact; only fill the placeholder slots.
 
 How to use it depends on its type:
 - **`.tex` / `.html`** — a fillable template: keep its packages, layout, and
@@ -45,7 +48,14 @@ How to use it depends on its type:
      sections, bold company + right-aligned dates on one line, bullet lists),
      then `pandoc resume.md -o resume.docx`. Fallback without pandoc: write
      semantic HTML and `textutil -convert docx resume.html`.
-4. Report: file path(s) + a one-paragraph note on what was emphasized and why.
+4. **One-page review gate (mandatory for tex/pdf)**: after compiling, check
+   the page count (pdflatex log says `Output written on … (N pages` — or
+   `pdfinfo`/`mdls`). If N > 1: cut the lowest-weight bullets first (respect
+   `weight`), then the least JD-relevant project, and recompile until it is
+   exactly 1 page. Never shrink font size or margins to force a fit. Report
+   what was cut. For docx, sanity-check length the same way (≈45 lines of
+   content) before delivering.
+5. Report: file path(s) + a one-paragraph note on what was emphasized and why.
 
 ## Rules
 

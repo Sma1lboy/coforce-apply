@@ -1,90 +1,140 @@
-\documentclass[11pt,a4paper]{article}
+%-------------------------
+% Resume template — Jake's-resume style, content stripped.
+% Placeholders use {field} / {{#each list}} matching the profile schema:
+%   header: {name} {phone} {email} {linkedin} {github}
+%   sections in THIS order: Education, Experience, Projects, Skills.
+% Skills: group profile skills[] into Languages vs Frameworks/Tools when
+% possible; otherwise one line. Keep the output to ONE page.
+%-------------------------
+\documentclass[letterpaper,11pt]{article}
 
-% Packages
-\usepackage[margin=0.75in]{geometry}
-\usepackage{hyperref}
-\usepackage{fontawesome}
+\usepackage{latexsym}
+\usepackage[empty]{fullpage}
 \usepackage{titlesec}
+\usepackage{marvosym}
+\usepackage[usenames,dvipsnames]{color}
+\usepackage{verbatim}
 \usepackage{enumitem}
-\usepackage{xcolor}
+\usepackage[hidelinks]{hyperref}
+\usepackage{fancyhdr}
+\usepackage[english]{babel}
+\usepackage{tabularx}
+\input{glyphtounicode}
 
-% Define colors
-\definecolor{primary}{RGB}{70, 130, 180}
-\definecolor{secondary}{RGB}{128, 128, 128}
+\pagestyle{fancy}
+\fancyhf{}
+\fancyfoot{}
+\renewcommand{\headrulewidth}{0pt}
+\renewcommand{\footrulewidth}{0pt}
 
-% Format section headings
-\titleformat{\section}{\normalfont\Large\bfseries}{}{0em}{\color{primary}}[\titlerule]
-\titlespacing*{\section}{0pt}{*1.5}{*1}
+\addtolength{\oddsidemargin}{-0.5in}
+\addtolength{\evensidemargin}{-0.5in}
+\addtolength{\textwidth}{1in}
+\addtolength{\topmargin}{-.5in}
+\addtolength{\textheight}{1.0in}
 
-% Remove page numbers
-\pagestyle{empty}
+\urlstyle{same}
+
+\raggedbottom
+\raggedright
+\setlength{\tabcolsep}{0in}
+
+\titleformat{\section}{
+\vspace{-4pt}\scshape\raggedright\large
+}{}{0em}{}[\color{black}\titlerule \vspace{-5pt}]
+
+\pdfgentounicode=1
+
+\newcommand{\resumeItem}[1]{
+\item\small{
+{#1 \vspace{-1pt}}
+}
+}
+
+\newcommand{\resumeSubheading}[4]{
+\vspace{-2pt}\item
+\begin{tabular*}{0.97\textwidth}[t]{l@{\extracolsep{\fill}}r}
+\textbf{#1} & #2 \\
+\textit{\small#3} & \textit{\small #4} \\
+\end{tabular*}\vspace{-7pt}
+}
+
+\newcommand{\resumeSubSubheading}[2]{
+\item
+\begin{tabular*}{0.97\textwidth}{l@{\extracolsep{\fill}}r}
+\textit{\small#1} & \textit{\small #2} \\
+\end{tabular*}\vspace{-7pt}
+}
+
+\newcommand{\resumeProjectHeading}[2]{
+\item
+\begin{tabular*}{0.97\textwidth}{l@{\extracolsep{\fill}}r}
+\small#1 & \textit{\small #2} \\
+\end{tabular*}\vspace{-5pt}
+}
+
+\newcommand{\resumeSubItem}[1]{\resumeItem{#1}\vspace{-4pt}}
+
+\renewcommand\labelitemii{$\vcenter{\hbox{\tiny$\bullet$}}$}
+
+\newcommand{\resumeSubHeadingListStart}{\begin{itemize}[leftmargin=0.15in, label={}]}
+\newcommand{\resumeSubHeadingListEnd}{\end{itemize}}
+\newcommand{\resumeItemListStart}{\begin{itemize}}
+\newcommand{\resumeItemListEnd}{\end{itemize}\vspace{-5pt}}
 
 \begin{document}
 
-% Header with name and contact info
 \begin{center}
-    {\LARGE \textbf{{name}}}\\[0.3em]
-    {\large {title}}\\[0.5em]
-    {\small 
-    \faEnvelope\ \href{mailto:{email}}{{email}} $|$
-    \faPhone\ {phone} $|$
-    \faMapMarker\ {location}
-    {{#if linkedin}}
-    $|$ \faLinkedin\ \href{https://www.linkedin.com/in/{linkedin}}{linkedin}
-    {{/if}}
-    {{#if github}}
-    $|$ \faGithub\ \href{https://github.com/{github}}{github}
-    {{/if}}
-    {{#if website}}
-    $|$ \faGlobe\ \href{https://{website}}{{website}}
-    {{/if}}
-    }
+\textbf{\Huge \scshape {name}} \\ \vspace{1pt}
+\small
+\href{sms:{phone}}{{phone}} $|$
+\href{mailto:{email}}{{email}} $|$
+\href{https://www.linkedin.com/in/{linkedin}}{\underline{linkedin.com/in/{linkedin}}} $|$
+\href{https://github.com/{github}}{\underline{github.com/{github}}}
 \end{center}
 
-% Summary
-\section{Professional Summary}
-{summary}
-
-% Skills
-\section{Skills}
-{{#each skills}}
-{{this}}{{#unless @last}}, {{/unless}}
-{{/each}}
-
-% Experience
-\section{Experience}
-{{#each experience}}
-\textbf{{company}} \hfill {{date}}\\
-\textit{{title}}\\
-\begin{itemize}[leftmargin=*,nosep]
-{{#each description}}
-    \item {{{this}}}
-{{/each}}
-\end{itemize}
-{{/each}}
-
-% Education
 \section{Education}
+\resumeSubHeadingListStart
 {{#each education}}
-\textbf{{institution}} \hfill {{date}}\\
-\textit{{degree}}\\
+\resumeSubheading
+{{{institution}}}{{{location}}}
+{{{degree}}}{{{date}}}
 {{/each}}
+\resumeSubHeadingListEnd
 
-{{#if certifications}}
-% Certifications
-\section{Certifications}
-{{#each certifications}}
-\textbf{{name}} \hfill {{date}}\\
-\textit{{issuer}}\\
+\section{Experience}
+\resumeSubHeadingListStart
+{{#each experience}}
+\resumeSubheading
+{{{title}}}{{{location}}}
+{{{company}}}{{{date}}}
+\resumeItemListStart
+{{#each description}}
+\resumeItem{{{text}}}
 {{/each}}
-{{/if}}
+\resumeItemListEnd
+{{/each}}
+\resumeSubHeadingListEnd
 
-{{#if languages}}
-% Languages
-\section{Languages}
-{{#each languages}}
-{{language}} ({{proficiency}}){{#unless @last}}, {{/unless}}
+\section{Projects}
+\resumeSubHeadingListStart
+{{#each projects}}
+\resumeProjectHeading
+{\textbf{{{name}}} $|$ \emph{{{technologies}}}}{\small\textit{{{dateRange}}}}
+\resumeItemListStart
+{{#each description}}
+\resumeItem{{{text}}}
 {{/each}}
-{{/if}}
+\resumeItemListEnd
+{{/each}}
+\resumeSubHeadingListEnd
+
+\section{Skills}
+\begin{itemize}[leftmargin=0.15in, label={}]
+\small{\item{
+\textbf{Languages}: {languages-from-skills} \quad \\
+\textbf{Frameworks/Tools}: {frameworks-and-tools-from-skills}
+}}
+\end{itemize}
 
 \end{document}

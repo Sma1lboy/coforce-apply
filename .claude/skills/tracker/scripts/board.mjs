@@ -90,16 +90,12 @@ function listFiles(dir) {
 }
 
 function loadApps() {
-  let apps;
-  try {
-    apps = JSON.parse(readFileSync(input, 'utf8'));
-  } catch (err) {
-    console.error(`Cannot read ${input}: ${err.message}`);
-    process.exit(1);
-  }
+  // missing file = fresh workspace (empty board); corrupt file must THROW —
+  // never silently return [] or a later save would wipe the user's data
+  if (!existsSync(input)) return [];
+  const apps = JSON.parse(readFileSync(input, 'utf8'));
   if (!Array.isArray(apps)) {
-    console.error(`${input} must be a JSON array of applications`);
-    process.exit(1);
+    throw new Error(`${input} must be a JSON array of applications`);
   }
   return apps.map(normalize);
 }
@@ -589,6 +585,14 @@ document.querySelectorAll('.card').forEach(card => {
 
 if (serve) {
   const server = createServer((req, res) => {
+    try {
+      handle(req, res);
+    } catch (err) {
+      res.writeHead(500, { 'content-type': 'text/plain' });
+      res.end(String(err.message));
+    }
+  });
+  const handle = (req, res) => {
     if (req.method === 'GET' && (req.url === '/' || req.url === '/board')) {
       res.writeHead(200, { 'content-type': 'text/html; charset=utf-8' });
       res.end(render(loadApps()));
@@ -678,13 +682,19 @@ if (serve) {
       return;
     }
     res.writeHead(404).end();
-  });
+  };
   server.listen(port, () => {
     const actual = server.address().port;
     console.log(`console: http://localhost:${actual} (writes ${input})`);
   });
 } else {
-  const apps = loadApps();
+  let apps;
+  try {
+    apps = loadApps();
+  } catch (err) {
+    console.error(err.message);
+    process.exit(1);
+  }
   mkdirSync(dirname(output), { recursive: true });
   writeFileSync(output, render(apps));
   console.log(`board: ${apps.length} applications → ${output}`);

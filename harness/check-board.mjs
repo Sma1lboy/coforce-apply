@@ -88,6 +88,19 @@ assert.ok(
 );
 console.log('board: escaping probe + legacy migration ✓');
 
+// --- 2.5 fresh workspace: missing applications.json renders an empty board ---
+const freshOut = join(outDir, 'fresh.html');
+execFileSync(
+  process.execPath,
+  ['.claude/skills/tracker/scripts/board.mjs', join(outDir, 'does-not-exist.json'), freshOut],
+  { cwd: root, stdio: 'inherit' }
+);
+assert.ok(
+  readFileSync(freshOut, 'utf8').includes('0 tracked'),
+  'missing file renders empty board instead of crashing'
+);
+console.log('board: fresh workspace ✓');
+
 // --- 3. serve mode: drag persistence writes back to the JSON file ---
 const live = join(outDir, 'apps-live.json');
 copyFileSync(join(here, 'fixtures/applications.json'), live);
