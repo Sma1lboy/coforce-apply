@@ -544,7 +544,6 @@ function render(apps, profile = loadProfile(), instructions = readText(instructi
   </div>
   <div class="view" id="view-discover">
     <div class="discover-wrap">
-      <aside id="filters"><div class="pane-empty">Filters appear after the first fetch</div></aside>
       <div class="discover-main">
         <div class="editor-toolbar">
           <button id="discover-refresh" type="button" class="ghost">↻ Refresh sources</button>
@@ -552,6 +551,7 @@ function render(apps, profile = loadProfile(), instructions = readText(instructi
         </div>
         <div id="discover-list" class="form-scroll"></div>
       </div>
+      <aside id="filters"><div class="pane-empty">Filters appear after the first fetch</div></aside>
     </div>
   </div>
   <div class="view" id="view-profile">
