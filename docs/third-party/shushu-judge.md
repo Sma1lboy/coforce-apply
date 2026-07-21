@@ -1,7 +1,7 @@
 # Third-party skill review: shushu-internship-tool
 
 Upstream: <https://github.com/LiuMengxuan04/shushu-internship-tool> (Apache-2.0)
-Vendored at `.claude/skills/shushu-internship-tool/` with a CoForce integration
+Vendored at `.agents/skills/shushu-internship-tool/` with a CoForce integration
 layer appended. This is the first sample of the Phase-2 "third-party skills"
 contract — reviewed before adoption, judged below.
 

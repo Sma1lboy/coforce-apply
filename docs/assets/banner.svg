@@ -29,6 +29,6 @@
   <!-- tagline -->
   <text x="384" y="272" font-family="JetBrainsMonoNL Nerd Font, JetBrains Mono, Menlo, monospace" font-size="27" fill="#9A9285">discover → tailor → apply → track · your job hunt on autopilot</text>
   <text x="384" y="322" font-family="JetBrainsMonoNL Nerd Font, JetBrains Mono, Menlo, monospace" font-size="27">
-    <tspan fill="#5B554C">$ </tspan><tspan fill="#DE5F38">/setup</tspan><tspan fill="#5B554C"> &amp;&amp; </tspan><tspan fill="#DE5F38">/loop 30m /start</tspan>
+    <tspan fill="#5B554C">$ </tspan><tspan fill="#DE5F38">$setup</tspan><tspan fill="#5B554C"> &amp;&amp; </tspan><tspan fill="#DE5F38">$start</tspan>
   </text>
 </svg>

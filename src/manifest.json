@@ -8,7 +8,7 @@
     "48": "assets/icons/android-chrome-192x192.png",
     "128": "assets/icons/android-chrome-512x512.png"
   },
-  "description": "CoForce Apply's in-browser hands: auto-fill applications from your local profile, track every submission, and hand stubborn forms to Claude browser-use",
+  "description": "CoForce Apply's in-browser hands: auto-fill applications from your local profile, track every submission, and hand stubborn forms to Codex or Claude",
   "homepage_url": "https://github.com/Sma1lboy/coforce-apply",
   "short_name": "CoForce",
   "permissions": [

@@ -217,5 +217,5 @@ dist/
 
 # the console web package ships its prebuilt dist with the skill (must stay
 # last: overrides the generic dist/ rule above)
-!.claude/skills/tracker/web/dist/
-!.claude/skills/tracker/web/dist/**
+!.agents/skills/tracker/web/dist/
+!.agents/skills/tracker/web/dist/**

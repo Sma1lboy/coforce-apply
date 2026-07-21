@@ -57,7 +57,7 @@ export interface UserProfile {
 }
 
 // A tracked job application. Status is the pipeline stage only; HOW delivery
-// went (tier-1 failed, handed to Claude fallback) is recorded in `history` and
+// went (tier-1 failed, handed to an agent fallback) is recorded in `history` and
 // the `needsFallback` flag, not as statuses. Local truth:
 // profile/applications.json (synced with the extension via export/import).
 export type JobApplicationStatus =
@@ -77,7 +77,7 @@ export interface JobApplication {
   company?: string;
   position?: string;
   notes?: string;
-  /** Tier-1 auto-fill failed or stalled — hand this one to the Claude fallback */
+  /** Tier-1 auto-fill failed or stalled — hand this one to the configured agent fallback */
   needsFallback?: boolean;
   /** Job description text saved when the application was tracked */
   description?: string;

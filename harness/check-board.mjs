@@ -8,6 +8,7 @@ import {
   cpSync,
   mkdirSync,
   readFileSync,
+  readdirSync,
   writeFileSync,
 } from 'node:fs';
 import { strict as assert } from 'node:assert';
@@ -23,7 +24,7 @@ mkdirSync(outDir, { recursive: true });
 const out = join(outDir, 'board.html');
 execFileSync(
   process.execPath,
-  ['.claude/skills/tracker/scripts/board.mjs', 'harness/fixtures/applications.json', out],
+  ['.agents/skills/tracker/scripts/board.mjs', 'harness/fixtures/applications.json', out],
   { cwd: root, stdio: 'inherit' }
 );
 const html = readFileSync(out, 'utf8');
@@ -42,7 +43,7 @@ for (const status of [
 }
 assert.ok(!html.includes('data-status="fallback"'), 'fallback is not a column');
 assert.ok(!html.includes('data-status="failed"'), 'failed is not a column');
-assert.ok(html.includes('needs Claude fallback'), 'needsFallback flag rendered');
+assert.ok(html.includes('needs agent fallback'), 'needsFallback flag rendered');
 assert.ok(html.includes('5 tracked'), 'header count');
 assert.ok(html.includes('Senior Full-Stack Engineer — Nimbus Analytics'));
 assert.ok(html.includes('Referred by Sam; recruiter: r.lee@acme.example'));
@@ -75,7 +76,7 @@ writeFileSync(
   ])
 );
 const probeOut = join(outDir, 'probe.html');
-execFileSync(process.execPath, ['.claude/skills/tracker/scripts/board.mjs', probe, probeOut], {
+execFileSync(process.execPath, ['.agents/skills/tracker/scripts/board.mjs', probe, probeOut], {
   cwd: root,
   stdio: 'inherit',
 });
@@ -85,7 +86,7 @@ assert.ok(!probeHtml.includes('<img src=x'), 'notes/url markup escaped');
 assert.ok(probeHtml.includes('&lt;script&gt;alert(1)'), 'escaped title rendered');
 // legacy status normalized: card renders with the fallback flag in To Apply
 assert.ok(
-  probeHtml.includes('needs Claude fallback'),
+  probeHtml.includes('needs agent fallback'),
   'legacy fallback status normalized to pending + flag'
 );
 console.log('board: escaping probe + legacy migration ✓');
@@ -94,7 +95,7 @@ console.log('board: escaping probe + legacy migration ✓');
 const freshOut = join(outDir, 'fresh.html');
 execFileSync(
   process.execPath,
-  ['.claude/skills/tracker/scripts/board.mjs', join(outDir, 'does-not-exist.json'), freshOut],
+  ['.agents/skills/tracker/scripts/board.mjs', join(outDir, 'does-not-exist.json'), freshOut],
   { cwd: root, stdio: 'inherit' }
 );
 assert.ok(
@@ -116,11 +117,16 @@ copyFileSync(
   join(here, 'fixtures/instructions.md'),
   join(outDir, 'instructions.md')
 );
-const server = spawn(process.execPath, ['.claude/skills/tracker/scripts/board.mjs', live, '--serve', '0'], {
+writeFileSync(
+  join(outDir, 'apply-config.json'),
+  JSON.stringify({ headlessApply: false, agent: 'codex' })
+);
+const server = spawn(process.execPath, ['.agents/skills/tracker/scripts/board.mjs', live, '--serve', '0'], {
   cwd: root,
   env: {
     ...process.env,
-    COFORCE_CLAUDE_BIN: join(here, 'fixtures/claude-stub.sh'),
+    COFORCE_CODEX_BIN: join(here, 'fixtures/agent-stub.sh'),
+    COFORCE_CLAUDE_BIN: join(here, 'fixtures/agent-stub.sh'),
     COFORCE_SOURCE_FILE: join(here, 'fixtures/source-jobs.md'),
   },
 });
@@ -144,9 +150,17 @@ try {
     rootPage.includes('id="root"') || rootPage.includes('id="view-board"'),
     'root serves React dist (or inline fallback when dist absent)'
   );
+  const workerAsset = readdirSync(join(root, '.agents/skills/tracker/web/dist/assets'))
+    .find(name => name.endsWith('.mjs'));
+  assert.ok(workerAsset, 'PDF.js worker is bundled');
+  const workerResponse = await fetch(`${base}/assets/${workerAsset}`);
+  assert.equal(workerResponse.status, 200, 'PDF.js worker served');
+  assert.ok(workerResponse.headers.get('content-type').startsWith('text/javascript'), 'PDF.js worker has executable MIME type');
   const bootstrap = await (await fetch(`${base}/api/state`)).json();
   assert.equal(bootstrap.profile.name, 'John Doe', 'state bootstrap profile');
   assert.equal(bootstrap.apps.length, 5, 'state bootstrap apps');
+  assert.equal(bootstrap.agent, 'codex', 'state exposes configured/detected agent');
+  assert.equal(bootstrap.experience.tier, 0, 'state exposes Tier 0 experience status');
   assert.ok(Array.isArray(bootstrap.globalFiles), 'state bootstrap files');
 
   const page = await (await fetch(`${base}/legacy`)).text();
@@ -195,7 +209,7 @@ try {
   });
   assert.equal((await (await fetch(`${base}/api/prefs`)).json()).level, 'any', 'prefs overwrite');
 
-  // AI import: stubbed claude CLI parses pasted text into a profile object
+  // AI import: stubbed configured agent parses pasted text into a profile object
   const imp = await fetch(`${base}/api/import`, {
     method: 'POST',
     headers: { 'content-type': 'application/json' },
@@ -251,11 +265,12 @@ try {
     body: JSON.stringify(job),
   });
   assert.equal(q1.status, 200, 'queue accepted');
+  const queuedResult = await q1.json();
   const afterQueue = JSON.parse(readFileSync(live, 'utf8'));
   const queued = afterQueue.find(a => a.url === job.url);
   assert.ok(queued, 'queued job tracked');
   assert.equal(queued.status, 'pending');
-  assert.ok(queued.history[0].event.includes('queued for apply'), 'queue history event');
+  assert.ok(queued.history[0].event.includes('queued for resume campaign'), 'queue history event');
   const q2 = await fetch(`${base}/api/queue`, {
     method: 'POST',
     headers: { 'content-type': 'application/json' },
@@ -264,22 +279,66 @@ try {
   assert.equal(q2.status, 409, 'duplicate queue rejected');
   console.log('board: discover + apply queue ✓');
 
-  // headless apply lifecycle: consent gate → fill → confirm → submitted
+  // resume campaign API: queue → feedback → approve → export/download
+  const campaign = await (await fetch(`${base}/api/campaign`)).json();
+  const campaignJob = campaign.jobs.find(item =>
+    item.id === queuedResult.campaignJobId || item.url === job.url
+  );
+  assert.ok(campaignJob, 'queued listing appears in resume campaign');
+  const feedback = await fetch(`${base}/api/campaign/jobs/${campaignJob.id}/feedback`, {
+    method: 'POST',
+    headers: { 'content-type': 'application/json' },
+    body: JSON.stringify({ text: 'Lead with the grounded reliability work.' }),
+  });
+  assert.equal(feedback.status, 200, 'campaign feedback accepted');
+  assert.equal((await feedback.json()).status, 'revision_requested');
+  const campaignDir = join(outDir, 'campaigns', 'current', 'jobs', campaignJob.folder);
+  mkdirSync(campaignDir, { recursive: true });
+  for (const [name, content] of Object.entries({
+    'resume.pdf': '%PDF-1.4\n%%EOF\n',
+    'resume.tex': '\\documentclass{article}\\begin{document}Fixture\\end{document}\n',
+    'job-description.md': '# Fixture JD\n',
+    'job.json': JSON.stringify({ id: campaignJob.id }),
+    'match-report.md': '# Grounded match\n',
+  })) writeFileSync(join(campaignDir, name), content);
+  const approved = await fetch(`${base}/api/campaign/jobs/${campaignJob.id}/approve`, { method: 'POST' });
+  assert.equal(approved.status, 200, 'campaign approval accepted with complete artifacts');
+  assert.equal((await approved.json()).status, 'approved');
+  const packed = await fetch(`${base}/api/campaign/export`, { method: 'POST' });
+  assert.equal(packed.status, 200, 'approved campaign exported');
+  const download = await fetch(`${base}${(await packed.json()).url}`);
+  assert.equal(download.status, 200, 'campaign ZIP served');
+  assert.equal(download.headers.get('content-type'), 'application/zip');
+  const campaignEvil = await fetch(`${base}/campaign/files/..%2Fapps-live.json`);
+  assert.equal(campaignEvil.status, 404, 'campaign traversal blocked');
+  console.log('board: campaign feedback + approval + ZIP API ✓');
+
+  const reviewToggle = await fetch(`${base}/api/config`, {
+    method: 'POST',
+    headers: { 'content-type': 'application/json' },
+    body: JSON.stringify({ requireResumeReview: false }),
+  });
+  assert.equal(reviewToggle.status, 204, 'resume review setting saved');
+  const autoReviewState = await (await fetch(`${base}/api/state`)).json();
+  assert.equal(autoReviewState.campaign.reviewRequired, false, 'campaign exposes auto-review mode');
+  console.log('board: resume review toggle ✓');
+
+  // background Chrome apply lifecycle: consent gate → fill → confirm → submitted
   writeFileSync(join(outDir, 'apply-config.json'), JSON.stringify({ headlessApply: false }));
   const denied = await fetch(`${base}/api/apply`, {
     method: 'POST',
     headers: { 'content-type': 'application/json' },
     body: JSON.stringify({ url: 'https://jobs.example.com/x' }),
   });
-  assert.equal(denied.status, 403, 'headless apply gated on consent');
+  assert.equal(denied.status, 403, 'background apply gated on consent');
 
-  writeFileSync(join(outDir, 'apply-config.json'), JSON.stringify({ headlessApply: true }));
+  writeFileSync(join(outDir, 'apply-config.json'), JSON.stringify({ headlessApply: true, agent: 'codex' }));
   const started = await fetch(`${base}/api/apply`, {
     method: 'POST',
     headers: { 'content-type': 'application/json' },
     body: JSON.stringify({ url: 'https://jobs.example.com/x' }),
   });
-  assert.equal(started.status, 200, 'headless apply started');
+  assert.equal(started.status, 200, 'background Chrome apply started');
   const { id: applyId } = await started.json();
 
   const waitFor = async want => {
@@ -295,7 +354,31 @@ try {
 
   await fetch(`${base}/api/apply/${applyId}/confirm`, { method: 'POST' });
   await waitFor('submitted');
-  console.log('board: headless apply lifecycle ✓');
+  console.log('board: Codex Chrome-backed apply lifecycle ✓');
+
+  // Claude remains a supported runtime through the same adapter.
+  writeFileSync(join(outDir, 'apply-config.json'), JSON.stringify({ headlessApply: true, agent: 'claude' }));
+  const claudeStarted = await fetch(`${base}/api/apply`, {
+    method: 'POST',
+    headers: { 'content-type': 'application/json' },
+    body: JSON.stringify({ url: 'https://jobs.example.com/claude' }),
+  });
+  assert.equal(claudeStarted.status, 200, 'Claude apply started');
+  const { id: claudeApplyId } = await claudeStarted.json();
+  for (let i = 0; i < 40; i += 1) {
+    const s = await (await fetch(`${base}/api/apply/${claudeApplyId}`)).json();
+    if (s.status === 'awaiting_confirm') break;
+    if (i === 39) throw new Error('Claude apply never reached awaiting_confirm');
+    await new Promise(r => setTimeout(r, 250));
+  }
+  await fetch(`${base}/api/apply/${claudeApplyId}/confirm`, { method: 'POST' });
+  for (let i = 0; i < 40; i += 1) {
+    const s = await (await fetch(`${base}/api/apply/${claudeApplyId}`)).json();
+    if (s.status === 'submitted') break;
+    if (i === 39) throw new Error('Claude apply never reached submitted');
+    await new Promise(r => setTimeout(r, 250));
+  }
+  console.log('board: Claude Chrome-backed apply lifecycle ✓');
 } finally {
   server.kill();
 }

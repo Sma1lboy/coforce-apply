@@ -6,6 +6,8 @@ import { Badge } from '@/components/ui/badge';
 import { JobApplication } from '@/types';
 
 const STORAGE_KEY = 'jobApplications';
+const AGENT_STORAGE_KEY = 'coforceAgent';
+type AgentRuntime = 'codex' | 'claude';
 
 const STATUS_STYLES: Record<JobApplication['status'], string> = {
   pending: 'bg-yellow-100 text-yellow-800',
@@ -24,21 +26,25 @@ const normalize = (app: JobApplication): JobApplication => {
   return app;
 };
 
-function fallbackCommand(url: string): string {
-  return `claude "/apply ${url}"`;
+function fallbackCommand(url: string, agent: AgentRuntime): string {
+  return agent === 'codex'
+    ? `codex '$apply ${url}'`
+    : `claude --chrome "/apply ${url}"`;
 }
 
 const ApplyTab: React.FC = () => {
   const [applications, setApplications] = React.useState<JobApplication[]>([]);
   const [message, setMessage] = React.useState<string>('');
   const [copiedId, setCopiedId] = React.useState<string>('');
+  const [agentRuntime, setAgentRuntime] = React.useState<AgentRuntime>('codex');
 
   React.useEffect(() => {
     const load = async () => {
-      const data = await browser.storage.local.get(STORAGE_KEY);
+      const data = await browser.storage.local.get([STORAGE_KEY, AGENT_STORAGE_KEY]);
       if (Array.isArray(data[STORAGE_KEY])) {
         setApplications(data[STORAGE_KEY].map(normalize));
       }
+      if (data[AGENT_STORAGE_KEY] === 'claude') setAgentRuntime('claude');
     };
     load().catch(error => console.error('Error loading applications:', error));
   }, []);
@@ -140,20 +146,20 @@ const ApplyTab: React.FC = () => {
   };
 
   const copyFallback = async (app: JobApplication) => {
-    await navigator.clipboard.writeText(fallbackCommand(app.url));
+    await navigator.clipboard.writeText(fallbackCommand(app.url, agentRuntime));
     setCopiedId(app.id);
     setTimeout(() => setCopiedId(''), 2000);
     await upsertApplication(
       app.url,
       app.title,
       { needsFallback: true },
-      'handed to Claude fallback (command copied)'
+      `handed to ${agentRuntime === 'codex' ? 'Codex' : 'Claude'} fallback (command copied)`
     );
   };
 
   // Tier 1: scripted form-fill on the current tab from the stored profile.
   // On failure (nothing filled / required fields left), surface the Tier 2
-  // fallback: a Claude CLI browser-use command.
+  // fallback: a local agent CLI command targeting the user's Chrome.
   const autofillCurrentPage = async () => {
     setMessage('');
     try {
@@ -201,8 +207,8 @@ const ApplyTab: React.FC = () => {
       if (failed) {
         setMessage(
           result?.filled === 0
-            ? 'No fillable fields matched — use the Claude fallback below.'
-            : `Filled ${result.filled}, but ${result.unfilledRequired.length} required field(s) remain — finish manually or use the Claude fallback.`
+            ? 'No fillable fields matched — use the agent fallback below.'
+            : `Filled ${result.filled}, but ${result.unfilledRequired.length} required field(s) remain — finish manually or use the agent fallback.`
         );
       } else {
         setMessage(
@@ -281,10 +287,12 @@ const ApplyTab: React.FC = () => {
                   type="button"
                   onClick={() => copyFallback(app)}
                   className="text-xs px-2 py-0.5 rounded bg-purple-100 text-purple-800 hover:bg-purple-200 flex items-center gap-1"
-                  title={fallbackCommand(app.url)}
+                  title={fallbackCommand(app.url, agentRuntime)}
                 >
                   <Terminal className="size-3" />
-                  {copiedId === app.id ? 'Copied!' : 'Claude fallback'}
+                  {copiedId === app.id
+                    ? 'Copied!'
+                    : `${agentRuntime === 'codex' ? 'Codex' : 'Claude'} fallback`}
                 </button>
                 <button
                   type="button"
@@ -329,10 +337,26 @@ const ApplyTab: React.FC = () => {
         />
       </div>
 
+      <label className="flex items-center justify-between gap-2 text-[11px] text-gray-500">
+        Fallback agent
+        <select
+          className="border border-gray-200 rounded px-1.5 py-1 bg-white text-gray-700"
+          value={agentRuntime}
+          onChange={async e => {
+            const value = e.target.value as AgentRuntime;
+            setAgentRuntime(value);
+            await browser.storage.local.set({ [AGENT_STORAGE_KEY]: value });
+          }}
+        >
+          <option value="codex">Codex</option>
+          <option value="claude">Claude Code</option>
+        </select>
+      </label>
+
       <p className="text-[11px] text-gray-500 leading-snug">
-        Tier 1 fills forms from your profile. If it fails or stalls, “Claude
-        fallback” copies a CLI command that hands the application to Claude
-        browser-use (the <code>apply</code> skill).
+        Tier 1 fills forms from your profile. If it fails or stalls, the agent
+        fallback copies a CLI command that hands the application to the
+        <code>apply</code> skill.
       </p>
     </div>
   );

@@ -21,7 +21,7 @@ const run = () =>
     execFileSync(
       process.execPath,
       [
-        '.claude/skills/start/scripts/hunt.mjs',
+        '.agents/skills/start/scripts/hunt.mjs',
         '--track',
         '--source-file', 'harness/fixtures/source-jobs.md',
         '--apps', apps,

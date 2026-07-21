@@ -21,7 +21,7 @@ git subtree add --prefix=apply https://github.com/Sma1lboy/coforce-apply.git mai
 
 After the subtree merge:
 
-- Move `.claude/skills/*` into CoForce's own `.claude/skills/` (skills are
+- Move the skill set into CoForce's own `.agents/skills/` (skills are
   discovered per-repo).
 - Keep `profile/profile.json` gitignored in CoForce too.
 - Archive the old repo (`gh repo archive Sma1lboy/coforce-apply`).

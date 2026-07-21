@@ -9,7 +9,7 @@
   },
   "license": "MIT",
   "engines": {
-    "node": ">=10.0.0",
+    "node": ">=22.0.0",
     "yarn": ">= 1.0.0"
   },
   "scripts": {
@@ -23,10 +23,10 @@
     "build:firefox": "cross-env NODE_ENV=production TARGET_BROWSER=firefox webpack --config webpack.config.js && node copy-pdf-worker.js",
     "build:opera": "cross-env NODE_ENV=production TARGET_BROWSER=opera webpack --config webpack.config.js && node copy-pdf-worker.js",
     "build:edge": "cross-env NODE_ENV=production TARGET_BROWSER=edge webpack --config webpack.config.js && node copy-pdf-worker.js",
-    "board": "node .claude/skills/tracker/scripts/board.mjs",
-    "board:serve": "node .claude/skills/tracker/scripts/board.mjs --serve",
-    "harness": "node harness/check-autofill.mjs && sh harness/check-formats.sh && node harness/check-board.mjs && node harness/check-hunt.mjs",
-    "hunt": "node .claude/skills/start/scripts/hunt.mjs",
+    "board": "node .agents/skills/tracker/scripts/board.mjs",
+    "board:serve": "node .agents/skills/tracker/scripts/board.mjs --serve",
+    "harness": "node harness/check-autofill.mjs && sh harness/check-formats.sh && python3 harness/check-github-evidence.py && node harness/check-experience.mjs && node harness/check-campaign.mjs && node harness/check-board.mjs && node harness/check-hunt.mjs",
+    "hunt": "node .agents/skills/start/scripts/hunt.mjs",
     "lint": "eslint . --ext .ts,.tsx",
     "lint:fix": "eslint . --ext .ts,.tsx --fix"
   },

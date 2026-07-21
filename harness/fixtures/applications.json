@@ -36,7 +36,7 @@
     "history": [
       { "date": "2026-07-17T08:00:00.000Z", "event": "tracked from JD page" },
       { "date": "2026-07-17T08:05:00.000Z", "event": "tier-1 autofill failed: 0 filled, 3 required unfilled" },
-      { "date": "2026-07-17T08:05:30.000Z", "event": "handed to Claude fallback (command copied)" }
+      { "date": "2026-07-17T08:05:30.000Z", "event": "handed to agent fallback (command copied)" }
     ]
   },
   {

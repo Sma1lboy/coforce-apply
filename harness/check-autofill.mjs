@@ -4,7 +4,7 @@
 // imported directly via Node's TS type-stripping) against the mock ATS form,
 // asserting each field resolves to the right fixture-profile value.
 // Tier 2: asserts the failure signal (required fields tier 1 can't fill) that
-// makes the extension surface the `claude "/apply <url>"` fallback.
+// makes the extension surface an agent fallback command.
 
 import { readFileSync } from 'node:fs';
 import { strict as assert } from 'node:assert';
@@ -78,7 +78,7 @@ assert.deepEqual(unfilledRequired, ['sponsorship']);
 const fallbackTriggered = filled === 0 || unfilledRequired.length > 0;
 assert.ok(fallbackTriggered, 'tier-2 fallback should trigger');
 console.log(
-  `tier 2: fallback triggered by required [${unfilledRequired}] → claude "/apply <url>" ✓`
+  `tier 2: fallback triggered by required [${unfilledRequired}] → agent apply skill ✓`
 );
 
 console.log('harness: two-tier apply check passed');

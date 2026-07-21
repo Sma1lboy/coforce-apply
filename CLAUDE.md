@@ -1,9 +1,10 @@
 # CoForce Apply
 
-Skill-first job application agent. **The product is the skill set under
-`.claude/skills/` — users install those into `~/.claude/skills/` (see README
-Install) and never work inside this repo.** The repo exists for developing the
-skills, the harness, and the optional Chrome extension.
+Skill-first job application agent. **The canonical product is the shared skill
+set under `.agents/skills/`; `.claude/skills` is a project-local compatibility
+symlink to that same tree. Clone the repository and run Claude Code from the
+checkout—no global skill installation is required.** The repo also contains
+the harness and optional Chrome extension.
 
 - User data home: `~/.coforce/` — profile.json (schema canonical in the
   `profile` skill), applications.json, instructions.md, apply-config.json,
