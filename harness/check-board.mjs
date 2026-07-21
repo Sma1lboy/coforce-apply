@@ -137,8 +137,20 @@ try {
   });
 
   const base = `http://localhost:${port}`;
-  const page = await (await fetch(base)).text();
-  assert.ok(page.includes('id="view-board"'), 'console renders board view');
+
+  // React console served at / when web/dist is built; /api/state bootstrap
+  const rootPage = await (await fetch(base)).text();
+  assert.ok(
+    rootPage.includes('id="root"') || rootPage.includes('id="view-board"'),
+    'root serves React dist (or inline fallback when dist absent)'
+  );
+  const bootstrap = await (await fetch(`${base}/api/state`)).json();
+  assert.equal(bootstrap.profile.name, 'John Doe', 'state bootstrap profile');
+  assert.equal(bootstrap.apps.length, 5, 'state bootstrap apps');
+  assert.ok(Array.isArray(bootstrap.globalFiles), 'state bootstrap files');
+
+  const page = await (await fetch(`${base}/legacy`)).text();
+  assert.ok(page.includes('id="view-board"'), 'legacy console renders board view');
   // profile pane: resume preview + editor payload from fixture profile
   assert.ok(page.includes('John Doe'), 'profile preview rendered');
   assert.ok(page.includes('id="view-instructions"'), 'instructions view present');

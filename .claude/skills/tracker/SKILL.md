@@ -26,13 +26,20 @@ change appends to `history`: `{date, event}` (e.g.
 `"status: applied → interviewing — recruiter email"`); record submissions and
 interviews there too.
 
-**Console (看板 + 面板)** — ships with this skill at `scripts/board.mjs`
-(relative to this skill's base directory, shown when the skill loads). Prefer
-serve mode; it's interactive and persists:
+**Console (看板 + 面板)** — a React + Tailwind web app that ships with this
+skill (`web/`, prebuilt `web/dist` included). **The only launch entry point
+is** `scripts/start_web.sh` (relative to this skill's base directory, shown
+when the skill loads):
 ```sh
-node "<skill-dir>/scripts/board.mjs" --serve   # http://localhost:4517
+"<skill-dir>/scripts/start_web.sh"           # console on http://localhost:4517
 open http://localhost:4517
 ```
+`PORT=… ` overrides the port; `--dev` starts the API plus a Vite dev server
+with HMR on :5173 for working on the UI (`web/src`, needs bun or npm). The
+script rebuilds dist automatically when sources changed and a package manager
+exists; otherwise it serves the committed dist (end users never build).
+`board.mjs` is the API server behind it — never invoke it directly from
+skills; a plain inline fallback lives at `/legacy`.
 One kobe-Hallmark-themed local site, four tabs:
 - **Board** — kanban: full-height status columns, drag & drop moves an
   application (appends a history event, saves to the JSON), cards open a
@@ -55,7 +62,7 @@ One kobe-Hallmark-themed local site, four tabs:
 - **Instructions** — edit `~/.coforce/instructions.md` in place.
 
 **Launch it at the start of every working session** (any tracker/apply/start
-activity): if port 4517 isn't already serving, start it and `open` the URL —
+activity): if port 4517 isn't already serving, run start_web.sh and `open` the URL —
 the console is how the user watches everything. Without `--serve` it renders a
 static read-only `~/.coforce/out/board.html` (drags show a "Copy JSON" bar).
 

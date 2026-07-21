@@ -29,6 +29,19 @@ const huntScript = join(
   dirname(fileURLToPath(import.meta.url)),
   '../../start/scripts/hunt.mjs'
 );
+// prebuilt React console (tracker/web) — served at / when present;
+// the inline-rendered page stays available at /legacy as fallback
+const webDist = join(dirname(fileURLToPath(import.meta.url)), '../web/dist');
+const MIME = {
+  '.html': 'text/html; charset=utf-8',
+  '.js': 'text/javascript; charset=utf-8',
+  '.css': 'text/css; charset=utf-8',
+  '.svg': 'image/svg+xml',
+  '.png': 'image/png',
+  '.ico': 'image/x-icon',
+  '.woff2': 'font/woff2',
+  '.map': 'application/json',
+};
 
 const HOME = join(homedir(), '.coforce');
 const args = process.argv.slice(2);
@@ -1161,9 +1174,55 @@ if (serve) {
     }
   });
   const handle = (req, res) => {
-    if (req.method === 'GET' && (req.url === '/' || req.url === '/board')) {
+    const hasDist = existsSync(join(webDist, 'index.html'));
+    if (
+      req.method === 'GET' &&
+      (req.url === '/legacy' ||
+        ((req.url === '/' || req.url === '/board') && !hasDist))
+    ) {
       res.writeHead(200, { 'content-type': 'text/html; charset=utf-8' });
       res.end(render(loadApps()));
+      return;
+    }
+    if (
+      req.method === 'GET' &&
+      hasDist &&
+      (req.url === '/' || req.url.startsWith('/assets/'))
+    ) {
+      const rel = req.url === '/' ? 'index.html' : req.url.slice(1).split('?')[0];
+      const target = resolve(webDist, rel);
+      if (
+        (target.startsWith(resolve(webDist) + sep)) &&
+        existsSync(target) &&
+        statSync(target).isFile()
+      ) {
+        res.writeHead(200, {
+          'content-type':
+            MIME[extname(target).toLowerCase()] || 'application/octet-stream',
+        });
+        createReadStream(target).pipe(res);
+      } else {
+        res.writeHead(404).end();
+      }
+      return;
+    }
+    if (req.url === '/api/state' && req.method === 'GET') {
+      const apps = loadApps().map(a => ({
+        ...a,
+        _files: listFiles(join(filesRoot, a.id)),
+      }));
+      res.writeHead(200, { 'content-type': 'application/json' });
+      res.end(
+        JSON.stringify({
+          apps,
+          profile: loadProfile(),
+          instructions: readText(instructionsPath),
+          prefs: existsSync(prefsPath)
+            ? JSON.parse(readFileSync(prefsPath, 'utf8'))
+            : null,
+          globalFiles: listFiles(filesRoot),
+        })
+      );
       return;
     }
     if (req.method === 'GET' && req.url.startsWith('/files/')) {

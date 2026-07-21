@@ -11,6 +11,7 @@ harness/out/
 # user-provided resume templates / reference resumes (personal)
 templates/
 
+
 ### WebStorm+all ###
 # Covers JetBrains IDEs: IntelliJ, RubyMine, PhpStorm, AppCode, PyCharm, CLion, Android Studio, WebStorm and Rider
 # Reference: https://intellij-support.jetbrains.com/hc/en-us/articles/206544839
@@ -213,3 +214,8 @@ dist/
 !.yarn/plugins
 .pnp.*
 .gstack/
+
+# the console web package ships its prebuilt dist with the skill (must stay
+# last: overrides the generic dist/ rule above)
+!.claude/skills/tracker/web/dist/
+!.claude/skills/tracker/web/dist/**
