@@ -1,4 +1,5 @@
 import { browser } from 'webextension-polyfill-ts';
+import { ProfileLike, resolveFieldValue } from '@/utils/autofillFields';
 
 let isInitialized = false;
 let stylesAdded = false;
@@ -233,6 +234,85 @@ function hideLoadingToast(id: string): void {
 }
 
 /**
+ * Tier-1 auto-fill: heuristically fill application form fields from the profile.
+ * Matches inputs by label/name/id/placeholder/aria-label/autocomplete text.
+ */
+function describeInput(input: HTMLElement): string {
+  const parts: string[] = [];
+  const id = input.getAttribute('id');
+  if (id) {
+    const label = document.querySelector(`label[for="${CSS.escape(id)}"]`);
+    if (label) parts.push(label.textContent || '');
+  }
+  const wrappingLabel = input.closest('label');
+  if (wrappingLabel) parts.push(wrappingLabel.textContent || '');
+  parts.push(
+    input.getAttribute('name') || '',
+    id || '',
+    input.getAttribute('placeholder') || '',
+    input.getAttribute('aria-label') || '',
+    input.getAttribute('autocomplete') || ''
+  );
+  return parts.join(' ');
+}
+
+function setNativeValue(
+  input: HTMLInputElement | HTMLTextAreaElement,
+  value: string
+): void {
+  // Use the native setter so React-controlled inputs register the change
+  const proto =
+    input instanceof HTMLTextAreaElement
+      ? HTMLTextAreaElement.prototype
+      : HTMLInputElement.prototype;
+  const setter = Object.getOwnPropertyDescriptor(proto, 'value')?.set;
+  if (setter) {
+    setter.call(input, value);
+  } else {
+    input.value = value;
+  }
+  input.dispatchEvent(new Event('input', { bubbles: true }));
+  input.dispatchEvent(new Event('change', { bubbles: true }));
+}
+
+function autofillFromProfile(profile: ProfileLike): {
+  filled: number;
+  total: number;
+  unfilledRequired: string[];
+} {
+  const inputs = Array.from(
+    document.querySelectorAll<HTMLInputElement | HTMLTextAreaElement>(
+      'input:not([type=hidden]):not([type=file]):not([type=checkbox]):not([type=radio]):not([type=submit]):not([type=button]), textarea'
+    )
+  ).filter(el => !el.disabled && !el.readOnly);
+
+  let filled = 0;
+  const unfilledRequired: string[] = [];
+
+  inputs.forEach(input => {
+    const descriptor = describeInput(input);
+    const value = resolveFieldValue(descriptor, profile);
+
+    if (value && !input.value) {
+      setNativeValue(input, value);
+      filled += 1;
+    } else if (
+      !input.value &&
+      (input.required || input.getAttribute('aria-required') === 'true')
+    ) {
+      unfilledRequired.push(
+        input.getAttribute('name') ||
+          input.getAttribute('id') ||
+          input.getAttribute('placeholder') ||
+          'unnamed field'
+      );
+    }
+  });
+
+  return { filled, total: inputs.length, unfilledRequired };
+}
+
+/**
  * Message listener for background script communication
  */
 browser.runtime.onMessage.addListener((message: any) => {
@@ -282,6 +362,15 @@ browser.runtime.onMessage.addListener((message: any) => {
         title: document.title,
         content: content,
       });
+    }
+
+    if (message.action === 'autofillApplication' && message.profile) {
+      const result = autofillFromProfile(message.profile);
+      showNotification(
+        `Auto-filled ${result.filled} field${result.filled === 1 ? '' : 's'}`,
+        result.filled > 0 ? 'success' : 'error'
+      );
+      return Promise.resolve({ success: true, ...result });
     }
 
     if (message.action === 'showNotification' && message.message) {

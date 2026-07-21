@@ -1,6 +1,6 @@
 {
   "manifest_version": 3,
-  "name": "Resume Generator",
+  "name": "CoForce Apply",
   "version": "1.0.0",
   "icons": {
     "16": "assets/icons/favicon-16x16.png",
@@ -8,9 +8,9 @@
     "48": "assets/icons/android-chrome-192x192.png",
     "128": "assets/icons/android-chrome-512x512.png"
   },
-  "description": "Create tailored resumes for job applications using OpenAI API based on job descriptions",
+  "description": "CoForce Apply's in-browser hands: auto-fill applications from your local profile, track every submission, and hand stubborn forms to Claude browser-use",
   "homepage_url": "https://github.com/Sma1lboy/jd-resume-fitter",
-  "short_name": "ResumeGen",
+  "short_name": "CoForce",
   "permissions": [
     "activeTab",
     "storage",
@@ -49,7 +49,7 @@
       "48": "assets/icons/android-chrome-192x192.png",
       "128": "assets/icons/android-chrome-512x512.png"
     },
-    "default_title": "Resume Generator"
+    "default_title": "CoForce Apply"
   },
   "__chrome|opera__options_page": "options.html",
   "options_ui": {

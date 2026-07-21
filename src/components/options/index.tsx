@@ -322,7 +322,7 @@ const Options: React.FC = () => {
   return (
     <div className="max-w-4xl mx-auto p-6 font-sans">
       <h1 className="text-2xl font-bold mb-6 text-center text-gray-800 flex items-center justify-center">
-        Resume Generator Settings
+        CoForce Apply Settings
         <Logo size="6" className="ml-2" />
       </h1>
 

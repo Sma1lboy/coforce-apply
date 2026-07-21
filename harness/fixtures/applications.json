@@ -1,0 +1,68 @@
+[
+  {
+    "id": "1752900000000",
+    "url": "https://jobs.example.com/nimbus-analytics/senior-full-stack",
+    "title": "Senior Full-Stack Engineer — Nimbus Analytics",
+    "status": "pending",
+    "createdAt": "2026-07-18T09:00:00.000Z",
+    "updatedAt": "2026-07-18T09:00:00.000Z",
+    "company": "Nimbus Analytics",
+    "position": "Senior Full-Stack Engineer",
+    "description": "Nimbus Analytics builds a real-time observability platform used by 400+ engineering teams. You will own features end-to-end across a React/TypeScript frontend and a Node.js microservices backend running on AWS (EKS).\n\nRequirements: 5+ years production web apps; strong TypeScript, React, Node.js; AWS, Docker, Kubernetes; REST/GraphQL at scale.",
+    "history": [
+      { "date": "2026-07-18T09:00:00.000Z", "event": "tracked from JD page" }
+    ]
+  },
+  {
+    "id": "1752900000001",
+    "url": "https://jobs.example.com/acme/platform-engineer",
+    "title": "Platform Engineer — Acme Corp",
+    "status": "applied",
+    "createdAt": "2026-07-15T14:30:00.000Z",
+    "updatedAt": "2026-07-16T10:00:00.000Z",
+    "company": "Acme Corp",
+    "position": "Platform Engineer",
+    "notes": "Referred by Sam; recruiter: r.lee@acme.example"
+  },
+  {
+    "id": "1752900000002",
+    "url": "https://jobs.example.com/globex/staff-swe",
+    "title": "Staff Software Engineer — Globex",
+    "status": "pending",
+    "needsFallback": true,
+    "createdAt": "2026-07-17T08:00:00.000Z",
+    "updatedAt": "2026-07-17T08:05:00.000Z",
+    "company": "Globex",
+    "history": [
+      { "date": "2026-07-17T08:00:00.000Z", "event": "tracked from JD page" },
+      { "date": "2026-07-17T08:05:00.000Z", "event": "tier-1 autofill failed: 0 filled, 3 required unfilled" },
+      { "date": "2026-07-17T08:05:30.000Z", "event": "handed to Claude fallback (command copied)" }
+    ]
+  },
+  {
+    "id": "1752900000003",
+    "url": "https://jobs.example.com/initech/backend",
+    "title": "Backend Engineer — Initech",
+    "status": "interviewing",
+    "createdAt": "2026-07-10T12:00:00.000Z",
+    "updatedAt": "2026-07-19T16:00:00.000Z",
+    "company": "Initech",
+    "position": "Backend Engineer",
+    "notes": "Onsite scheduled 2026-07-24",
+    "history": [
+      { "date": "2026-07-10T12:00:00.000Z", "event": "tracked from JD page" },
+      { "date": "2026-07-10T12:20:00.000Z", "event": "tier-1 autofill: 7/8 fields" },
+      { "date": "2026-07-10T12:25:00.000Z", "event": "status: pending → applied (extension)" },
+      { "date": "2026-07-19T16:00:00.000Z", "event": "status: applied → interviewing — recruiter email" }
+    ]
+  },
+  {
+    "id": "1752900000004",
+    "url": "https://jobs.example.com/umbrella/fullstack",
+    "title": "Full-Stack Developer — Umbrella",
+    "status": "rejected",
+    "createdAt": "2026-07-01T09:00:00.000Z",
+    "updatedAt": "2026-07-12T09:00:00.000Z",
+    "company": "Umbrella"
+  }
+]

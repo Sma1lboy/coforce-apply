@@ -1,0 +1,46 @@
+<!DOCTYPE html>
+<html lang="en">
+<head><meta charset="utf-8"><title>Apply — Senior Full-Stack Engineer — Nimbus Analytics</title></head>
+<body>
+<!-- Mock ATS application form (Greenhouse-style field naming).
+     Used by harness/check-autofill.mjs and for manual extension QA.
+     The screening question is required and unmatched by tier-1 patterns,
+     so a correct tier-1 run reports it in unfilledRequired → tier-2 trigger. -->
+<main>
+  <h1>Apply for Senior Full-Stack Engineer</h1>
+  <form action="#" method="post">
+    <label for="first_name">First Name *</label>
+    <input type="text" id="first_name" name="first_name" required>
+
+    <label for="last_name">Last Name *</label>
+    <input type="text" id="last_name" name="last_name" required>
+
+    <label for="email">Email *</label>
+    <input type="email" id="email" name="email" autocomplete="email" required>
+
+    <label for="phone">Phone</label>
+    <input type="tel" id="phone" name="phone" autocomplete="tel">
+
+    <label for="job_application_location">Location (City)</label>
+    <input type="text" id="job_application_location" name="job_application[location]">
+
+    <label for="linkedin_url">LinkedIn Profile</label>
+    <input type="text" id="linkedin_url" name="job_application[answers_attributes][0][text_value]" placeholder="LinkedIn URL">
+
+    <label for="github_url">GitHub Profile</label>
+    <input type="text" id="github_url" name="job_application[answers_attributes][1][text_value]" placeholder="GitHub URL">
+
+    <label for="portfolio">Website / Portfolio</label>
+    <input type="text" id="portfolio" name="portfolio">
+
+    <label for="resume">Resume/CV *</label>
+    <input type="file" id="resume" name="resume" required>
+
+    <label for="sponsorship">Will you now or in the future require sponsorship for employment visa status? *</label>
+    <textarea id="sponsorship" name="job_application[answers_attributes][2][text_value]" required></textarea>
+
+    <button type="submit">Submit Application</button>
+  </form>
+</main>
+</body>
+</html>

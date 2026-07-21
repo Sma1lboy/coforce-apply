@@ -1,6 +1,16 @@
 # ignore haters
 haters/
 
+# personal career data (profile, tracker, per-application archives)
+profile/
+
+# generated resumes and harness run artifacts
+out/
+harness/out/
+
+# user-provided resume templates / reference resumes (personal)
+templates/
+
 ### WebStorm+all ###
 # Covers JetBrains IDEs: IntelliJ, RubyMine, PhpStorm, AppCode, PyCharm, CLion, Android Studio, WebStorm and Rider
 # Reference: https://intellij-support.jetbrains.com/hc/en-us/articles/206544839
@@ -202,3 +212,4 @@ dist/
 !.yarn/releases
 !.yarn/plugins
 .pnp.*
+.gstack/

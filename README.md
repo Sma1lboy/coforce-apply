@@ -1,127 +1,105 @@
-# Resume Generator
-
 <p align="center">
-  <img src="src/assets/icons/android-chrome-512x512.png" alt="Resume Generator Logo" width="150" height="150">
+  <img src="docs/assets/banner.png" alt="CoForce Apply — discover → tailor → apply → track" width="100%">
 </p>
 
-A Chrome extension that helps you create tailored resumes for job applications using OpenAI API. It analyzes job descriptions to highlight your most relevant skills and experiences.
+# CoForce Apply
 
-## Features
+**Your job hunt on autopilot.** CoForce Apply is a skill-first job application
+agent: Claude Code discovers postings, tailors your resume, submits
+applications, and tracks everything on a local kanban — while a slim Chrome
+extension handles the in-browser last mile. All of your data stays on your
+machine.
 
-- **AI-Powered Resume Generation**: Generate customized resumes based on job descriptions using OpenAI API
-- **LaTeX Template Support**: Create professional-looking resumes with customizable LaTeX templates
-- **Profile Management**: Easily manage your professional profile information
-- **Job Description Analysis**: Automatically extract key requirements and responsibilities from job postings
-- **PDF Export**: Export your generated resumes as PDF documents
-- **Local Storage**: All your data is stored locally in your browser
+```
+sources (GitHub job lists)          profile/ (local, gitignored)
+        │                            profile.json      your background
+   scripts/hunt.mjs ──dedup──▶       applications.json tracker truth
+        │                            instructions.md   your standing rules
+        ▼                            applications/<id>/ per-app archive
+  new postings ──▶ tailor ──▶ apply ──▶ board (kanban, drag & drop)
+                     │           │
+                LaTeX/PDF/docx   tier 1: extension form-fill
+                                 tier 2: Claude browser-use fallback
+```
 
-## Installation
+## Quick start
 
-### From Chrome Web Store
+```sh
+git clone https://github.com/Sma1lboy/jd-resume-fitter.git && cd jd-resume-fitter
+yarn install
+claude   # then:
+```
 
-1. Visit the [Chrome Web Store](https://chrome.google.com/webstore/category/extensions) (link will be updated when published)
-2. Search for "Resume Generator"
-3. Click "Add to Chrome"
+1. **`/setup`** — one-time onboarding: import or interview your background,
+   set your email + consents, name the companies you never want to apply to,
+   confirm job sources (seeded with
+   [2027-SWE-College-Jobs](https://github.com/speedyapply/2027-SWE-College-Jobs)
+   and [Summer2027-Internships](https://github.com/vanshb03/Summer2027-Internships)).
+2. **`/start`** — one cycle: fetch sources → skip anything already applied or
+   blocklisted → auto-apply (capped, with confirmation) → refresh the board.
+3. **`/loop 30m /start`** — keep it running every half hour.
 
-### Manual Installation (Developer Mode)
+## What's inside
 
-1. Clone this repository:
-   ```
-   git clone https://github.com/Sma1lboy/jd-resume-fitter.git
-   ```
-2. Install dependencies:
-   ```
-   yarn install
-   ```
-3. Build the extension:
-   ```
-   yarn build:chrome
-   ```
-4. Open Chrome and navigate to `chrome://extensions/`
-5. Enable "Developer mode" (toggle in the top right)
-6. Click "Load unpacked" and select the `dist/chrome` directory
+| Skill | What it does |
+|---|---|
+| `setup` | One-time onboarding: profile, consents, standing instructions, job sources |
+| `start` | One discover→apply cycle; recurring via `/loop 30m /start` |
+| `profile` | Maintain your background (`profile/profile.json`) |
+| `repo-bullets` | Turn a git repo's real commits into STAR resume bullets |
+| `tailor` | JD → tailored one-page resume (LaTeX/PDF/docx, template or reference-guided) |
+| `apply` | Browser-use application: fills forms, registers ATS accounts (Workday & co., passwords in macOS Keychain), stops before submit for your confirmation |
+| `tracker` | Application tracker + kanban board + per-application file archive |
+| `harness` | Mock-environment E2E test of the whole pipeline |
 
-## Usage
+**The board** (`yarn board:serve` → http://localhost:4517) is a
+kobe-Hallmark-themed kanban over `profile/applications.json`: five pipeline
+columns (To Apply → Applied → Interviewing → Offer / Rejected), drag & drop
+persists status changes, cards open a detail view with the JD link, saved
+info, delivery history timeline, archived files, and job description.
 
-### Initial Setup
+**Your instructions rule everything.** `profile/instructions.md` is standing
+user instruction — preferences, caps, and a `## never-apply` company list that
+every skill and script respects. Duplicate applications are hard-blocked by
+URL and company+role matching.
 
-1. After installing the extension, click on the extension icon in your browser toolbar
-2. Go to the Options page to set up your OpenAI API key:
-   - Click on the "Settings" tab
-   - Enter your OpenAI API key
-   - Click "Save"
-3. Set up your profile information:
-   - Navigate to the "Profile" tab
-   - Fill in your personal details, education, experience, and skills
-   - Your profile will be automatically saved
+**Two-tier delivery.** The extension's Apply tab form-fills from your profile
+(tier 1); when a form resists, one click hands the job to Claude browser-use
+(tier 2, the `apply` skill) — which can also register ATS accounts with
+locally-generated Keychain-stored passwords and fetch email verification
+codes, all gated on consents you grant once during setup.
 
-### Generating a Resume
+## Extension (developer mode)
 
-1. Find a job posting you want to apply for
-2. Click on the extension icon and select "Generate Resume"
-3. The extension will analyze the job description and create a tailored resume
-4. Review and edit the generated resume
-5. Click "Export to PDF" to download your ready-to-submit resume
+```sh
+yarn build:chrome
+```
 
-### Customizing Templates
-
-1. Go to the Options page and select the "Template" tab
-2. Edit the LaTeX template or choose "Generate Template from Current Input" to have AI create a template
-3. Click "Save" to update your template
+Load `extension/chrome` via `chrome://extensions` → Developer mode → Load
+unpacked. Options → Profile → "Import from JSON" accepts
+`profile/profile.json` as-is; the Apply tab syncs with the tracker via
+Export/Import JSON.
 
 ## Development
 
-### Project Structure
+- `yarn dev:chrome` / `yarn build:chrome` — extension watch / production build
+- `yarn harness` — deterministic checks: two-tier apply, resume formats, board, hunt
+- `yarn board` / `yarn board:serve` — static / live kanban
+- `yarn hunt` — one discovery pass (`--track` to record)
+- `yarn lint` — ESLint
 
-```
-resume-generator/
-├── src/                 # Source code
-│   ├── components/      # React components
-│   ├── utils/           # Utility functions
-│   ├── types/           # TypeScript type definitions
-│   └── manifest.json    # Extension manifest
-├── public/              # Static assets
-└── dist/                # Build output
-```
-
-### Development Workflow
-
-1. Run the development server:
-   ```
-   yarn dev:chrome
-   ```
-2. Make your changes
-3. Build for production:
-   ```
-   yarn build:chrome
-   ```
-
-## Technologies Used
-
-- **React**: UI framework
-- **TypeScript**: Type-safe JavaScript
-- **TailwindCSS**: Styling
-- **OpenAI API**: AI-powered content generation
-- **LaTeX**: Resume templating
-- **Chrome Extension API**: Browser integration
+Key paths: `.claude/skills/` (the skills), `scripts/` (board + hunt),
+`harness/` (mock E2E), `src/` (extension). Full design history in
+[docs/ROADMAP.md](docs/ROADMAP.md); the CoForce merge plan in
+[docs/MIGRATION.md](docs/MIGRATION.md).
 
 ## Privacy
 
-This extension respects your privacy. All personal information is stored locally in your browser. See our [Privacy Policy](PRIVACY.md) for more details.
+Everything personal lives in `profile/` (gitignored) and
+`browser.storage.local` — nothing leaves your machine except the applications
+you approve. ATS passwords go to macOS Keychain, never to files. See
+[PRIVACY.md](PRIVACY.md).
 
 ## License
 
-This project is licensed under the MIT License - see the [LICENSE](LICENSE) file for details.
-
-## Contributing
-
-Contributions are welcome! Please feel free to submit a Pull Request.
-
-## Acknowledgments
-
-- OpenAI for providing the API that powers our resume generation
-- The open source community for the amazing tools that made this possible
-
----
-
-Made with ❤️ for job seekers everywhere
+MIT — see [LICENCE](LICENCE).

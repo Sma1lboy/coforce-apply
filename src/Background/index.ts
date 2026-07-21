@@ -185,7 +185,7 @@ browser.contextMenus.onClicked.addListener(async (info, tab) => {
           iconUrl: browser.runtime.getURL(
             'assets/icons/android-chrome-192x192.png'
           ),
-          title: 'Resume Generator',
+          title: 'CoForce Apply',
           message: 'Resume generated and saved!',
         });
       } catch (storageError) {
@@ -200,7 +200,7 @@ browser.contextMenus.onClicked.addListener(async (info, tab) => {
         iconUrl: browser.runtime.getURL(
           'assets/icons/android-chrome-192x192.png'
         ),
-        title: 'Resume Generator - Error',
+        title: 'CoForce Apply - Error',
         message: 'Failed to generate resume. Please try again.',
       });
     }
@@ -224,7 +224,7 @@ browser.contextMenus.onClicked.addListener(async (info, tab) => {
         iconUrl: browser.runtime.getURL(
           'assets/icons/android-chrome-192x192.png'
         ),
-        title: 'Resume Generator - Error',
+        title: 'CoForce Apply - Error',
         message: `Error: ${error instanceof Error ? error.message : 'Unknown error'}`,
       });
     } catch (notificationError) {
@@ -382,7 +382,7 @@ browser.runtime.onMessage.addListener(
                 iconUrl: browser.runtime.getURL(
                   'assets/icons/android-chrome-192x192.png'
                 ),
-                title: 'Resume Generator',
+                title: 'CoForce Apply',
                 message: 'Resume generated and saved!',
               });
 
@@ -405,7 +405,7 @@ browser.runtime.onMessage.addListener(
                 iconUrl: browser.runtime.getURL(
                   'assets/icons/android-chrome-192x192.png'
                 ),
-                title: 'Resume Generator - Error',
+                title: 'CoForce Apply - Error',
                 message: `Error: ${error instanceof Error ? error.message : 'Unknown error'}`,
               });
             } catch (notificationError) {

@@ -1,0 +1,34 @@
+<svg xmlns="http://www.w3.org/2000/svg" width="1600" height="400" viewBox="0 0 1600 400">
+  <!-- CoForce Apply banner — kobe brand language -->
+  <rect width="1600" height="400" fill="#141413"/>
+  <rect x="0" y="396" width="1600" height="4" fill="#DE5F38"/>
+  <!-- badge -->
+  <g transform="translate(84,80) scale(0.469)">
+    <rect x="16" y="16" width="480" height="480" rx="112" fill="#1A1815"/>
+    <rect x="16" y="16" width="480" height="480" rx="112" fill="none" stroke="#2B2620" stroke-width="6"/>
+    <g fill="#DE5F38">
+      <rect x="104" y="144" width="28" height="224" rx="6"/>
+      <rect x="104" y="144" width="72" height="28" rx="6"/>
+      <rect x="104" y="340" width="72" height="28" rx="6"/>
+      <rect x="336" y="144" width="72" height="28" rx="6"/>
+      <rect x="380" y="144" width="28" height="150" rx="6"/>
+      <rect x="336" y="340" width="28" height="28" rx="6"/>
+    </g>
+    <rect x="380" y="318" width="28" height="50" rx="6" fill="#7EC13F"/>
+    <g transform="translate(12,-16)">
+      <path d="M168 300 L318 212 L262 344 L232 296 L200 322 L206 278 Z" fill="#F2EDE3"/>
+      <path d="M206 278 L318 212 L236 300 L233 318 Z" fill="#CFC5B4"/>
+    </g>
+  </g>
+  <!-- wordmark -->
+  <text x="380" y="212" font-family="JetBrainsMonoNL Nerd Font, JetBrains Mono, Menlo, monospace" font-weight="800" font-size="92" letter-spacing="-3">
+    <tspan fill="#F2EDE3">coforce</tspan><tspan fill="#DE5F38"> apply</tspan>
+  </text>
+  <!-- cursor block -->
+  <rect x="1122" y="136" width="30" height="86" fill="#7EC13F"/>
+  <!-- tagline -->
+  <text x="384" y="272" font-family="JetBrainsMonoNL Nerd Font, JetBrains Mono, Menlo, monospace" font-size="27" fill="#9A9285">discover → tailor → apply → track · your job hunt on autopilot</text>
+  <text x="384" y="322" font-family="JetBrainsMonoNL Nerd Font, JetBrains Mono, Menlo, monospace" font-size="27">
+    <tspan fill="#5B554C">$ </tspan><tspan fill="#DE5F38">/setup</tspan><tspan fill="#5B554C"> &amp;&amp; </tspan><tspan fill="#DE5F38">/loop 30m /start</tspan>
+  </text>
+</svg>

@@ -4,7 +4,7 @@ import { cn } from '@/lib/utils';
 
 // {/* <img
 // src="../assets/icons/icon.png"
-// alt="Resume Generator Icon"
+// alt="CoForce Apply Icon"
 // className="w-6 h-6 mr-2"
 // onError={e => {
 //   console.error('Icon failed to load:', e);
@@ -20,7 +20,7 @@ export default function Logo({
   return (
     <img
       src="../assets/icons/icon.png"
-      alt="Resume Generator Icon"
+      alt="CoForce Apply Icon"
       className={cn(`w-${size} h-${size} mr-2`, className)}
       onError={e => {
         console.error('Icon failed to load:', e);

@@ -1,13 +1,11 @@
 {
-  "name": "web-extension-starter",
+  "name": "coforce-apply",
   "version": "2.0.0",
-  "description": "Web extension starter using react and typescript",
+  "description": "CoForce Apply — skill-first job application agent: discover, tailor, apply, track. Your job hunt on autopilot.",
   "private": true,
-  "repository": "https://github.com/abhijithvijayan/web-extension-starter.git",
+  "repository": "https://github.com/Sma1lboy/jd-resume-fitter.git",
   "author": {
-    "name": "abhijithvijayan",
-    "email": "email@abhijithvijayan.in",
-    "url": "https://abhijithvijayan.in"
+    "name": "Sma1lboy"
   },
   "license": "MIT",
   "engines": {
@@ -25,6 +23,10 @@
     "build:firefox": "cross-env NODE_ENV=production TARGET_BROWSER=firefox webpack --config webpack.config.js && node copy-pdf-worker.js",
     "build:opera": "cross-env NODE_ENV=production TARGET_BROWSER=opera webpack --config webpack.config.js && node copy-pdf-worker.js",
     "build:edge": "cross-env NODE_ENV=production TARGET_BROWSER=edge webpack --config webpack.config.js && node copy-pdf-worker.js",
+    "board": "node scripts/board.mjs",
+    "board:serve": "node scripts/board.mjs --serve",
+    "harness": "node harness/check-autofill.mjs && sh harness/check-formats.sh && node harness/check-board.mjs && node harness/check-hunt.mjs",
+    "hunt": "node scripts/hunt.mjs",
     "lint": "eslint . --ext .ts,.tsx",
     "lint:fix": "eslint . --ext .ts,.tsx --fix"
   },

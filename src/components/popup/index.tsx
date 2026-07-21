@@ -3,6 +3,7 @@ import { browser, Tabs as BrowserTabs } from 'webextension-polyfill-ts';
 import * as Tabs from '@radix-ui/react-tabs';
 import { FileText, Settings } from 'lucide-react';
 import Logo from '@/components/Logo';
+import ApplyTab from '@/components/popup/ApplyTab';
 import './popup.css';
 
 import { Input } from '@/components/ui/input';
@@ -392,7 +393,7 @@ const Popup: React.FC = () => {
   return (
     <div className="w-96 p-4 font-sans popup-container">
       <h1 className="text-xl font-bold mb-4 text-center text-gray-800 flex items-center justify-center">
-        Resume Generator
+        CoForce Apply
         <Logo size="6" className="ml-2" />
       </h1>
 
@@ -440,7 +441,7 @@ const Popup: React.FC = () => {
                 iconUrl: browser.runtime.getURL(
                   'assets/icons/android-chrome-192x192.png'
                 ),
-                title: 'Resume Generator',
+                title: 'CoForce Apply',
                 message:
                   'Please refresh the page and try again, or navigate to a job description page.',
               });
@@ -552,7 +553,7 @@ const Popup: React.FC = () => {
                     iconUrl: browser.runtime.getURL(
                       'assets/icons/android-chrome-192x192.png'
                     ),
-                    title: 'Resume Generator - Error',
+                    title: 'CoForce Apply - Error',
                     message: `Error: ${error.message || 'Failed to generate resume'}`,
                   });
                 }
@@ -578,6 +579,12 @@ const Popup: React.FC = () => {
               Recent Resumes
             </Tabs.Trigger>
             <Tabs.Trigger
+              value="apply"
+              className="px-3 py-2 text-sm font-medium data-[state=active]:bg-white data-[state=active]:text-primary-700 data-[state=active]:border-b-2 data-[state=active]:border-primary-500 data-[state=inactive]:text-gray-600 data-[state=inactive]:hover:bg-gray-200"
+            >
+              Apply
+            </Tabs.Trigger>
+            <Tabs.Trigger
               value="profile"
               className="px-3 py-2 text-sm font-medium data-[state=active]:bg-white data-[state=active]:text-primary-700 data-[state=active]:border-b-2 data-[state=active]:border-primary-500 data-[state=inactive]:text-gray-600 data-[state=inactive]:hover:bg-gray-200"
             >
@@ -592,6 +599,11 @@ const Popup: React.FC = () => {
           </Tabs.List>
 
           <div className="bg-white">
+            {/* Apply Tab */}
+            <Tabs.Content value="apply" className="p-4">
+              <ApplyTab />
+            </Tabs.Content>
+
             {/* Settings Tab */}
             <Tabs.Content value="settings" className="p-4">
               <InputField
@@ -828,7 +840,7 @@ const Popup: React.FC = () => {
       </div>
 
       <div className="text-center text-xs text-gray-500 flex max-w-full justify-between align-middle items-center">
-        <p>Resume Generator v1.0.0</p>
+        <p>CoForce Apply v1.0.0</p>
         <p className="mt-1">
           <a
             href="#"

@@ -1,0 +1,94 @@
+{
+  "name": "John Doe",
+  "title": "Senior Software Engineer",
+  "email": "john.doe@example.com",
+  "phone": "(123) 456-7890",
+  "location": "San Francisco, CA",
+  "linkedin": "johndoe",
+  "github": "johndoe",
+  "website": "johndoe.com",
+  "summary": "Experienced software engineer with over 8 years of expertise in full-stack development, cloud architecture, and leading engineering teams. Passionate about creating scalable, maintainable solutions and mentoring junior developers.",
+  "skills": [
+    "JavaScript",
+    "TypeScript",
+    "React",
+    "Node.js",
+    "Python",
+    "AWS",
+    "Docker",
+    "Kubernetes",
+    "GraphQL",
+    "MongoDB",
+    "PostgreSQL",
+    "CI/CD"
+  ],
+  "experience": [
+    {
+      "company": "Tech Innovations Inc.",
+      "title": "Senior Software Engineer",
+      "date": "Jan 2020 - Present",
+      "description": [
+        "Led the development of a microservices architecture that improved system reliability by 35%",
+        "Implemented CI/CD pipelines that reduced deployment time by 50%",
+        "Mentored junior developers and conducted code reviews to maintain code quality",
+        "Designed and built RESTful APIs serving over 1 million requests per day"
+      ]
+    },
+    {
+      "company": "Digital Solutions LLC",
+      "title": "Software Engineer",
+      "date": "Mar 2017 - Dec 2019",
+      "description": [
+        "Developed and maintained front-end applications using React and TypeScript",
+        "Collaborated with UX designers to implement responsive, accessible interfaces",
+        "Optimized database queries resulting in 40% faster page load times",
+        "Participated in agile development processes including daily stand-ups and sprint planning"
+      ]
+    },
+    {
+      "company": "WebTech Startup",
+      "title": "Junior Developer",
+      "date": "Jun 2015 - Feb 2017",
+      "description": [
+        "Built and maintained features for a SaaS platform with 10,000+ users",
+        "Implemented responsive designs using HTML, CSS, and JavaScript",
+        "Fixed bugs and improved application performance",
+        "Participated in code reviews and pair programming sessions"
+      ]
+    }
+  ],
+  "education": [
+    {
+      "institution": "University of Technology",
+      "degree": "Master of Science in Computer Science",
+      "date": "2013 - 2015"
+    },
+    {
+      "institution": "State University",
+      "degree": "Bachelor of Science in Software Engineering",
+      "date": "2009 - 2013"
+    }
+  ],
+  "certifications": [
+    {
+      "name": "AWS Certified Solutions Architect",
+      "issuer": "Amazon Web Services",
+      "date": "2021"
+    },
+    {
+      "name": "Professional Scrum Master I",
+      "issuer": "Scrum.org",
+      "date": "2019"
+    }
+  ],
+  "languages": [
+    {
+      "language": "English",
+      "proficiency": "Native"
+    },
+    {
+      "language": "Spanish",
+      "proficiency": "Intermediate"
+    }
+  ]
+}
