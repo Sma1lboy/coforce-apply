@@ -42,6 +42,11 @@ assert.deepEqual(
   ['Stripe', 'Stripe'],
   '↳ continuation row inherits company'
 );
+assert.equal(
+  first.new[0].homepage,
+  'https://stripe.com',
+  'company homepage captured for logos'
+);
 assert.equal(first.skipped.tracked, 2, 'url + company/role dedup');
 assert.equal(first.skipped.blocked, 1, 'never-apply respected');
 

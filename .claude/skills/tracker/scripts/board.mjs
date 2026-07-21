@@ -369,6 +369,10 @@ function render(apps, profile = loadProfile(), instructions = readText(instructi
   .dtitle { color: var(--accent-soft); font-weight: 500; text-decoration: none; word-break: break-word; }
   .dtitle:hover { color: var(--accent-2); text-decoration: underline; }
   .dsource { color: var(--dim); }
+  .dlogo {
+    width: 26px; height: 26px; border-radius: 6px; flex: none;
+    background: var(--paper-3); object-fit: contain;
+  }
   .dapply {
     font: 500 .75rem var(--font-body); color: var(--accent-soft);
     background: var(--accent-wash); border: 1px solid var(--accent);
@@ -489,16 +493,16 @@ function render(apps, profile = loadProfile(), instructions = readText(instructi
 <header>
   <h1>CoForce</h1>
   <nav id="tabs">
-    <button data-view="board" class="active" type="button">Board</button>
     <button data-view="discover" type="button">Discover</button>
     <button data-view="profile" type="button">Profile</button>
+    <button data-view="board" type="button">Board</button>
     <button data-view="instructions" type="button">Instructions</button>
   </nav>
   <span class="tracked">${apps.length} tracked</span>
   <div id="savebar"><span class="state"></span><button id="copyjson" type="button">Copy JSON</button></div>
 </header>
 <main class="views">
-  <div class="view active" id="view-board">
+  <div class="view" id="view-board">
     <div class="board">${columns}
     </div>
   </div>
@@ -580,15 +584,24 @@ document.getElementById('copyjson').addEventListener('click', async () => {
   stateEl.textContent = 'copied — paste into profile/applications.json';
 });
 
-// --- header tabs ---
+// --- header tabs (Discover is home; hash keeps the tab across reloads) ---
 let queuedDirty = false;
+function showView(name) {
+  document.querySelectorAll('#tabs button').forEach(b =>
+    b.classList.toggle('active', b.dataset.view === name));
+  document.querySelectorAll('.view').forEach(v =>
+    v.classList.toggle('active', v.id === 'view-' + name));
+  location.hash = name;
+  if (name === 'discover' && !discoverLoaded) loadDiscover();
+}
 document.querySelectorAll('#tabs button').forEach(btn => {
   btn.addEventListener('click', () => {
-    if (btn.dataset.view === 'board' && queuedDirty) { location.reload(); return; }
-    document.querySelectorAll('#tabs button').forEach(b => b.classList.toggle('active', b === btn));
-    document.querySelectorAll('.view').forEach(v =>
-      v.classList.toggle('active', v.id === 'view-' + btn.dataset.view));
-    if (btn.dataset.view === 'discover' && !discoverLoaded) loadDiscover();
+    if (btn.dataset.view === 'board' && queuedDirty) {
+      location.hash = 'board';
+      location.reload();
+      return;
+    }
+    showView(btn.dataset.view);
   });
 });
 
@@ -611,14 +624,23 @@ async function loadDiscover() {
     dStatus.textContent = d.new.length + ' new · ' + d.skipped.tracked + ' already tracked · ' +
       d.skipped.blocked + ' blocked by never-apply · ' +
       d.sources.map(s => s.name + (s.error ? ' ⚠' : ' (' + s.listings + ')')).join(' · ');
-    dList.innerHTML = d.new.map((j, i) =>
-      '<div class="drow">' +
-      '<div class="dmain"><a class="dtitle" href="' + escHtml(j.url) + '" target="_blank" rel="noreferrer">' +
-      escHtml(j.role) + '</a>' +
-      '<div class="meta">' + escHtml(j.company) + (j.location ? ' · ' + escHtml(j.location) : '') +
-      ' · <span class="dsource">' + escHtml(j.source) + '</span></div></div>' +
-      '<button class="dapply" type="button" data-i="' + i + '">Apply ⇢</button></div>'
-    ).join('') || '<div class="pane-empty">No new postings — everything is already tracked or filtered.</div>';
+    dList.innerHTML = d.new.map((j, i) => {
+      let logo = '';
+      try {
+        if (j.homepage) {
+          const host = new URL(j.homepage).hostname;
+          logo = '<img class="dlogo" alt="" loading="lazy" ' +
+            'src="https://www.google.com/s2/favicons?domain=' + encodeURIComponent(host) + '&sz=64" ' +
+            'onerror="this.remove()">';
+        }
+      } catch {}
+      return '<div class="drow">' + logo +
+        '<div class="dmain"><a class="dtitle" href="' + escHtml(j.url) + '" target="_blank" rel="noreferrer">' +
+        escHtml(j.role) + '</a>' +
+        '<div class="meta">' + escHtml(j.company) + (j.location ? ' · ' + escHtml(j.location) : '') +
+        ' · <span class="dsource">' + escHtml(j.source) + '</span></div></div>' +
+        '<button class="dapply" type="button" data-i="' + i + '">Apply ⇢</button></div>';
+    }).join('') || '<div class="pane-empty">No new postings — everything is already tracked or filtered.</div>';
   } catch (e) {
     dStatus.textContent = 'Discovery failed: ' + e.message;
   } finally {
@@ -945,6 +967,10 @@ document.querySelectorAll('.card').forEach(card => {
   card.addEventListener('click', () => openDetail(byId(card.dataset.id)));
   card.addEventListener('keydown', e => { if (e.key === 'Enter') openDetail(byId(card.dataset.id)); });
 });
+
+// --- initial tab: hash if valid, else Discover is home ---
+const initial = location.hash.slice(1);
+showView(['discover', 'profile', 'board', 'instructions'].includes(initial) ? initial : 'discover');
 </script>
 </body>
 </html>

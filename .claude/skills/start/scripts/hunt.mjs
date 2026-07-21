@@ -91,12 +91,14 @@ function parseJobs(md) {
     if (cells.length < 3) continue;
     const first = stripCell(cells[0]);
     if (/^-+$/.test(cells[0].replaceAll(':', '').trim()) || /company/i.test(first)) continue;
-    // the apply link is the LAST link in the row — the first is usually the
-    // company homepage link inside the company cell
-    const url =
-      [...line.matchAll(/href="(https?:[^"]+)"/g)].at(-1)?.[1] ??
-      [...line.matchAll(/\((https?:[^)]+)\)/g)].at(-1)?.[1];
+    // the apply link is the LAST link in the row; the FIRST (when different)
+    // is usually the company homepage — kept for favicons/logos
+    const links = [
+      ...line.matchAll(/href="(https?:[^"]+)"|\]\((https?:[^)]+)\)/g),
+    ].map(m => m[1] || m[2]);
+    const url = links.at(-1);
     if (!url) continue;
+    const homepage = links.length > 1 && links[0] !== url ? links[0] : undefined;
     const company = first === '↳' || first === '' ? lastCompany : first;
     lastCompany = company;
     jobs.push({
@@ -104,6 +106,7 @@ function parseJobs(md) {
       role: stripCell(cells[1]),
       location: stripCell(cells[2] ?? ''),
       url,
+      ...(homepage ? { homepage } : {}),
     });
   }
   return jobs;
