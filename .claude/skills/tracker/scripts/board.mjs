@@ -75,6 +75,7 @@ const dataDir = dirname(input);
 const filesRoot = join(dataDir, 'applications');
 const profilePath = join(dataDir, 'profile.json');
 const instructionsPath = join(dataDir, 'instructions.md');
+const prefsPath = join(dataDir, 'preferences.json');
 
 const readText = path => {
   try {
@@ -355,8 +356,43 @@ function render(apps, profile = loadProfile(), instructions = readText(instructi
   }
   .pane-empty { color: var(--dim); text-align: center; margin: auto; }
   .discover-wrap {
-    flex: 1; min-height: 0; display: flex; flex-direction: column; gap: 10px;
-    padding: clamp(16px, 3vw, 28px); max-width: 980px; width: 100%; margin: 0 auto;
+    flex: 1; min-height: 0; display: flex; gap: 16px;
+    padding: clamp(16px, 3vw, 28px); max-width: 1240px; width: 100%; margin: 0 auto;
+  }
+  #filters {
+    width: 235px; flex: none; overflow-y: auto;
+    background: var(--paper-2); border: 1px solid var(--rule);
+    border-radius: var(--radius-card); padding: 14px;
+  }
+  #filters h4 {
+    font: 600 .6875rem var(--font-display); text-transform: uppercase;
+    letter-spacing: .1em; color: var(--faint); margin: 14px 0 8px;
+  }
+  #filters h4:first-child { margin-top: 0; }
+  #filters .frow {
+    display: flex; align-items: center; gap: 8px; padding: 4px 0;
+    color: var(--ink-2); font-size: .78rem; cursor: pointer;
+  }
+  #filters .frow input { accent-color: oklch(65% 0.107 41); }
+  #filters .frow .fcount { margin-left: auto; color: var(--dim); font-size: .6875rem; }
+  #filters .fsearch {
+    width: 100%; font: 400 12px var(--font-body); color: var(--ink);
+    background: var(--well); border: 1px solid var(--rule);
+    border-radius: var(--radius-chip); padding: 6px 10px; outline: none;
+  }
+  #filters .fsearch:focus { border-color: var(--accent); }
+  .discover-main { flex: 1; min-width: 0; display: flex; flex-direction: column; gap: 10px; }
+  .choice-row { display: flex; gap: 8px; margin-bottom: 6px; }
+  .choice-row.wrap { flex-wrap: wrap; }
+  .choice-row button {
+    font: 500 .78rem var(--font-body); color: var(--muted);
+    background: var(--well); border: 1px solid var(--rule-2);
+    border-radius: 999px; padding: 7px 16px; cursor: pointer;
+    transition: border-color 180ms var(--ease-out);
+  }
+  .choice-row button:hover { border-color: var(--accent); color: var(--ink-2); }
+  .choice-row button.sel {
+    color: var(--accent-soft); background: var(--accent-wash); border-color: var(--accent);
   }
   .drow {
     display: flex; align-items: center; gap: 14px;
@@ -508,11 +544,14 @@ function render(apps, profile = loadProfile(), instructions = readText(instructi
   </div>
   <div class="view" id="view-discover">
     <div class="discover-wrap">
-      <div class="editor-toolbar">
-        <button id="discover-refresh" type="button" class="ghost">↻ Refresh sources</button>
-        <span id="discover-status" class="hint"></span>
+      <aside id="filters"><div class="pane-empty">Filters appear after the first fetch</div></aside>
+      <div class="discover-main">
+        <div class="editor-toolbar">
+          <button id="discover-refresh" type="button" class="ghost">↻ Refresh sources</button>
+          <span id="discover-status" class="hint"></span>
+        </div>
+        <div id="discover-list" class="form-scroll"></div>
       </div>
-      <div id="discover-list" class="form-scroll"></div>
     </div>
   </div>
   <div class="view" id="view-profile">
@@ -538,6 +577,19 @@ function render(apps, profile = loadProfile(), instructions = readText(instructi
   </div>
 </main>
 <dialog id="detail"></dialog>
+<dialog id="prefs-dlg">
+  <div class="dlg-head"><h3>Welcome 👋 — tune your discovery</h3></div>
+  <div class="dlg-body">
+    <h4>What are you looking for?</h4>
+    <div class="choice-row" id="pref-level"></div>
+    <h4>Directions — pick any that fit</h4>
+    <div class="choice-row wrap" id="pref-dirs"></div>
+    <div class="editor-bar" style="margin-top:16px">
+      <span class="hint">Saved locally to ~/.coforce/preferences.json — change anytime in the filter panel</span>
+      <button id="prefs-save" type="button">Start discovering →</button>
+    </div>
+  </div>
+</dialog>
 <dialog id="import-dlg">
   <div class="dlg-head"><h3>Import resume with AI</h3><button class="close" type="button" aria-label="Close">✕</button></div>
   <div class="dlg-body">
@@ -553,6 +605,7 @@ function render(apps, profile = loadProfile(), instructions = readText(instructi
 <script>
 const APPS = ${payload};
 const PROFILE = ${JSON.stringify(profile).replaceAll('<', '\\u003c')};
+const PREFS = ${JSON.stringify(existsSync(prefsPath) ? JSON.parse(readFileSync(prefsPath, 'utf8')) : null).replaceAll('<', '\\u003c')};
 const GLOBAL_FILES = ${globalFiles};
 const SERVE = ${JSON.stringify(serve)};
 const FILES_ROOT = ${JSON.stringify(filesRoot).replaceAll('<', '\\u003c')};
@@ -605,11 +658,119 @@ document.querySelectorAll('#tabs button').forEach(btn => {
   });
 });
 
-// --- discover: local job discovery with one-click apply queue ---
+// --- discover: preference wizard + filters + classified list ---
 let discoverLoaded = false;
 let DISCOVER = [];
+let DSUMMARY = null;
 const dList = document.getElementById('discover-list');
 const dStatus = document.getElementById('discover-status');
+const filtersEl = document.getElementById('filters');
+
+// ponytail: hardcoded keyword classifier — an LLM pass can replace it later
+const LEVELS = [['internship', 'Internship'], ['newgrad', 'New Grad / Full-time'], ['any', 'Both']];
+// NB: this block ships through a server-side template literal — word
+// boundaries must be written \\b or they arrive as backspace characters
+const DIRS = [
+  ['frontend', 'Frontend', /front.?end|\\bui\\b|web develop/i],
+  ['backend', 'Backend', /back.?end|\\bapi\\b|server|distributed|microservice/i],
+  ['fullstack', 'Full-Stack', /full.?stack/i],
+  ['mobile', 'Mobile', /mobile|\\bios\\b|android/i],
+  ['ai-ml', 'AI / ML', /machine learning|\\bml\\b|\\bai\\b|deep learning|\\bllm\\b|computer vision|\\bnlp\\b|data scien|perception/i],
+  ['data', 'Data Eng', /data engineer|analytics|\\betl\\b|data platform/i],
+  ['infra', 'Infra / Cloud', /infrastructure|cloud|devops|\\bsre\\b|kubernetes|reliability|platform engineer/i],
+  ['security', 'Security', /security|appsec|crypto/i],
+  ['embedded', 'Embedded / Systems', /embedded|firmware|kernel|systems software|silicon|hardware/i],
+  ['qa', 'QA / Test', /\\bqa\\b|quality|test engineer/i],
+  ['general', 'General SWE', null],
+];
+const levelOf = j => (/\\bintern(ship)?s?\\b/i.test(j.role) ? 'internship' : 'newgrad');
+const dirsOf = j => {
+  const hit = DIRS.filter(([, , re]) => re && re.test(j.role)).map(([k]) => k);
+  return hit.length ? hit : ['general'];
+};
+
+// filter state, seeded from saved preferences
+const F = {
+  level: PREFS?.level || 'any',
+  dirs: new Set(PREFS?.directions || []),
+  sources: new Set(),
+  q: '',
+};
+async function savePrefs() {
+  try {
+    await postTo('/api/prefs', JSON.stringify({ level: F.level, directions: [...F.dirs] }), 'application/json');
+  } catch {}
+}
+
+function matches(j) {
+  if (F.level !== 'any' && j._level !== F.level) return false;
+  if (F.dirs.size && !j._dirs.some(d => F.dirs.has(d))) return false;
+  if (F.sources.size && !F.sources.has(j.source)) return false;
+  if (F.q && !(j.role + ' ' + j.company + ' ' + (j.location || '')).toLowerCase().includes(F.q)) return false;
+  return true;
+}
+
+function renderFilters() {
+  const dirCounts = {};
+  const srcCounts = {};
+  for (const j of DISCOVER) {
+    for (const d of j._dirs) dirCounts[d] = (dirCounts[d] || 0) + 1;
+    srcCounts[j.source] = (srcCounts[j.source] || 0) + 1;
+  }
+  filtersEl.innerHTML =
+    '<h4>Search</h4><input class="fsearch" id="f-q" placeholder="role, company, city…" value="' + escHtml(F.q) + '">' +
+    '<h4>Level</h4>' + LEVELS.map(([k, label]) =>
+      '<label class="frow"><input type="radio" name="f-level" value="' + k + '"' + (F.level === k ? ' checked' : '') + '> ' + label + '</label>').join('') +
+    '<h4>Direction</h4>' + DIRS.map(([k, label]) =>
+      '<label class="frow"><input type="checkbox" data-dir="' + k + '"' + (F.dirs.size === 0 || F.dirs.has(k) ? ' checked' : '') + '> ' + label +
+      '<span class="fcount">' + (dirCounts[k] || 0) + '</span></label>').join('') +
+    '<h4>Source</h4>' + Object.keys(srcCounts).map(s =>
+      '<label class="frow"><input type="checkbox" data-src="' + escHtml(s) + '"' + (F.sources.size === 0 || F.sources.has(s) ? ' checked' : '') + '> ' + escHtml(s) +
+      '<span class="fcount">' + srcCounts[s] + '</span></label>').join('');
+}
+filtersEl.addEventListener('input', e => {
+  const t = e.target;
+  if (t.id === 'f-q') F.q = t.value.trim().toLowerCase();
+  else if (t.name === 'f-level') { F.level = t.value; savePrefs(); }
+  else if (t.dataset.dir) {
+    const checked = [...filtersEl.querySelectorAll('[data-dir]:checked')].map(x => x.dataset.dir);
+    F.dirs = checked.length === DIRS.length ? new Set() : new Set(checked);
+    savePrefs();
+  } else if (t.dataset.src) {
+    const all = [...filtersEl.querySelectorAll('[data-src]')];
+    const checked = all.filter(x => x.checked).map(x => x.dataset.src);
+    F.sources = checked.length === all.length ? new Set() : new Set(checked);
+  }
+  renderList();
+});
+
+function renderList() {
+  const shown = DISCOVER.filter(matches);
+  if (DSUMMARY) {
+    dStatus.textContent = shown.length + ' shown of ' + DISCOVER.length + ' new · ' +
+      DSUMMARY.skipped.tracked + ' tracked · ' + DSUMMARY.skipped.blocked + ' never-apply · ' +
+      DSUMMARY.sources.map(s => s.name + (s.error ? ' ⚠' : '')).join(' · ');
+  }
+  dList.innerHTML = shown.map(j => {
+    const i = DISCOVER.indexOf(j);
+    let logo = '';
+    try {
+      if (j.homepage) {
+        const host = new URL(j.homepage).hostname;
+        logo = '<img class="dlogo" alt="" loading="lazy" ' +
+          'src="https://www.google.com/s2/favicons?domain=' + encodeURIComponent(host) + '&sz=64" ' +
+          'onerror="this.remove()">';
+      }
+    } catch {}
+    return '<div class="drow">' + logo +
+      '<div class="dmain"><a class="dtitle" href="' + escHtml(j.url) + '" target="_blank" rel="noreferrer">' +
+      escHtml(j.role) + '</a>' +
+      '<div class="meta">' + escHtml(j.company) + (j.location ? ' · ' + escHtml(j.location) : '') +
+      ' · <span class="dsource">' + escHtml(j.source) + '</span></div></div>' +
+      '<button class="dapply" type="button" data-i="' + i + '">Apply ⇢</button></div>';
+  }).join('') || '<div class="pane-empty">Nothing matches these filters — loosen them or ↻ refresh sources.</div>';
+}
+
 async function loadDiscover() {
   if (!SERVE) { dStatus.textContent = 'static file — discovery needs the served console'; return; }
   dStatus.textContent = 'Fetching job sources…';
@@ -620,27 +781,11 @@ async function loadDiscover() {
     if (!res.ok) throw new Error(await res.text() || res.status);
     const d = await res.json();
     discoverLoaded = true;
-    DISCOVER = d.new;
-    dStatus.textContent = d.new.length + ' new · ' + d.skipped.tracked + ' already tracked · ' +
-      d.skipped.blocked + ' blocked by never-apply · ' +
-      d.sources.map(s => s.name + (s.error ? ' ⚠' : ' (' + s.listings + ')')).join(' · ');
-    dList.innerHTML = d.new.map((j, i) => {
-      let logo = '';
-      try {
-        if (j.homepage) {
-          const host = new URL(j.homepage).hostname;
-          logo = '<img class="dlogo" alt="" loading="lazy" ' +
-            'src="https://www.google.com/s2/favicons?domain=' + encodeURIComponent(host) + '&sz=64" ' +
-            'onerror="this.remove()">';
-        }
-      } catch {}
-      return '<div class="drow">' + logo +
-        '<div class="dmain"><a class="dtitle" href="' + escHtml(j.url) + '" target="_blank" rel="noreferrer">' +
-        escHtml(j.role) + '</a>' +
-        '<div class="meta">' + escHtml(j.company) + (j.location ? ' · ' + escHtml(j.location) : '') +
-        ' · <span class="dsource">' + escHtml(j.source) + '</span></div></div>' +
-        '<button class="dapply" type="button" data-i="' + i + '">Apply ⇢</button></div>';
-    }).join('') || '<div class="pane-empty">No new postings — everything is already tracked or filtered.</div>';
+    DSUMMARY = d;
+    DISCOVER = d.new.map(j => ({ ...j, _level: levelOf(j), _dirs: dirsOf(j) }));
+    renderFilters();
+    renderList();
+    if (!PREFS) openPrefsWizard();
   } catch (e) {
     dStatus.textContent = 'Discovery failed: ' + e.message;
   } finally {
@@ -648,6 +793,35 @@ async function loadDiscover() {
   }
 }
 document.getElementById('discover-refresh').addEventListener('click', () => { discoverLoaded = false; loadDiscover(); });
+
+// --- first-run preference wizard ---
+const prefsDlg = document.getElementById('prefs-dlg');
+function openPrefsWizard() {
+  const lvl = document.getElementById('pref-level');
+  const dir = document.getElementById('pref-dirs');
+  lvl.innerHTML = LEVELS.map(([k, label]) =>
+    '<button type="button" data-k="' + k + '"' + (k === 'any' ? ' class="sel"' : '') + '>' + label + '</button>').join('');
+  dir.innerHTML = DIRS.filter(([k]) => k !== 'general').map(([k, label]) =>
+    '<button type="button" data-k="' + k + '">' + label + '</button>').join('');
+  lvl.addEventListener('click', e => {
+    const b = e.target.closest('button'); if (!b) return;
+    lvl.querySelectorAll('button').forEach(x => x.classList.toggle('sel', x === b));
+  });
+  dir.addEventListener('click', e => {
+    const b = e.target.closest('button'); if (!b) return;
+    b.classList.toggle('sel');
+  });
+  prefsDlg.showModal();
+}
+document.getElementById('prefs-save').addEventListener('click', async () => {
+  F.level = document.querySelector('#pref-level button.sel')?.dataset.k || 'any';
+  const picked = [...document.querySelectorAll('#pref-dirs button.sel')].map(b => b.dataset.k);
+  F.dirs = new Set(picked.length ? [...picked, 'general'] : []);
+  await savePrefs();
+  prefsDlg.close();
+  renderFilters();
+  renderList();
+});
 dList.addEventListener('click', async e => {
   const btn = e.target.closest('.dapply');
   if (!btn || btn.disabled) return;
@@ -1079,6 +1253,28 @@ if (serve) {
           writeFileSync(input, `${JSON.stringify(apps, null, 2)}\n`);
           res.writeHead(200, { 'content-type': 'application/json' });
           res.end(JSON.stringify({ id: apps[0].id }));
+        } catch (err) {
+          res.writeHead(400, { 'content-type': 'text/plain' });
+          res.end(String(err.message));
+        }
+      });
+      return;
+    }
+    if (req.url === '/api/prefs' && req.method === 'GET') {
+      res.writeHead(200, { 'content-type': 'application/json' });
+      res.end(existsSync(prefsPath) ? readFileSync(prefsPath, 'utf8') : 'null');
+      return;
+    }
+    if (req.url === '/api/prefs' && req.method === 'POST') {
+      let body = '';
+      req.on('data', chunk => { body += chunk; });
+      req.on('end', () => {
+        try {
+          const prefs = JSON.parse(body);
+          if (!prefs || typeof prefs !== 'object' || Array.isArray(prefs))
+            throw new Error('expected a JSON object');
+          writeFileSync(prefsPath, `${JSON.stringify(prefs, null, 2)}\n`);
+          res.writeHead(204).end();
         } catch (err) {
           res.writeHead(400, { 'content-type': 'text/plain' });
           res.end(String(err.message));

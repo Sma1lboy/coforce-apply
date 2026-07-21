@@ -51,6 +51,8 @@ assert.ok(html.includes('Onsite scheduled 2026-07-24'));
 assert.ok(html.includes('real-time observability platform'), 'description in payload');
 assert.ok(html.includes('recruiter email'), 'history in payload');
 assert.ok(html.includes('draggable="true"'), 'cards draggable');
+// template-literal escaping guard: client regex word boundaries must survive
+assert.ok(html.includes('\\bintern'), 'client regex \\b not eaten by template literal');
 // per-application + global archive files listed in the payload
 assert.ok(html.includes('interview-prep.md'), 'per-app file listed');
 assert.ok(html.includes('interview-cheatsheet.md'), 'global file listed');
@@ -163,6 +165,17 @@ try {
   );
   const badProf = await fetch(`${base}/api/profile`, { method: 'POST', body: '[1,2]' });
   assert.equal(badProf.status, 400, 'non-object profile rejected');
+
+  // discovery preferences round-trip (first-run wizard persistence)
+  assert.equal(await (await fetch(`${base}/api/prefs`)).json(), null, 'prefs empty at first');
+  const prefPost = await fetch(`${base}/api/prefs`, {
+    method: 'POST',
+    headers: { 'content-type': 'application/json' },
+    body: JSON.stringify({ level: 'internship', directions: ['backend', 'general'] }),
+  });
+  assert.equal(prefPost.status, 204, 'prefs saved');
+  const prefs = await (await fetch(`${base}/api/prefs`)).json();
+  assert.equal(prefs.level, 'internship', 'prefs persisted');
 
   // AI import: stubbed claude CLI parses pasted text into a profile object
   const imp = await fetch(`${base}/api/import`, {

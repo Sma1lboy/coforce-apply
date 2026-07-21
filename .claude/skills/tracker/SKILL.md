@@ -37,12 +37,15 @@ One kobe-Hallmark-themed local site, four tabs:
 - **Board** — kanban: full-height status columns, drag & drop moves an
   application (appends a history event, saves to the JSON), cards open a
   detail view (JD link, saved info, files, history timeline, description).
-- **Discover** — local job discovery: fetches the configured sources through
-  the start skill's `hunt.mjs` (sibling install), lists postings not yet
-  tracked (dedup + never-apply applied), and each row's **Apply** button
-  queues it into the tracker as `pending` with a discovery history event and
-  copies `claude "/apply <url>"` — the user pastes that in Claude Code (or
-  lets `/start` pick the queue up) to run the full flow.
+- **Discover** (home tab) — local job discovery: fetches the configured
+  sources through the start skill's `hunt.mjs` (sibling install), lists
+  postings not yet tracked (dedup + never-apply applied) with company logos.
+  First visit opens a preference wizard (internship/new-grad + directions →
+  `~/.coforce/preferences.json`); a left filter panel (search, level,
+  direction with keyword classification, source) narrows the list. Each row's
+  **Apply** button queues the posting into the tracker as `pending` with a
+  discovery history event and copies `claude "/apply <url>"` — paste in
+  Claude Code (or let `/start` pick the queue up) to run the full flow.
 - **Profile** — resume-style live preview of `~/.coforce/profile.json` beside
   a structured form editor (basics, skill chips, add/remove
   experience/project/education cards and bullets — no raw JSON), plus
