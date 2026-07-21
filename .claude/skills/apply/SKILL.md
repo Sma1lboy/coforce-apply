@@ -1,6 +1,6 @@
 ---
 name: apply
-description: Tier-2 fallback for job applications — given a job posting URL, complete and submit the application form via browser automation using the user's profile/profile.json and resume PDF. Invoked as "/apply <url>", typically copied from the extension's "Claude fallback" button when scripted auto-fill failed or stalled.
+description: Tier-2 fallback for job applications — given a job posting URL, complete and submit the application form via browser automation using the user's ~/.coforce/profile.json and resume PDF. Invoked as "/apply <url>", typically copied from the extension's "Claude fallback" button when scripted auto-fill failed or stalled.
 ---
 
 # Apply — browser-use job application (Tier 2 fallback)
@@ -10,10 +10,9 @@ Tier 1 (the extension's scripted form-fill) failed on this page — expect a
 non-trivial form: multi-step wizard, custom widgets, an ATS (Workday,
 Greenhouse, Lever, Ashby…), or login walls.
 
-## Setup (first run, answers persist in profile/apply-config.json)
+## Setup (first run, answers persist in ~/.coforce/apply-config.json)
 
-Before the first application, ask ONCE and save to `profile/apply-config.json`
-(gitignored with the rest of `profile/`):
+Before the first application, ask ONCE and save to `~/.coforce/apply-config.json`:
 
 ```json
 {
@@ -29,12 +28,12 @@ Subsequent runs read this file and only ask about gaps.
 
 ## Preconditions
 
-0. Read `profile/instructions.md` — standing user instructions (never-apply
+0. Read `~/.coforce/instructions.md` — standing user instructions (never-apply
    companies, preferences). It overrides everything below; a never-apply
    company means stop and tell the user, not apply anyway.
-1. Read `profile/profile.json` (repo root). Missing → run the `profile` skill's
-   init first; don't guess values.
-2. Read `profile/apply-config.json`; missing → run Setup above. Batch any
+1. Read `~/.coforce/profile.json`. Missing → run the `profile` skill's init
+   first; don't guess values.
+2. Read `~/.coforce/apply-config.json`; missing → run Setup above. Batch any
    remaining per-job questions up front; don't drip.
 
 ## Flow
@@ -52,16 +51,16 @@ Subsequent runs read this file and only ask about gaps.
 5. **Stop before the final submit** and show a summary of what was entered.
    Submit only after the user confirms. Submission is irreversible.
 6. Report the outcome (confirmation page / email signal), record it in the
-   local tracker (`profile/applications.json`, per the `tracker` skill — add or
-   update the entry with the final status), then regenerate and open the board
-   (`node scripts/board.mjs && open out/board.html`) so the user sees the
-   updated state without asking.
+   local tracker (`~/.coforce/applications.json`, per the `tracker` skill — add or
+   update the entry with the final status), then serve/refresh the board per
+   the `tracker` skill and open it so the user sees the updated state without
+   asking.
 
 ## Account registration (Workday & co.)
 
 When the ATS requires an account and `autoRegister` is consented:
 
-1. **Reuse first**: check `profile/accounts.json` for an existing account on
+1. **Reuse first**: check `~/.coforce/accounts.json` for an existing account on
    this ATS domain (Workday tenants are per-company — match the full host,
    e.g. `acme.wd5.myworkdayjobs.com`).
 2. **Register**: username/email = `email` from apply-config. Password:
@@ -74,7 +73,7 @@ When the ATS requires an account and `autoRegister` is consented:
    security add-generic-password -s "coforce:<ats-host>" -a "<email>" -w "$PW"
    # retrieve later: security find-generic-password -s "coforce:<ats-host>" -w
    ```
-   Append the metadata (NO password) to `profile/accounts.json`:
+   Append the metadata (NO password) to `~/.coforce/accounts.json`:
    `{"host", "email", "keychain": "coforce:<ats-host>", "createdAt"}`.
 4. **Email verification**: per `mailboxAccess` —
    - `browser`: open the mailbox in the browser (user's logged-in session;
@@ -95,6 +94,6 @@ When the ATS requires an account and `autoRegister` is consented:
   yes); accepting non-obvious terms (background checks, data sharing beyond
   the application) still needs an explicit ask.
 - Passwords live only in Keychain; never print them into the conversation,
-  files, or logs. `profile/accounts.json` holds metadata only.
+  files, or logs. `~/.coforce/accounts.json` holds metadata only.
 - In the mailbox, open ONLY the verification email for the ATS at hand —
   never read, summarize, or act on anything else in the inbox.

@@ -1,0 +1,90 @@
+\documentclass[11pt,a4paper]{article}
+
+% Packages
+\usepackage[margin=0.75in]{geometry}
+\usepackage{hyperref}
+\usepackage{fontawesome}
+\usepackage{titlesec}
+\usepackage{enumitem}
+\usepackage{xcolor}
+
+% Define colors
+\definecolor{primary}{RGB}{70, 130, 180}
+\definecolor{secondary}{RGB}{128, 128, 128}
+
+% Format section headings
+\titleformat{\section}{\normalfont\Large\bfseries}{}{0em}{\color{primary}}[\titlerule]
+\titlespacing*{\section}{0pt}{*1.5}{*1}
+
+% Remove page numbers
+\pagestyle{empty}
+
+\begin{document}
+
+% Header with name and contact info
+\begin{center}
+    {\LARGE \textbf{{name}}}\\[0.3em]
+    {\large {title}}\\[0.5em]
+    {\small 
+    \faEnvelope\ \href{mailto:{email}}{{email}} $|$
+    \faPhone\ {phone} $|$
+    \faMapMarker\ {location}
+    {{#if linkedin}}
+    $|$ \faLinkedin\ \href{https://www.linkedin.com/in/{linkedin}}{linkedin}
+    {{/if}}
+    {{#if github}}
+    $|$ \faGithub\ \href{https://github.com/{github}}{github}
+    {{/if}}
+    {{#if website}}
+    $|$ \faGlobe\ \href{https://{website}}{{website}}
+    {{/if}}
+    }
+\end{center}
+
+% Summary
+\section{Professional Summary}
+{summary}
+
+% Skills
+\section{Skills}
+{{#each skills}}
+{{this}}{{#unless @last}}, {{/unless}}
+{{/each}}
+
+% Experience
+\section{Experience}
+{{#each experience}}
+\textbf{{company}} \hfill {{date}}\\
+\textit{{title}}\\
+\begin{itemize}[leftmargin=*,nosep]
+{{#each description}}
+    \item {{{this}}}
+{{/each}}
+\end{itemize}
+{{/each}}
+
+% Education
+\section{Education}
+{{#each education}}
+\textbf{{institution}} \hfill {{date}}\\
+\textit{{degree}}\\
+{{/each}}
+
+{{#if certifications}}
+% Certifications
+\section{Certifications}
+{{#each certifications}}
+\textbf{{name}} \hfill {{date}}\\
+\textit{{issuer}}\\
+{{/each}}
+{{/if}}
+
+{{#if languages}}
+% Languages
+\section{Languages}
+{{#each languages}}
+{{language}} ({{proficiency}}){{#unless @last}}, {{/unless}}
+{{/each}}
+{{/if}}
+
+\end{document}

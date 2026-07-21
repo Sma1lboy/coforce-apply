@@ -5,15 +5,16 @@ description: Run one discover→apply cycle — fetch job sources, diff against 
 
 # Start — one discover→apply cycle
 
-Setup must exist (`profile/apply-config.json`); missing → run the `setup`
-skill first. **Read `profile/instructions.md` before anything else** — it
+Setup must exist (`~/.coforce/apply-config.json`); missing → run the `setup`
+skill first. **Read `~/.coforce/instructions.md` before anything else** — it
 overrides every default below.
 
 ## Cycle
 
-1. **Discover**:
+1. **Discover** (the script ships with this skill, path relative to this
+   skill's base directory):
    ```sh
-   node scripts/hunt.mjs --track
+   node "<skill-dir>/scripts/hunt.mjs" --track
    ```
    Fetches all configured sources, skips anything already tracked (URL or
    company+role match — never double-apply) and every `never-apply` company,

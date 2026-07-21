@@ -5,7 +5,10 @@ description: End-to-end mock-environment test of the whole pipeline — fixture 
 
 # Harness — mock E2E
 
-Everything runs against fixtures; the user's real `profile/profile.json` is
+**Repo-development skill** — it needs the coforce-apply repo checkout
+(`harness/` fixtures, `yarn`), so installers skip it; end users don't need it.
+
+Everything runs against fixtures; the user's real `~/.coforce/profile.json` is
 never touched. Mock environment lives in `harness/`:
 
 - `harness/fixtures/profile.json` — John Doe fixture (schema: `src/types.ts`)

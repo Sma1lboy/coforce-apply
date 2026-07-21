@@ -23,7 +23,7 @@ mkdirSync(outDir, { recursive: true });
 const out = join(outDir, 'board.html');
 execFileSync(
   process.execPath,
-  ['scripts/board.mjs', 'harness/fixtures/applications.json', out],
+  ['.claude/skills/tracker/scripts/board.mjs', 'harness/fixtures/applications.json', out],
   { cwd: root, stdio: 'inherit' }
 );
 const html = readFileSync(out, 'utf8');
@@ -73,7 +73,7 @@ writeFileSync(
   ])
 );
 const probeOut = join(outDir, 'probe.html');
-execFileSync(process.execPath, ['scripts/board.mjs', probe, probeOut], {
+execFileSync(process.execPath, ['.claude/skills/tracker/scripts/board.mjs', probe, probeOut], {
   cwd: root,
   stdio: 'inherit',
 });
@@ -95,7 +95,7 @@ copyFileSync(join(here, 'fixtures/applications.json'), live);
 cpSync(join(here, 'fixtures/applications'), join(outDir, 'applications'), {
   recursive: true,
 });
-const server = spawn(process.execPath, ['scripts/board.mjs', live, '--serve', '0'], {
+const server = spawn(process.execPath, ['.claude/skills/tracker/scripts/board.mjs', live, '--serve', '0'], {
   cwd: root,
 });
 try {

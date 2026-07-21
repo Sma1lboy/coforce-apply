@@ -1,6 +1,6 @@
 ---
 name: repo-bullets
-description: Read a git repository (local path or GitHub URL) and generate resume-ready STAR bullet points from the user's actual contributions, then optionally merge them into profile/profile.json as a project entry. Use when the user wants resume bullets for a repo/project, e.g. "把这个 repo 写成简历上的项目" or "generate bullets for X".
+description: Read a git repository (local path or GitHub URL) and generate resume-ready STAR bullet points from the user's actual contributions, then optionally merge them into ~/.coforce/profile.json as a project entry. Use when the user wants resume bullets for a repo/project, e.g. "把这个 repo 写成简历上的项目" or "generate bullets for X".
 ---
 
 # Repo → STAR resume bullets
@@ -26,7 +26,7 @@ evidence (commits, diffs, code) — never in the README's marketing copy alone.
      (users, %, latency); if none, write a qualitative outcome instead of
      inventing one.
    - ≤ ~28 words per bullet.
-5. **Merge (on confirmation)**: append to `profile/profile.json` `projects[]` as
+5. **Merge (on confirmation)**: append to `~/.coforce/profile.json` `projects[]` as
    `{name, description: [{text}...], technologies, dateRange}` (dateRange from
    first/last commit dates). Follow the schema rules in the `profile` skill.
 

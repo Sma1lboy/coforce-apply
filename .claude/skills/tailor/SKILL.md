@@ -7,17 +7,17 @@ description: Generate a tailored resume for a specific job description from the 
 
 Input: a job description (URL to fetch, file path, or pasted text), optionally a
 format ("docx", "pdf", "tex") and/or a template/reference file.
-Read `profile/instructions.md` first if present — standing user preferences
+Read `~/.coforce/instructions.md` first if present — standing user preferences
 (tone, emphasis, format defaults) override this skill's defaults.
-Profile source: `profile/profile.json` (fall back to asking the user to run the
+Profile source: `~/.coforce/profile.json` (fall back to asking the user to run the
 `profile` skill if missing).
 
 ## Template / reference resolution (first match wins)
 
 1. A file the user names explicitly.
-2. Files in `templates/` at the repo root (gitignored — may carry personal style
-   or data). If several, ask once which to use.
-3. Default: `src/templates/resume_template.tex`.
+2. Files in `~/.coforce/templates/` (may carry personal style or data). If
+   several, ask once which to use.
+3. Default: `assets/resume_template.tex` inside this skill's base directory.
 
 How to use it depends on its type:
 - **`.tex` / `.html`** — a fillable template: keep its packages, layout, and
@@ -37,8 +37,7 @@ How to use it depends on its type:
      JD-relevant ones lead; drop the weakest bullets if over one page. Respect
      `weight` fields (higher = keep first) when present.
    - Summary: 2–3 sentences positioning the user for THIS role, facts only.
-3. Render to `out/resume-<company>-<role>.<ext>` (kebab-case; `out/` is
-   gitignored):
+3. Render to `~/.coforce/out/resume-<company>-<role>.<ext>` (kebab-case):
    - **tex/pdf** (default): write `.tex`, escape LaTeX-special characters
      (`& % $ # _ { } ~ ^`), compile with `pdflatex -interaction=nonstopmode`
      (or `tectonic`) if on PATH.
@@ -53,5 +52,5 @@ How to use it depends on its type:
 - Facts only from the profile. Tailoring reorders and rephrases; it never adds
   employers, titles, dates, metrics, or skills the profile doesn't contain.
 - One page unless the profile clearly warrants two (10+ years, many roles).
-- Never write into `templates/` — outputs go to `out/` (or the path the user
-  asks for).
+- Never write into `~/.coforce/templates/` — outputs go to `~/.coforce/out/`
+  (or the path the user asks for).

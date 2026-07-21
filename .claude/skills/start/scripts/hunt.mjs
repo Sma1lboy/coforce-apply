@@ -1,7 +1,9 @@
 // Job discovery: fetch job-list sources (GitHub README tables), diff against
 // the tracker, respect the user's never-apply list, optionally track new ones.
 //
-//   node scripts/hunt.mjs [--track] [--config profile/apply-config.json]
+// Ships inside the start skill; user data lives in ~/.coforce/.
+//
+//   node hunt.mjs [--track] [--config ~/.coforce/apply-config.json]
 //     [--source-file path.md ...]   # local files instead of config URLs (harness)
 //     [--apps path] [--instructions path]
 //
@@ -10,6 +12,7 @@
 // twice to the same posting hurts the candidate, so skip on any doubt.
 
 import { readFileSync, writeFileSync, existsSync } from 'node:fs';
+import { homedir } from 'node:os';
 import { dirname, join, basename } from 'node:path';
 
 const args = process.argv.slice(2);
@@ -18,7 +21,8 @@ const flag = name => {
   return i === -1 ? undefined : args[i + 1];
 };
 const track = args.includes('--track');
-const configPath = flag('config') ?? 'profile/apply-config.json';
+const configPath =
+  flag('config') ?? join(homedir(), '.coforce', 'apply-config.json');
 const profileDir = dirname(configPath);
 const appsPath = flag('apps') ?? join(profileDir, 'applications.json');
 const instructionsPath =

@@ -1,9 +1,10 @@
 // Local application-tracker board: applications JSON → interactive kanban HTML.
+// Ships inside the tracker skill; user data lives in ~/.coforce/.
 //
-//   node scripts/board.mjs [input.json] [output.html]   # render static file
-//   node scripts/board.mjs [input.json] --serve [port]  # live board, drag persists
+//   node board.mjs [input.json] [output.html]   # render static file
+//   node board.mjs [input.json] --serve [port]  # live board, drag persists
 //
-// Defaults: profile/applications.json → out/board.html, serve port 4517.
+// Defaults: ~/.coforce/applications.json → ~/.coforce/out/board.html, port 4517.
 // Serve mode regenerates on every GET and writes drags back to the input JSON
 // (POST /api/apps). Static mode falls back to a "copy JSON" bar after a drag.
 // Theme: kobe "Hallmark" tokens (terracotta on warm dark) — the CoForce brand look.
@@ -18,8 +19,10 @@ import {
   writeFileSync,
 } from 'node:fs';
 import { createServer } from 'node:http';
+import { homedir } from 'node:os';
 import { dirname, extname, join, resolve, sep } from 'node:path';
 
+const HOME = join(homedir(), '.coforce');
 const args = process.argv.slice(2);
 const serveIdx = args.indexOf('--serve');
 const serve = serveIdx !== -1;
@@ -30,8 +33,10 @@ const port = serve ? (hasPortArg ? Number(portArg) : 4517) : null;
 const positional = args.filter(
   (a, i) => a !== '--serve' && !(hasPortArg && i === serveIdx + 1)
 );
-const [input = 'profile/applications.json', output = 'out/board.html'] =
-  positional;
+const [
+  input = join(HOME, 'applications.json'),
+  output = join(HOME, 'out', 'board.html'),
+] = positional;
 
 // Pipeline stages only — delivery mishaps (tier-1 failure, Claude fallback)
 // are history events + a needsFallback flag, not statuses.

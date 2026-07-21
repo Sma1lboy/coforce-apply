@@ -91,6 +91,15 @@ The `harness` skill runs the full loop — tailor a resume from the mock JD, the
 the deterministic two-tier apply check (`yarn harness`) — without touching real
 data or real job sites. Resume generation itself is the `tailor` skill.
 
+## Distribution — installable skills ✅
+
+The product ships as Claude Code skills, not a project: users paste the README
+install prompt (or one-liner), the agent shallow-clones the repo, copies the
+skill folders (minus `harness`) into `~/.claude/skills/`, and runs `/setup`.
+Skills are self-contained — scripts and the resume template live inside their
+skill directories; user data lives in `~/.coforce/`. The repo remains the dev
+environment (harness, extension build).
+
 ## Phase 4 — Rebrand & merge 🔶 (prep done)
 
 Rebranded in-repo to **CoForce Apply** (new logo, manifest, README, package name).

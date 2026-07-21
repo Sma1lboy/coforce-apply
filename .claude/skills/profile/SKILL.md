@@ -1,15 +1,14 @@
 ---
 name: profile
-description: Maintain the user's local career background (resume metadata) in profile/profile.json — init from interview or an existing resume (PDF/JSON), add or update experience/projects/education/skills, review, and export for the extension. Use whenever the user mentions their profile, background, resume data, work history, or wants to add something they built to their record.
+description: Maintain the user's local career background (resume metadata) in ~/.coforce/profile.json — init from interview or an existing resume (PDF/JSON), add or update experience/projects/education/skills, review, and export for the extension. Use whenever the user mentions their profile, background, resume data, work history, or wants to add something they built to their record.
 ---
 
 # Profile — local background maintenance
 
-Single source of truth: `profile/profile.json` at the repo root. It is gitignored
-(personal data). The schema is `userProfileSchema` in `src/types.ts` — read that
-file for the authoritative field list before writing. Never invent fields.
+Single source of truth: `~/.coforce/profile.json` (personal data — never in any
+repo). The authoritative schema is the shape below. Never invent fields.
 
-Shape summary (all fields optional): `name`, `title`, `email`, `phone`, `location`,
+Shape (all fields optional): `name`, `title`, `email`, `phone`, `location`,
 `linkedin`, `github`, `website`, `summary`, `skills[]`, `courses[]`,
 `experience[] {company, title, date, description[{text, weight?}], weight?}`,
 `education[] {institution, degree, date, relevantCourses?}`,
@@ -20,9 +19,9 @@ to a JD — set it when the user signals importance, otherwise omit.
 
 ## Operations
 
-**Init** (`profile/profile.json` missing):
-- If the user has an existing resume (PDF/JSON/text), read it and map into the
-  schema. A reference example lives at `src/templates/user_profile.json`.
+**Init** (`~/.coforce/profile.json` missing):
+- Create `~/.coforce/` if needed. If the user has an existing resume
+  (PDF/JSON/text), read it and map into the schema.
 - Otherwise interview briefly: contact basics → education → experience → projects
   → skills. Don't interrogate; accept partial data, everything is optional.
 
@@ -40,7 +39,8 @@ tell the user the file path or print the JSON.
 
 ## Rules
 
-- Validate against `src/types.ts` shapes before writing; `description` entries are
+- Validate against the shape above before writing; `description` entries are
   objects `{text, weight?}`, not bare strings.
 - Never fabricate experience, dates, or metrics. Unknown → omit or ask.
-- Never commit `profile/profile.json` or paste its contents into commits/PRs.
+- Never commit `~/.coforce/profile.json` anywhere or paste its contents into
+  commits/PRs.

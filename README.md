@@ -11,10 +11,10 @@ extension handles the in-browser last mile. All of your data stays on your
 machine.
 
 ```
-sources (GitHub job lists)          profile/ (local, gitignored)
-        │                            profile.json      your background
-   scripts/hunt.mjs ──dedup──▶       applications.json tracker truth
-        │                            instructions.md   your standing rules
+sources (GitHub job lists)          ~/.coforce/ (your data, local only)
+        │                            profile.json       your background
+   hunt.mjs ──dedup──▶               applications.json  tracker truth
+        │                            instructions.md    your standing rules
         ▼                            applications/<id>/ per-app archive
   new postings ──▶ tailor ──▶ apply ──▶ board (kanban, drag & drop)
                      │           │
@@ -22,13 +22,30 @@ sources (GitHub job lists)          profile/ (local, gitignored)
                                  tier 2: Claude browser-use fallback
 ```
 
-## Quick start
+## Install
+
+CoForce Apply is a set of Claude Code **skills** — you don't work inside this
+repo. Paste this into any Claude Code session and it installs itself:
+
+> Install the CoForce Apply skills: shallow-clone
+> `https://github.com/Sma1lboy/coforce-apply` into a temp directory, copy every
+> skill folder under `.claude/skills/` **except `harness`** into
+> `~/.claude/skills/`, delete the temp clone, then run `/setup`.
+
+Or the equivalent one-liner:
 
 ```sh
-git clone https://github.com/Sma1lboy/coforce-apply.git && cd coforce-apply
-yarn install
-claude   # then:
+git clone --depth 1 https://github.com/Sma1lboy/coforce-apply /tmp/coforce-apply && \
+  mkdir -p ~/.claude/skills && \
+  for s in setup start profile repo-bullets tailor apply tracker; do \
+    cp -R "/tmp/coforce-apply/.claude/skills/$s" ~/.claude/skills/; done
 ```
+
+Skills carry their own scripts (`tracker/scripts/board.mjs`,
+`start/scripts/hunt.mjs`, `tailor/assets/resume_template.tex`) — the only
+runtime dependency is Node ≥ 22. All your data lives in `~/.coforce/`.
+
+## Use
 
 1. **`/setup`** — one-time onboarding: import or interview your background,
    set your email + consents, name the companies you never want to apply to,
@@ -52,13 +69,13 @@ claude   # then:
 | `tracker` | Application tracker + kanban board + per-application file archive |
 | `harness` | Mock-environment E2E test of the whole pipeline |
 
-**The board** (`yarn board:serve` → http://localhost:4517) is a
-kobe-Hallmark-themed kanban over `profile/applications.json`: five pipeline
+**The board** (http://localhost:4517, served by the tracker skill) is a
+kobe-Hallmark-themed kanban over `~/.coforce/applications.json`: five pipeline
 columns (To Apply → Applied → Interviewing → Offer / Rejected), drag & drop
 persists status changes, cards open a detail view with the JD link, saved
 info, delivery history timeline, archived files, and job description.
 
-**Your instructions rule everything.** `profile/instructions.md` is standing
+**Your instructions rule everything.** `~/.coforce/instructions.md` is standing
 user instruction — preferences, caps, and a `## never-apply` company list that
 every skill and script respects. Duplicate applications are hard-blocked by
 URL and company+role matching.
@@ -69,18 +86,22 @@ URL and company+role matching.
 locally-generated Keychain-stored passwords and fetch email verification
 codes, all gated on consents you grant once during setup.
 
-## Extension (developer mode)
+## Extension (optional, developer mode)
+
+The tier-1 form-filler is a Chrome extension; building it is the one thing
+that needs the repo:
 
 ```sh
-yarn build:chrome
+git clone https://github.com/Sma1lboy/coforce-apply && cd coforce-apply
+yarn install && yarn build:chrome
 ```
 
 Load `extension/chrome` via `chrome://extensions` → Developer mode → Load
 unpacked. Options → Profile → "Import from JSON" accepts
-`profile/profile.json` as-is; the Apply tab syncs with the tracker via
+`~/.coforce/profile.json` as-is; the Apply tab syncs with the tracker via
 Export/Import JSON.
 
-## Development
+## Development (this repo)
 
 - `yarn dev:chrome` / `yarn build:chrome` — extension watch / production build
 - `yarn harness` — deterministic checks: two-tier apply, resume formats, board, hunt
@@ -88,16 +109,15 @@ Export/Import JSON.
 - `yarn hunt` — one discovery pass (`--track` to record)
 - `yarn lint` — ESLint
 
-Key paths: `.claude/skills/` (the skills), `scripts/` (board + hunt),
+Key paths: `.claude/skills/` (the distributable skills + their scripts),
 `harness/` (mock E2E), `src/` (extension). Full design history in
 [docs/ROADMAP.md](docs/ROADMAP.md); the CoForce merge plan in
 [docs/MIGRATION.md](docs/MIGRATION.md).
 
 ## Privacy
 
-Everything personal lives in `profile/` (gitignored) and
-`browser.storage.local` — nothing leaves your machine except the applications
-you approve. ATS passwords go to macOS Keychain, never to files. See
+Everything personal lives in `~/.coforce/` and `browser.storage.local` —
+nothing leaves your machine except the applications you approve. ATS passwords go to macOS Keychain, never to files. See
 [PRIVACY.md](PRIVACY.md).
 
 ## License
