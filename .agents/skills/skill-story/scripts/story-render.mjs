@@ -39,8 +39,8 @@ const THEME = {
   defaultBg: '#181310',
   // Hallmark-leaning 16-color palette (kobe's warm scheme, bg-adjusted)
   ansi16: [
-    '#141413', '#D47563', '#9ACA86', '#E8C96B', '#CC785C', '#9B87F5', '#5FB4C9', '#EAE7DF',
-    '#6b5d52', '#E08A76', '#B0DCA0', '#F2DA8C', '#D4967E', '#B3A3F8', '#8CD3E5', '#FFFFFF',
+    '#141413', '#E8694A', '#9ACA86', '#E8C96B', '#CC785C', '#9B87F5', '#5FB4C9', '#EAE7DF',
+    '#6b5d52', '#F07B5B', '#B0DCA0', '#F2DA8C', '#D4967E', '#B3A3F8', '#8CD3E5', '#FFFFFF',
   ],
 };
 
@@ -176,30 +176,36 @@ try {
   execFileSync('which', ['ffmpeg'], { stdio: 'pipe' });
   const pngDir = join(storyDir, 'png');
   mkdirSync(pngDir, { recursive: true });
-  const width = 1344;
-  const height = 756;
-  const lineH = Math.floor((height - 40) / rows);
-  const charW = 11.4; // Menlo 13px advance approximation for bg rects
+  // Real monospace grid: Menlo advance ≈ 0.6023em. Position by COLUMN and pin
+  // every span with textLength so glyphs (incl. half-block mosaics like the
+  // Claude logo) land exactly on the grid — no stretching, no seams.
+  const FONT = 15;
+  const ADV = FONT * 0.6023;
+  const LINE_H = Math.round(FONT * 1.35);
+  const PAD = 24;
+  const width = Math.round(cols * ADV + PAD * 2);
+  const height = rows * LINE_H + PAD * 2;
   const concat = [];
   parsed.forEach((frame, index) => {
     const rowsSvg = frame.lines.map((line, row) => {
-      const y = 26 + row * lineH;
-      let x = 18;
+      const y = PAD + (row + 0.8) * LINE_H;
+      let col = 0;
       const bgs = [];
-      const tspans = line.map(s => {
-        const w = s.text.length * charW;
-        const bg = s.reverse ? (s.fg || THEME.defaultFg) : s.bg;
-        if (bg) bgs.push(`<rect x="${x.toFixed(1)}" y="${y - lineH + 5}" width="${w.toFixed(1)}" height="${lineH}" fill="${bg}"/>`);
-        const fill = s.reverse ? (s.bg || THEME.defaultBg) : (s.fg || THEME.defaultFg);
-        const t = `<text x="${x.toFixed(1)}" y="${y}" fill="${fill}"${s.bold ? ' font-weight="700"' : ''}${s.dim ? ' opacity="0.55"' : ''}${s.italic ? ' font-style="italic"' : ''}${s.underline ? ' text-decoration="underline"' : ''} xml:space="preserve">${esc(s.text)}</text>`;
-        x += w;
-        return t;
-      }).join('');
-      return bgs.join('') + tspans;
+      const texts = [];
+      for (const s2 of line) {
+        const x = PAD + col * ADV;
+        const w = s2.text.length * ADV;
+        const bg = s2.reverse ? (s2.fg || THEME.defaultFg) : s2.bg;
+        if (bg) bgs.push(`<rect x="${x.toFixed(1)}" y="${(y - 0.8 * LINE_H).toFixed(1)}" width="${w.toFixed(1)}" height="${LINE_H}" fill="${bg}"/>`);
+        const fill = s2.reverse ? (s2.bg || THEME.defaultBg) : (s2.fg || THEME.defaultFg);
+        texts.push(`<text x="${x.toFixed(1)}" y="${y.toFixed(1)}" textLength="${w.toFixed(1)}" lengthAdjust="spacingAndGlyphs" fill="${fill}"${s2.bold ? ' font-weight="700"' : ''}${s2.dim ? ' opacity="0.55"' : ''}${s2.italic ? ' font-style="italic"' : ''}${s2.underline ? ' text-decoration="underline"' : ''} xml:space="preserve">${esc(s2.text)}</text>`);
+        col += s2.text.length;
+      }
+      return bgs.join('') + texts.join('');
     }).join('');
     const svg = join(pngDir, `f${String(index).padStart(4, '0')}.svg`);
-    writeFileSync(svg, `<svg xmlns="http://www.w3.org/2000/svg" width="${width}" height="${height}" font-family="Menlo, monospace" font-size="13"><rect width="${width}" height="${height}" fill="${THEME.defaultBg}"/>${rowsSvg}</svg>`);
-    execFileSync('qlmanage', ['-t', '-s', String(width), '-o', pngDir, svg], { stdio: 'pipe' });
+    writeFileSync(svg, `<svg xmlns="http://www.w3.org/2000/svg" width="${width}" height="${height}" font-family="Menlo, monospace" font-size="${FONT}"><rect width="${width}" height="${height}" fill="${THEME.defaultBg}"/>${rowsSvg}</svg>`);
+    execFileSync('qlmanage', ['-t', '-s', String(width * 2), '-o', pngDir, svg], { stdio: 'pipe' }); // 2x supersample
     const next = parsed[index + 1];
     const dur = next ? Math.min(Math.max((next.t - frame.t) / 1000 / speed, 0.12), maxFrame) : 3;
     concat.push(`file '${svg}.png'`, `duration ${dur.toFixed(2)}`);
@@ -207,8 +213,8 @@ try {
   concat.push(concat.at(-2));
   writeFileSync(join(pngDir, 'concat.txt'), `${concat.join('\n')}\n`);
   execFileSync('ffmpeg', ['-y', '-f', 'concat', '-safe', '0', '-i', join(pngDir, 'concat.txt'),
-    '-vf', `scale=${width}:${height},format=yuv420p`, '-r', '30', join(storyDir, 'story.mp4')], { stdio: 'pipe' });
-  video = join(storyDir, 'story.mp4');
+    '-vf', `crop=iw:min(ih\\,iw*${(height / width).toFixed(4)}):0:0,scale=1280:-2:flags=lanczos,format=yuv420p`, '-r', '30', join(storyDir, 'story.mp4')], { stdio: 'pipe' });
+    video = join(storyDir, 'story.mp4');
 } catch (err) {
   video = `skipped (${String(err.message).split('\n')[0]})`;
 }
