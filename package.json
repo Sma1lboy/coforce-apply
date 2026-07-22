@@ -1,7 +1,7 @@
 {
   "name": "coforce-apply",
   "version": "2.0.0",
-  "description": "CoForce Apply — skill-first job application agent: discover, tailor, apply, track. Your job hunt on autopilot.",
+  "description": "CoForce Apply \u2014 skill-first job application agent: discover, tailor, apply, track. Your job hunt on autopilot.",
   "private": true,
   "repository": "https://github.com/Sma1lboy/coforce-apply.git",
   "author": {
@@ -28,7 +28,9 @@
     "harness": "node harness/check-autofill.mjs && sh harness/check-formats.sh && python3 harness/check-github-evidence.py && node harness/check-experience.mjs && node harness/check-campaign.mjs && node harness/check-board.mjs && node harness/check-hunt.mjs",
     "hunt": "node .agents/skills/start/scripts/hunt.mjs",
     "lint": "eslint . --ext .ts,.tsx",
-    "lint:fix": "eslint . --ext .ts,.tsx --fix"
+    "lint:fix": "eslint . --ext .ts,.tsx --fix",
+    "sandbox": "node harness/sandbox.mjs",
+    "record:setup": "node harness/record-setup.mjs"
   },
   "dependencies": {
     "@ai-sdk/openai": "^1.3.6",

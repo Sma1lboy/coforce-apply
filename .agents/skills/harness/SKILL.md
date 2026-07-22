@@ -57,3 +57,16 @@ yarn build:chrome
 One line per stage (pass/fail + evidence path), then overall verdict. On any
 failure: stop, diagnose root cause before touching the mock to make it pass —
 the mock is the spec, the code is the suspect.
+
+## Sandbox & setup recording
+
+- `npm run sandbox` — seed a throwaway data home (`harness/out/sandbox/coforce`,
+  fixture persona, canonical preferences) and serve the real console on
+  http://127.0.0.1:4519. No real user data involved.
+- `npm run record:setup` — kobe-quicklook-style recording harness: a scripted
+  driver runs the REAL pipeline (hunt → sync → pool → select → judge, plus a
+  live out-of-pool rejection) in a fresh sandbox, snapshots the terminal as
+  timestamped text frames, and asserts sandbox state after every step — the
+  capture is the verification. Outputs `frames.json` (kobe-compatible),
+  `replay.html` (self-contained animated replay), and `setup-demo.mp4`
+  (qlmanage + ffmpeg, macOS; skipped gracefully elsewhere). Zero npm deps.
