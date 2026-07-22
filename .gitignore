@@ -222,3 +222,4 @@ dist/
 
 # skill-story captures are local dev material — tooling is committed, data is not
 harness/stories/
+.DS_Store
