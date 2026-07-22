@@ -9,6 +9,13 @@ Everything lands in `~/.coforce/` (create it first: `mkdir -p ~/.coforce`).
 Run stages in order, skip any that are already complete. Batch questions per
 stage — don't drip.
 
+**Every question to the user goes through the AskUserQuestion tool** (Claude
+Code) — one call per stage with the stage's questions batched, concrete
+options where they exist (level, work mode, consents), free-text via "Other"
+otherwise. Never ask as prose paragraphs when the tool is available; in
+runtimes without it (codex, headless -p) fall back to a numbered question
+list and WAIT for the reply.
+
 ## 1. Profile
 
 `~/.coforce/profile.json` missing → run the `profile` skill's init (interview or
@@ -46,8 +53,19 @@ still carry them there; skills fall back for compatibility). If
 
 Runtime configuration and consents ONLY — user intent belongs in
 `preferences.json` above. Set `agent` to the current runtime (`"codex"` when
-this skill is running in Codex, `"claude"` in Claude Code). Then ask once:
-absolute path to the user's LaTeX resume template (`latexTemplate`) · whether
+this skill is running in Codex, `"claude"` in Claude Code).
+
+LaTeX template — ask the user which they want:
+
+1. **Their own template** → record the absolute path in `latexTemplate`.
+2. **The bundled base template** (default when they have none) → copy
+   `assets/resume_template.tex` from the `tailor` skill directory
+   (Jake's-resume style: letterpaper 11pt, `\resumeSubheading` macros) to
+   `~/.coforce/templates/resume_template.tex` and point `latexTemplate` at
+   that copy. The copy belongs to the user — they may edit or replace it
+   later; never modify the skill's bundled original.
+
+Then ask once: whether
 each generated resume must wait for manual review (`requireResumeReview`,
 default `true`; `false` enables automatic approval and ZIP export after
 successful rendering) · account email (Gmail) for ATS registrations
