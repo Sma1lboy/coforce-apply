@@ -65,6 +65,24 @@ already show `onePage: true`, `fullPage: true`, `verbatim: true`.
 > total (= substance + presentation + bonus − deductions, cap 130),
 > jd_fit_note, key_strengths[≤5], fixes[≤3]}
 
+## Pass bar, recording, and the regenerate loop
+
+**Every rendered resume takes this review — no exceptions.** After the judge
+subagent(s) return:
+
+- **Pass bar**: `medianTotal >= 85` (of 130) AND no single fix marked
+  critical. Tune the bar in this file, never per-resume.
+- **Record the verdict** to the job folder as `llm-judge.json`:
+  `{judgedAt, runs, medianTotal, pass, fixes[], verdicts[]}` — automatic
+  approval is code-gated on `pass: true` (a resume with no recorded verdict
+  cannot auto-approve), and the Review tab reads it for humans.
+- **Fail → regenerate from the feedback**: apply `fixes` (reselect / reorder /
+  cut / heading-links; bullet rewording goes back through Module 1), re-render,
+  re-judge. At most 3 loops; still failing → stop and escalate to the user
+  with all verdicts instead of shipping a weak resume.
+- After recording, run `campaign.mjs reconcile` so auto-approval (when review
+  is off) picks up the verdict.
+
 ## Acting on the verdict
 
 `deductions.reasons` + `fixes` are the regenerate loop's work list. Bullets

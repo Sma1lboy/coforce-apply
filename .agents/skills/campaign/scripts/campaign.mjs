@@ -6,6 +6,7 @@ import { join, resolve } from 'node:path';
 import {
   addFeedback,
   approveJob,
+  applyResumeReviewPolicy,
   campaignView,
   exportCampaign,
   bulletPool,
@@ -82,11 +83,15 @@ async function main() {
     console.log(JSON.stringify(exportCampaign(dataDir, option('--out') ? resolve(option('--out')) : null), null, 2));
     return;
   }
+  if (command === 'reconcile') {
+    console.log(JSON.stringify(applyResumeReviewPolicy(dataDir), null, 2));
+    return;
+  }
   if (command === 'show') {
     console.log(JSON.stringify(campaignView(dataDir), null, 2));
     return;
   }
-  throw new Error('usage: campaign.mjs sync|hydrate|pool|select|stage|render|judge|feedback|approve|export|show [options]');
+  throw new Error('usage: campaign.mjs sync|hydrate|pool|select|stage|render|judge|feedback|approve|reconcile|export|show [options]');
 }
 
 main().catch(error => {

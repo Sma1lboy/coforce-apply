@@ -173,7 +173,11 @@ input anymore.
    context is the resume text, the JD, and `references/resume-judge.md`.
    The agent that assembled the resume never judges it; do not pass it the
    pool or your selection rationale. Run 3× and take the median when the
-   score drives a decision. Isolation is two-way — the selection/assembly
+   score drives a decision. Record the verdict as `llm-judge.json` in the job
+   folder (schema + pass bar in the spec): **automatic approval is code-gated
+   on a recorded passing verdict**, and a failing score loops — apply the
+   fixes, re-render, re-judge, at most 3 rounds, then escalate to the user
+   with the verdicts. Isolation is two-way — the selection/assembly
    steps above must never read the judge spec: a generator that sees the
    rubric games the score instead of telling the truth.
 

@@ -221,6 +221,12 @@ stageArtifacts(autoDir, autoFirst.id, { jd: autoJd, match: autoMatch, tex, pdf }
 assert.equal(campaignView(autoDir).jobs[0].status, 'rendered');
 assert.equal(campaignView(autoDir).lastExport, null);
 writeFileSync(join(autoDir, 'apply-config.json'), JSON.stringify({ requireResumeReview: false }));
+const autoView = campaignView(autoDir).jobs[0];
+// auto-approval demands a recorded PASSING llm verdict — absent blocks first
+const preVerdict = applyResumeReviewPolicy(autoDir);
+assert.equal(preVerdict.autoApproved, 0, 'no recorded llm verdict, no automatic approval');
+writeFileSync(join(autoDir, 'campaigns', 'current', 'jobs', autoView.folder, 'llm-judge.json'),
+  JSON.stringify({ judgedAt: 'fixture', runs: 1, medianTotal: 92, pass: true, fixes: [] }));
 const reconciled = applyResumeReviewPolicy(autoDir);
 assert.equal(reconciled.autoApproved, 1, 'disabling review reconciles a complete rendered resume');
 assert.ok(reconciled.exported?.path, 'disabling review auto-exports a completed campaign');
@@ -237,16 +243,24 @@ writeFileSync(join(gateJobDir, 'match.json'), JSON.stringify({ bullets: [{ text:
 writeFileSync(join(gateJobDir, 'resume.tex'),
   '\\documentclass{article}\\begin{document}\\newcommand{\\resumeItem}[1]{#1}\n\\resumeItem{Fabricated line}\n\\end{document}\n');
 writeFileSync(join(gateDir, 'apply-config.json'), JSON.stringify({ requireResumeReview: false }));
+writeFileSync(join(gateJobDir, 'llm-judge.json'),
+  JSON.stringify({ judgedAt: 'fixture', runs: 1, medianTotal: 95, pass: true, fixes: [] }));
 const gated = applyResumeReviewPolicy(gateDir);
-assert.equal(gated.autoApproved, 0, 'failed verbatim metric blocks auto-approval');
+assert.equal(gated.autoApproved, 0, 'failed verbatim metric blocks auto-approval even with a passing llm verdict');
 assert.equal(campaignView(gateDir).jobs[0].status, 'rendered', 'job stays in review instead of shipping');
 
 const autoSecond = syncJobs(autoDir, [{
   id: 'auto-2', company: 'Auto Labs', role: 'Platform Engineer', url: 'https://jobs.example/auto-2',
 }]).added[0];
 const autoStaged = stageArtifacts(autoDir, autoSecond.id, { jd: autoJd, match: autoMatch, tex, pdf });
-assert.equal(autoStaged.status, 'approved', 'auto mode approves newly completed resumes');
-assert.equal(autoStaged.approvalMode, 'automatic');
+assert.equal(autoStaged.status, 'rendered', 'auto mode still waits for the mandatory llm verdict');
+const autoSecondView = campaignView(autoDir).jobs.find(job => job.id === autoSecond.id);
+writeFileSync(join(autoDir, 'campaigns', 'current', 'jobs', autoSecondView.folder, 'llm-judge.json'),
+  JSON.stringify({ judgedAt: 'fixture', runs: 1, medianTotal: 90, pass: true, fixes: [] }));
+applyResumeReviewPolicy(autoDir);
+const autoSecondDone = campaignView(autoDir).jobs.find(job => job.id === autoSecond.id);
+assert.equal(autoSecondDone.status, 'approved', 'verdict recorded → reconcile approves');
+assert.equal(autoSecondDone.approvalMode, 'automatic');
 assert.equal(campaignView(autoDir).lastExport.jobCount, 2, 'the final auto-approved job refreshes the ZIP');
 
 console.log('campaign: two JD matches + zero GitHub scans + optional HITL + ZIP ✓');

@@ -249,6 +249,14 @@ export function applyResumeReviewPolicy(dataDir) {
     // null = unverifiable (no pdfinfo / template without \resumeItem); only a
     // FAILED metric blocks auto-approval — humans can still approve manually
     if (judge.onePage === false || judge.fullPage === false || judge.verbatim === false) continue;
+    // the LLM review is mandatory: no recorded passing verdict, no automatic
+    // approval — the playbook records llm-judge.json after the context-free
+    // judge run (see references/resume-judge.md)
+    let llmJudge = null;
+    try {
+      llmJudge = readJson(join(dir, 'llm-judge.json'));
+    } catch {}
+    if (!llmJudge || llmJudge.pass !== true) continue;
     job.status = 'approved';
     job.approvedAt = now();
     job.approvalMode = 'automatic';
