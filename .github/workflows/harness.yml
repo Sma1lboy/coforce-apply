@@ -1,0 +1,19 @@
+# The deterministic mock-E2E harness — no network, no LLM calls, stubbed
+# agent CLIs. This is the contract test for the skill layer: if it's green,
+# the data-file schemas and both apply lifecycles still hold.
+name: harness
+on:
+  push:
+    branches: [main]
+  pull_request:
+jobs:
+  harness:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-node@v4
+        with:
+          node-version: 22
+      - name: Install pandoc (format round-trip check; harness skips it gracefully if absent)
+        run: sudo apt-get update && sudo apt-get install -y pandoc
+      - run: npm run harness
