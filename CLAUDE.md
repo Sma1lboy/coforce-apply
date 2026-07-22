@@ -24,7 +24,10 @@ the harness and optional Chrome extension.
   schemas, never against another skill's code; `.agents/lib/` holds shared
   low-level script utilities (e.g. the atomic JSON writer), and the console
   server may import sibling skill libs as glue.
-- Onboarding: `setup` skill; operating cycle: `start` skill.
+- Onboarding: `setup` skill; operating cycle: `start` skill. The
+  form-filling/submission modules (extension tier-1, agent browser-use) all
+  implement `docs/OPERATOR.md` — the operator contract (inputs, COFORCE_STATUS
+  events, confirmation-gate iron laws, cost-ladder escalation).
 - Brand theme: kobe "Hallmark" tokens (`/Users/jacksonc/i/kobe/packages/
   kobe-landing/tokens.css`) — terracotta on warm dark, Space Grotesk +
   JetBrains Mono. Board and any UI follow it.

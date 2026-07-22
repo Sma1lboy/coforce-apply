@@ -33,6 +33,12 @@ existed.
 
 Subsequent runs read this file and only ask about gaps.
 
+This skill is the **T2 operator** in the operator contract
+(`docs/OPERATOR.md` in the CoForce repo): inputs are job + profile + resume +
+intent, progress is reported as `COFORCE_STATUS` sentinels, and the iron laws
+(never cross the confirmation gate, never fabricate screening answers,
+instructions.md overrides everything) bind every run.
+
 ## Preconditions
 
 0. Read `~/.coforce/instructions.md` — standing user instructions (never-apply

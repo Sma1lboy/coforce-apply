@@ -20,5 +20,7 @@ is required.
   against another skill's code. `.agents/lib/` holds shared low-level script
   utilities; the console server may import sibling skill libs as glue.
 - The final application submit is irreversible. Every runtime must stop before
-  submission and resume only after explicit user confirmation.
+  submission and resume only after explicit user confirmation. The full
+  operator contract (inputs, COFORCE_STATUS events, iron laws, tier ladder)
+  is `docs/OPERATOR.md`.
 - Run `npm run harness` for the deterministic pipeline checks.

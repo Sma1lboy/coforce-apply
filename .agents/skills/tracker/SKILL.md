@@ -1,6 +1,6 @@
 ---
 name: tracker
-description: Maintain the local job-application tracker (~/.coforce/applications.json) and its kanban board — add applications, update pipeline statuses (pending/applied/interviewing/offer/rejected), record delivery events and the needsFallback flag, attach notes, serve the board, and sync with the extension's Apply tab via JSON export/import. Use for "记录一下投了 X", "更新申请状态", "看板/board", "application tracker", "$tracker" in Codex, or "/tracker" in Claude Code.
+description: Maintain the local job-application tracker (~/.coforce/applications.json) and its kanban board — add applications, update pipeline statuses (pending/applied/interviewing/offer/rejected), record delivery events and the needsFallback flag (= retry one operator tier up, per the operator contract), attach notes, serve the board, and sync with the extension's Apply tab via JSON export/import. Use for "记录一下投了 X", "更新申请状态", "看板/board", "application tracker", "$tracker" in Codex, or "/tracker" in Claude Code.
 ---
 
 # Tracker — local application board
