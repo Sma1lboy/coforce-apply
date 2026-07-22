@@ -248,7 +248,7 @@ export function applyResumeReviewPolicy(dataDir) {
     }
     // null = unverifiable (no pdfinfo / template without \resumeItem); only a
     // FAILED metric blocks auto-approval — humans can still approve manually
-    if (judge.onePage === false || judge.verbatim === false) continue;
+    if (judge.onePage === false || judge.fullPage === false || judge.verbatim === false) continue;
     job.status = 'approved';
     job.approvedAt = now();
     job.approvalMode = 'automatic';
@@ -572,6 +572,19 @@ export function judgeResume(dataDir, id) {
     pageCount = Number(info.match(/^Pages:\s+(\d+)/m)?.[1] || 0) || null;
   }
   const onePage = pageCount === null ? null : pageCount === 1;
+  // "one page" is necessary, not sufficient: a resume that fills 60% of the
+  // page is a failed product too. Measure how far content reaches down the
+  // page from the pdftotext bounding boxes.
+  let fullness = null;
+  const pdftotext = findBinary(['pdftotext']);
+  if (pdftotext) {
+    const bbox = execFileSync(pdftotext, ['-bbox', pdfPath, '-'], { encoding: 'utf8' });
+    const page = bbox.match(/<page width="([\d.]+)" height="([\d.]+)"/);
+    const ys = [...bbox.matchAll(/yMax="([\d.]+)"/g)].map(m => Number(m[1]));
+    if (page && ys.length) fullness = Math.round((Math.max(...ys) / Number(page[2])) * 1000) / 1000;
+  }
+  const FULL_PAGE_MIN = 0.88; // ponytail: content must reach within ~1.3in of a letter page's bottom; tune per template
+  const fullPage = fullness === null ? null : fullness >= FULL_PAGE_MIN;
   // judge only the document body — the preamble's macro definitions contain
   // \resumeItem{#1} and are not resume content
   const texSource = readFileSync(texPath, 'utf8');
@@ -590,6 +603,8 @@ export function judgeResume(dataDir, id) {
     judgedAt: now(),
     pageCount,
     onePage,
+    fullness,
+    fullPage,
     itemCount: items.length,
     verbatim,
     unknownLines,

@@ -26,9 +26,10 @@ import {
   upsertSource,
 } from '../.agents/skills/experience/scripts/experience-lib.mjs';
 
-function onePagePdf(label) {
+function onePagePdf(label, full = true) {
   const safe = label.replace(/[()\\]/g, '');
-  const stream = `BT /F1 20 Tf 72 720 Td (${safe}) Tj ET`;
+  const bottom = full ? ' BT /F1 12 Tf 72 40 Td (page filled to the bottom margin) Tj ET' : '';
+  const stream = `BT /F1 20 Tf 72 720 Td (${safe}) Tj ET${bottom}`;
   const objects = [
     '<< /Type /Catalog /Pages 2 0 R >>',
     '<< /Type /Pages /Kids [3 0 R] /Count 1 >>',
@@ -170,6 +171,14 @@ assert.equal(statSync(libraryPath).mtimeMs, libraryBefore.mtimeMs, 'campaign mus
   assert.equal(good.verbatim, true, 'pool bullet verbatim passes the judge');
   assert.equal(good.itemCount, 1);
   if (good.pageCount !== null) assert.equal(good.onePage, true, 'fixture pdf is one page');
+  if (good.fullness !== null) assert.equal(good.fullPage, true, 'fixture pdf fills the page');
+  // a one-page resume that leaves the bottom half empty must FAIL the judge
+  writeFileSync(join(jobTexDir, 'resume.pdf'), onePagePdf('sparse fixture', false));
+  const sparse = judgeResume(dataDir, synced.added[0].id);
+  if (sparse.fullness !== null) {
+    assert.equal(sparse.fullPage, false, 'a half-empty page fails the fullness metric');
+  }
+  writeFileSync(join(jobTexDir, 'resume.pdf'), onePagePdf('CoForce campaign fixture'));
   writeFileSync(join(jobTexDir, 'resume.tex'),
     '\\documentclass{article}\\begin{document}\\newcommand{\\resumeItem}[1]{#1}\n\\resumeItem{Invented a claim that is not in the pool}\n\\end{document}\n');
   const bad = judgeResume(dataDir, synced.added[0].id);

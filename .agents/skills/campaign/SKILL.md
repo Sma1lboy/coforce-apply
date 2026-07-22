@@ -158,10 +158,12 @@ input anymore.
    node "<campaign-skill>/scripts/campaign.mjs" judge --id <job-id>
    ```
 
-   `judge.json` must show `onePage: true` (exactly one page — a two-page or
-   half-empty render is a failed product) and `verbatim: true` (every
-   `\resumeItem` is one of the selected bullets, word for word). A failed
-   metric blocks automatic approval in code; fix and re-render, don't argue.
+   `judge.json` must show `onePage: true` (exactly one page), `fullPage: true`
+   (content reaches ≥88% down the page — a half-empty page is as much a failed
+   product as a second page; fix by selecting MORE pool bullets, never by
+   inflating text), and `verbatim: true` (every `\resumeItem` is one of the
+   selected bullets, word for word). A failed metric blocks automatic approval
+   in code; fix and re-render, don't argue.
 
    Then the LLM judge rubric on top:
 
