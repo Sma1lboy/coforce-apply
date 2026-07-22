@@ -51,7 +51,10 @@ One kobe-Hallmark-themed local site with these primary tabs:
   pre-filled by the setup skill (level, directions, sponsorship, work mode,
   locations…); if it is missing a first-visit wizard collects level +
   directions, and console edits merge into it (POST /api/prefs) without
-  touching keys the console does not show. A left filter panel (search, level,
+  touching keys the console does not show. Row icons resolve company-homepage logos via logo.dev when
+  `logoDevToken` (publishable key) is set in apply-config.json, falling back
+  to the Google favicon service, then to an initials tile when the source
+  list carried no homepage link. A left filter panel (search, level,
   direction with keyword classification, source) narrows the list. Each row's
   **Build resume** button queues the posting into both the tracker and current
   resume campaign. The next start/campaign cycle hydrates the JD and renders

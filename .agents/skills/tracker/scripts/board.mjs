@@ -253,6 +253,7 @@ if (serve) {
           campaign: campaignView(dataDir),
           agent: selectedAgent(config),
           applyMode: config.headlessApply ? 'headless' : 'manual',
+          config: { logoDevToken: config.logoDevToken || null },
         })
       );
       return;

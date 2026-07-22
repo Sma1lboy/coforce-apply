@@ -36,12 +36,31 @@ export const STATUS_COLUMNS = [
   ['rejected', 'Rejected', 'var(--color-dim)'],
 ];
 
-export const faviconFor = homepage => {
+const hostOf = homepage => {
   try {
-    if (!homepage) return null;
-    const host = new URL(homepage).hostname;
-    return `https://www.google.com/s2/favicons?domain=${encodeURIComponent(host)}&sz=64`;
+    return homepage ? new URL(homepage).hostname : null;
   } catch {
     return null;
   }
+};
+
+// logo chain: logo.dev (when the user configured a publishable token) →
+// Google favicon service → null (caller renders an initials tile).
+export const faviconFor = (homepage, logoDevToken = null) => {
+  const host = hostOf(homepage);
+  if (!host) return null;
+  if (logoDevToken) return `https://img.logo.dev/${host}?token=${encodeURIComponent(logoDevToken)}&size=64&retina=true`;
+  return `https://www.google.com/s2/favicons?domain=${encodeURIComponent(host)}&sz=64`;
+};
+
+export const faviconFallback = homepage => {
+  const host = hostOf(homepage);
+  return host ? `https://www.google.com/s2/favicons?domain=${encodeURIComponent(host)}&sz=64` : null;
+};
+
+// deterministic Hallmark-ish hue per company for the initials tile
+export const tileHue = name => {
+  let h = 0;
+  for (const ch of String(name || '?')) h = (h * 31 + ch.codePointAt(0)) % 360;
+  return h;
 };

@@ -1,7 +1,7 @@
 import React, { useEffect, useMemo, useState } from 'react';
 import { AnimatePresence, motion } from 'framer-motion';
 import { api } from '../lib/api.js';
-import { LEVELS, DIRS, levelOf, dirsOf, faviconFor } from '../lib/classify.js';
+import { LEVELS, DIRS, levelOf, dirsOf, faviconFor, faviconFallback, tileHue } from '../lib/classify.js';
 
 const spring = { type: 'spring', stiffness: 260, damping: 24 };
 
@@ -151,15 +151,23 @@ export default function Discover({ state, onChanged, goReview }) {
                 transition={{ duration: 0.15 }}
                 className="flex items-center gap-3.5 bg-paper2 border border-rule rounded-lg px-3.5 py-2.5 mb-2 hover:border-rule2"
               >
-                {faviconFor(j.homepage) && (
-                  <img
-                    src={faviconFor(j.homepage)}
-                    alt=""
-                    loading="lazy"
-                    className="w-[26px] h-[26px] rounded-md bg-paper3 object-contain shrink-0"
-                    onError={e => e.currentTarget.remove()}
-                  />
-                )}
+                <div className="relative w-[26px] h-[26px] rounded-md shrink-0 overflow-hidden grid place-items-center text-[12px] font-semibold"
+                  style={{ background: `oklch(0.35 0.06 ${tileHue(j.company)})`, color: 'oklch(0.85 0.06 ' + tileHue(j.company) + ')' }}>
+                  {(j.company || '?').trim().charAt(0).toUpperCase()}
+                  {faviconFor(j.homepage, state.config?.logoDevToken) && (
+                    <img
+                      src={faviconFor(j.homepage, state.config?.logoDevToken)}
+                      alt=""
+                      loading="lazy"
+                      className="absolute inset-0 w-full h-full bg-paper3 object-contain"
+                      onError={e => {
+                        const fallback = faviconFallback(j.homepage);
+                        if (fallback && e.currentTarget.src !== fallback) e.currentTarget.src = fallback;
+                        else e.currentTarget.remove();
+                      }}
+                    />
+                  )}
+                </div>
                 <div className="flex-1 min-w-0">
                   <a href={j.url} target="_blank" rel="noreferrer" className="text-accentsoft font-medium hover:text-accent2 hover:underline break-words">
                     {j.role}

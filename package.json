@@ -30,7 +30,8 @@
     "lint": "eslint . --ext .ts,.tsx",
     "lint:fix": "eslint . --ext .ts,.tsx --fix",
     "sandbox": "node harness/sandbox.mjs",
-    "record:setup": "node harness/record-setup.mjs"
+    "record:setup": "node harness/record-setup.mjs",
+    "record:session": "node harness/record-session.mjs"
   },
   "dependencies": {
     "@ai-sdk/openai": "^1.3.6",

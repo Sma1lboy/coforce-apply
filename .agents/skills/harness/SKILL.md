@@ -70,3 +70,9 @@ the mock is the spec, the code is the suspect.
   capture is the verification. Outputs `frames.json` (kobe-compatible),
   `replay.html` (self-contained animated replay), and `setup-demo.mp4`
   (qlmanage + ffmpeg, macOS; skipped gracefully elsewhere). Zero npm deps.
+- `npm run record:session` — drive a REAL `claude -p` session through /setup in
+  a sandbox (session-id + resume, stream-json capture): every agent question,
+  tool call and reply lands in `transcript.md/html/json` under
+  `harness/out/session-recording/` — the instrument for tuning the skill's
+  interaction design. Scripted user answers live at the top of the file; edit
+  them to probe different conversation branches. Non-deterministic, opt-in.
