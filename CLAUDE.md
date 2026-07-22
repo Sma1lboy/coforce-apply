@@ -38,6 +38,26 @@ the harness and optional Chrome extension.
   form-filling/submission modules (extension tier-1, agent browser-use) all
   implement `docs/OPERATOR.md` — the operator contract (inputs, COFORCE_STATUS
   events, confirmation-gate iron laws, cost-ladder escalation).
+## Skill routing
+
+When a request matches a CoForce workflow, the FIRST action is invoking the
+matching skill -- never answer ad hoc or improvise the workflow inline.
+Canonical router (full intent table + state-based next-step logic) is the
+`coforce` skill, which also ships to skills-only installs; this summary must
+stay in sync with it:
+
+- onboarding / 初始化 / missing data-home files -> `setup`
+- preference changes (level, H1B, work mode, locations) -> `setup` stage 2 or console Settings
+- background, work history, awards, certificates, "add X to my record" -> `profile`
+- GitHub URL / local repo into evidence or bullets -> `experience` + `repo-bullets`
+- "run a cycle" / find new jobs -> `start`
+- batch resumes, review/approve PDFs, ZIP -> `campaign`
+- one specific JD -> one resume -> `tailor`
+- submit an application URL -> `apply`
+- application statuses / board / archives -> `tracker`
+- record/test a skill's conversation -> `skill-story`
+- vague job-hunt intent, "where do I start", "what next" -> `coforce` (routes by pipeline state)
+
 - Brand theme: kobe "Hallmark" tokens (`/Users/jacksonc/i/kobe/packages/
   kobe-landing/tokens.css`) — terracotta on warm dark, Space Grotesk +
   JetBrains Mono. Board and any UI follow it.

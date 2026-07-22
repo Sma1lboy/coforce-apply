@@ -68,6 +68,25 @@ fork; `git pull upstream main` to update the tool); generated `out/`
 artifacts never sync, and ATS passwords stay in the local Keychain — never in
 files.
 
+### Or: install just the skills (no checkout)
+
+The other supported entry is copying the skill tree into your agent's own
+skills directory — no repo checkout at runtime:
+
+```sh
+git clone --depth 1 https://github.com/Sma1lboy/coforce-apply
+cp -R coforce-apply/.agents/skills/* ~/.claude/skills/   # Claude Code
+cp -R coforce-apply/.agents/lib     ~/.claude/lib        # shared script utils
+```
+
+The layout rule is the only requirement: the skill directories and a sibling
+`lib/` one level above them (scripts import `../../../lib/…`), so the same
+recipe works for any agent runtime with a global skills directory. In this
+mode the data home resolves to `~/.coforce` (or `$COFORCE_HOME`); the
+`coforce` router skill ships with the set, so intent navigation works without
+the repo's AGENTS.md/CLAUDE.md; skip `harness` (repo-dev-only). Building the
+Chrome extension is the one thing that still needs the repo.
+
 Skills carry their own scripts (`tracker/scripts/board.mjs`,
 `experience/scripts/experience.mjs`, `start/scripts/hunt.mjs`,
 `campaign/scripts/campaign.mjs`) — core operation needs Node ≥ 22 and Python 3.
@@ -111,6 +130,7 @@ use. Claude Code uses the equivalent slash commands (`/setup`, `/start`,
 
 | Skill | What it does |
 |---|---|
+| `coforce` | Entry point & router: matches vague intent ("我想找工作", "what next") to the right skill, or routes by pipeline state |
 | `setup` | One-time onboarding: profile, consents, standing instructions, job sources |
 | `experience` | Tier 0: ingest GitHub URLs, infer repo/author scope, explicitly refresh evidence, and rebuild compact profile tags offline |
 | `start` | One discover→resume-review cycle; recurring through the host agent's scheduler |
