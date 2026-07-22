@@ -17,6 +17,13 @@ the harness and optional Chrome extension.
   `tailor/assets/resume_template.tex`. Keep skills self-contained — no
   repo-relative references from skill instructions (only `harness` is
   repo-dev-only and exempt).
+- Data files are the contract BETWEEN skills: each schema is canonical in its
+  owning SKILL.md (profile → profile skill, preferences → setup,
+  applications.json → tracker, campaign manifest → campaign, experience index
+  → experience) and carries a schema version. Skill playbooks program against
+  schemas, never against another skill's code; `.agents/lib/` holds shared
+  low-level script utilities (e.g. the atomic JSON writer), and the console
+  server may import sibling skill libs as glue.
 - Onboarding: `setup` skill; operating cycle: `start` skill.
 - Brand theme: kobe "Hallmark" tokens (`/Users/jacksonc/i/kobe/packages/
   kobe-landing/tokens.css`) — terracotta on warm dark, Space Grotesk +

@@ -8,13 +8,13 @@ import {
   existsSync,
   mkdirSync,
   readFileSync,
-  renameSync,
   rmdirSync,
   statSync,
   writeFileSync,
 } from 'node:fs';
 import { execFileSync } from 'node:child_process';
 import { basename, dirname, extname, join, resolve, sep } from 'node:path';
+import { writeJsonAtomic } from '../../../lib/fs-atomic.mjs';
 
 export const CAMPAIGN_SCHEMA = '1.0';
 export const REQUIRED_EXPORT_FILES = [
@@ -52,13 +52,6 @@ export const resumeReviewRequired = dataDir => {
   } catch {
     return true;
   }
-};
-
-const writeJsonAtomic = (path, value) => {
-  ensureDir(dirname(path));
-  const temp = `${path}.${process.pid}.tmp`;
-  writeFileSync(temp, `${JSON.stringify(value, null, 2)}\n`);
-  renameSync(temp, path);
 };
 
 const slugify = value =>

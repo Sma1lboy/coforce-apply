@@ -7,10 +7,10 @@ import {
   existsSync,
   mkdirSync,
   readFileSync,
-  renameSync,
   writeFileSync,
 } from 'node:fs';
 import { dirname, join } from 'node:path';
+import { writeJsonAtomic } from '../../../lib/fs-atomic.mjs';
 
 export const EXPERIENCE_SCHEMA = '1.0';
 
@@ -33,13 +33,6 @@ const ensureDir = path => {
 };
 
 const readJson = path => JSON.parse(readFileSync(path, 'utf8'));
-
-const writeJsonAtomic = (path, value) => {
-  ensureDir(dirname(path));
-  const temporary = `${path}.${process.pid}.tmp`;
-  writeFileSync(temporary, `${JSON.stringify(value, null, 2)}\n`);
-  renameSync(temporary, path);
-};
 
 const sha256 = value => createHash('sha256').update(value).digest('hex');
 

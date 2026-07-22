@@ -19,6 +19,34 @@ The bundled scripts live relative to this skill directory:
 node "<campaign-skill>/scripts/campaign.mjs" <command>
 ```
 
+## Campaign state schema (canonical)
+
+`~/.coforce/campaigns/current/manifest.json` is the campaign's contract file —
+skills and the console both program against this schema, never against each
+other's code:
+
+```json
+{
+  "schemaVersion": "1.0",
+  "updatedAt": "ISO-8601",
+  "jobs": [{
+    "id": "stable hash", "applicationId": "tracker id | null",
+    "company": "…", "role": "…", "location": "…", "source": "…", "url": "…",
+    "folder": "slug of the jobs/<folder>/ dir",
+    "status": "queued | needs_browser_jd | jd_ready | matched | rendered | render_failed | revision_requested | approved",
+    "matchScore": 0, "evidenceIds": [],
+    "experienceIndexGeneratedAt": "ISO | null", "experienceIndexFingerprint": "sha | null",
+    "approvedAt": "ISO | null", "approvalMode": "manual | automatic | null",
+    "feedback": [], "error": null, "createdAt": "ISO", "updatedAt": "ISO"
+  }],
+  "lastExport": { "path": "…", "exportedAt": "ISO", "jobCount": 0 }
+}
+```
+
+Every write goes through the library's locked, atomic writer; each job also has
+a `jobs/<folder>/job.json` snapshot of its record. Bump `schemaVersion` on any
+breaking field change and keep a migration shim for one version back.
+
 ## One-time inputs
 
 Require these values in `~/.coforce/apply-config.json`:
