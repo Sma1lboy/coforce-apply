@@ -3,6 +3,7 @@ import { AnimatePresence, motion } from 'framer-motion';
 import { getDocument, GlobalWorkerOptions } from 'pdfjs-dist';
 import pdfWorkerUrl from 'pdfjs-dist/build/pdf.worker.min.mjs?url';
 import { api } from '../lib/api.js';
+import ApplyDialog from '../components/ApplyDialog.jsx';
 
 GlobalWorkerOptions.workerSrc = pdfWorkerUrl;
 
@@ -113,6 +114,7 @@ export default function Review({ state, onChanged }) {
   const [zoom, setZoom] = useState(100);
   const [busy, setBusy] = useState('');
   const [message, setMessage] = useState('');
+  const [applying, setApplying] = useState(null);
   const selected = campaign.jobs.find(job => job.id === selectedId) || campaign.jobs[0] || null;
 
   useEffect(() => {
@@ -289,7 +291,15 @@ export default function Review({ state, onChanged }) {
         <button className="btn w-full mt-3 disabled:opacity-40 disabled:cursor-not-allowed" disabled={!hasPdf || !selected.artifacts?.['resume.tex'] || selected.status === 'approved' || busy === 'approve'} onClick={approve}>
           {selected.status === 'approved' ? 'Approved ✓' : busy === 'approve' ? 'Approving…' : 'Approve this resume'}
         </button>
+        {selected.status === 'approved' && (
+          <button className="btn-ghost w-full mt-2"
+            onClick={() => setApplying({ url: selected.url, role: selected.role, company: selected.company, location: selected.location })}>
+            Apply ⇢
+          </button>
+        )}
       </aside>
+      <ApplyDialog job={applying} mode={state.applyMode} agent={state.agent}
+        onClose={() => setApplying(null)} onQueued={onChanged} />
     </div>
   );
 }
