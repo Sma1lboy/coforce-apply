@@ -36,13 +36,13 @@ if (!kickoffFile) {
   process.exit(1);
 }
 
-const storyDir = join(here, 'stories', name);
+const storyDir = join(here, '../../../../harness/stories', name);
 mkdirSync(join(storyDir, 'sandbox'), { recursive: true });
 const session = `coforce-story-${name}`;
 const tmux = (...a) => spawnSync('tmux', a, { encoding: 'utf8' });
 
 tmux('kill-session', '-t', session);
-const started = tmux('new-session', '-d', '-s', session, '-x', String(cols), '-y', String(rows), '-c', resolve(here, '..'));
+const started = tmux('new-session', '-d', '-s', session, '-x', String(cols), '-y', String(rows), '-c', resolve(here, '../../../..'));
 if (started.status !== 0) {
   console.error('tmux failed:', started.stderr);
   process.exit(1);
@@ -70,4 +70,4 @@ for (;;) {
 const capture = { cols, rows, frames, meta: { story: name, bin, recordedAt: new Date().toISOString() } };
 writeFileSync(join(storyDir, 'frames.json'), `${JSON.stringify(capture)}\n`);
 console.log(`story-record: ${frames.length} frames → ${join(storyDir, 'frames.json')}`);
-console.log(`  render:     node harness/story-render.mjs ${name}`);
+console.log(`  render:     node .agents/skills/skill-story/scripts/story-render.mjs ${name}`);

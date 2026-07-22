@@ -4,7 +4,7 @@
 // this parses SGR sequences into styled spans, kobe-quicklook style, and
 // renders faithful-color artifacts as many times as you like:
 //
-//   node harness/story-render.mjs <story-name> [--speed 1.5] [--max-frame-s 2]
+//   node .agents/skills/skill-story/scripts/story-render.mjs <story-name> [--speed 1.5] [--max-frame-s 2]
 //
 // Outputs into harness/stories/<story-name>/:
 //   replay.html — self-contained animated replay with true colors
@@ -28,7 +28,7 @@ const opt = (flag, fallback) => {
 const speed = opt('--speed', 1.5);
 const maxFrame = opt('--max-frame-s', 2);
 
-const storyDir = join(here, 'stories', name);
+const storyDir = join(here, '../../../../harness/stories', name);
 const { cols, rows, frames } = JSON.parse(readFileSync(join(storyDir, 'frames.json'), 'utf8'));
 
 // ---- minimal SGR parser (ported from kobe quicklook/ansi.ts) ---------------

@@ -134,6 +134,23 @@ unpacked. Options → Profile → "Import from JSON" accepts
 `~/.coforce/profile.json` as-is; the Apply tab syncs with the tracker via
 Export/Import JSON.
 
+## skill-story — test a skill's conversation like code
+
+Skills are described by features, but their real product surface is an
+interaction flow (setup interviews, adversarial reviewers, confirm-gated
+pipelines) — and prompts are black boxes until you watch one run. The
+bundled **skill-story** meta-skill turns any skill's flow into a visible,
+repeatable test: write the expected conversation script, run a REAL agent
+session in a sandbox, capture every frame with true colors, verify the
+outcome, sediment findings back into the skill's prompts.
+
+[![skill-story demo — a real /setup session, captured and re-rendered](docs/assets/skill-story-demo.png)](docs/assets/skill-story-demo.mp4)
+
+*Click through for the video: a real `/setup` run — AskUserQuestion batches,
+PDF profile import, preference collection, consents — recorded via
+`npm run story:record`, re-rendered via `npm run story:render` (capture once,
+render many).*
+
 ## Development (this repo)
 
 - `yarn dev:chrome` / `yarn build:chrome` — extension watch / production build

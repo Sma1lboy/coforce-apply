@@ -77,22 +77,10 @@ the mock is the spec, the code is the suspect.
   interaction design. Scripted user answers live at the top of the file; edit
   them to probe different conversation branches. Non-deterministic, opt-in.
 
-## Skill stories — capture once, render many (local dev material, not committed)
+## Skill stories
 
-A systematic way to dive into any skill and build the canonical example of its
-user conversation:
-
-- `npm run story:record -- <name> --kickoff <prompt-file>` — starts a REAL
-  interactive agent session in tmux running the skill (kickoff must include a
-  sandbox data-home override) and snapshots the terminal into
-  `harness/stories/<name>/frames.json`. The recorder only records — a human
-  (`tmux attach`) or an agent (`tmux send-keys`, mind the Down/Enter debounce)
-  drives the AskUserQuestion popups.
-- `npm run story:render -- <name> [--speed 1.5]` — re-render the capture into
-  `replay.html` + `story.mp4` as many times as needed; the frames are the
-  source of truth, no session re-run.
-
-Stories serve two audiences at once: an example interaction flow that shows
-users how a skill behaves, and the raw material for tuning the skill's
-instruction design (findings go to story.md next to the capture, then
-sediment into SKILL.md prompts). `harness/stories/` is gitignored.
+Interaction-flow capture/testing moved to its own meta-skill: **skill-story**
+(`.agents/skills/skill-story/`) — dive into any skill's conversation, record a
+real sandboxed session with true colors, verify against an expected script,
+and sediment findings. `npm run story:record` / `story:render` are its
+entry points; `harness/stories/` stays gitignored local material.
