@@ -56,9 +56,9 @@ const start = Date.now();
 const frames = [];
 let last = null;
 for (;;) {
-  const cap = tmux('capture-pane', '-pt', session);
+  const cap = tmux('capture-pane', '-e', '-pt', session); // -e keeps ANSI colors (kobe-style rawAnsi lines)
   if (cap.status !== 0) break; // session ended
-  const lines = cap.stdout.replace(/\n+$/, '').split('\n').slice(-rows).map(l => (l.length > cols ? `${l.slice(0, cols - 1)}…` : l));
+  const lines = cap.stdout.replace(/\n+$/, '').split('\n').slice(-rows);
   const key = JSON.stringify(lines);
   if (key !== last) {
     frames.push({ t: Date.now() - start, lines });
