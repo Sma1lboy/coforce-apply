@@ -583,7 +583,7 @@ export function judgeResume(dataDir, id) {
     const ys = [...bbox.matchAll(/yMax="([\d.]+)"/g)].map(m => Number(m[1]));
     if (page && ys.length) fullness = Math.round((Math.max(...ys) / Number(page[2])) * 1000) / 1000;
   }
-  const FULL_PAGE_MIN = 0.88; // ponytail: content must reach within ~1.3in of a letter page's bottom; tune per template
+  const FULL_PAGE_MIN = 0.93; // 撑满: content must press into the bottom margin zone (~0.77in of slack on letter); a page in the 0.8s reads half-hearted
   const fullPage = fullness === null ? null : fullness >= FULL_PAGE_MIN;
   // judge only the document body — the preamble's macro definitions contain
   // \resumeItem{#1} and are not resume content
