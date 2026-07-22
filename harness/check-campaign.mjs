@@ -1,4 +1,4 @@
-// Deterministic campaign pipeline: jobs + JD + evidence → review → approved ZIP.
+// Deterministic campaign pipeline: jobs + JD + verified bullet pool → strict selection → review → approved ZIP.
 
 import { strict as assert } from 'node:assert';
 import { execFileSync } from 'node:child_process';
@@ -7,6 +7,7 @@ import { tmpdir } from 'node:os';
 import { dirname, join, resolve } from 'node:path';
 import {
   addFeedback,
+  selectBullets,
   applyResumeReviewPolicy,
   approveJob,
   campaignView,
@@ -68,8 +69,16 @@ upsertSource(dataDir, { repo: 'example/product', authors: ['candidate'], project
 writeFileSync(join(dataDir, 'profile.json'), JSON.stringify({
   name: 'Candidate',
   skills: ['TypeScript', 'Node.js'],
-  experience: [],
-  projects: [],
+  experience: [{
+    company: 'Product Inc', title: 'Backend Engineer',
+    description: [
+      { text: 'Built reliable TypeScript agent API retries with observability and regression tests', source: 'https://github.com/example/product/pull/42', verifiedAt: '2026-07-01' },
+      { text: 'Migrated data storage schema with zero-downtime migration tooling', source: 'https://github.com/example/product/commit/abc', verifiedAt: '2026-07-01' },
+    ],
+  }],
+  projects: [{
+    name: 'CoForce', description: [{ text: 'Designed a two-gate apply pipeline with a verified bullet pool' }],
+  }],
 }, null, 2));
 writeFileSync(libraryPath, JSON.stringify({
   github_logins: ['candidate'],
@@ -110,23 +119,36 @@ writeFileSync(join(stubBin, 'gh'), '#!/bin/sh\nprintf called >> "$COFORCE_GH_LOG
 chmodSync(join(stubBin, 'gh'), 0o755);
 const campaignCli = resolve('.agents/skills/campaign/scripts/campaign.mjs');
 const libraryBefore = statSync(libraryPath);
+const poolOut = execFileSync(process.execPath, [campaignCli, 'pool', '--data-dir', dataDir], {
+  env: { ...process.env, PATH: `${stubBin}:${process.env.PATH}`, COFORCE_GH_LOG: ghLog },
+  encoding: 'utf8',
+});
+const pool = JSON.parse(poolOut);
+assert.equal(pool.length, 3, 'pool = every bullet already reviewed into profile.json');
+assert.ok(pool.every(bullet => bullet.id.length === 8 && bullet.text && bullet.origin));
+assert.equal(pool.filter(bullet => bullet.verifiedAt).length, 2, 'provenance fields survive into the pool');
 for (const job of synced.added) {
-  execFileSync(process.execPath, [campaignCli, 'match', '--data-dir', dataDir, '--id', job.id], {
+  execFileSync(process.execPath, [campaignCli, 'select', '--data-dir', dataDir, '--id', job.id,
+    '--bullets', `${pool[0].id},${pool[2].id}`], {
     env: { ...process.env, PATH: `${stubBin}:${process.env.PATH}`, COFORCE_GH_LOG: ghLog },
     stdio: 'pipe',
   });
   const matched = campaignView(dataDir).jobs.find(item => item.id === job.id);
-  assert.ok(matched.matchScore > 0);
-  assert.ok(matched.evidenceIds.includes('product:pr:repo:42'));
-  assert.ok(matched.evidenceIds.includes('product:commit:repo:abc'));
-  assert.ok(matched.evidenceIds.includes('profile:skills'), 'Tier 0 includes curated profile evidence');
-  assert.equal(matched.experienceIndexFingerprint, index.sourceFingerprint);
+  assert.equal(matched.status, 'matched');
+  assert.deepEqual(matched.evidenceIds, [pool[0].id, pool[2].id], 'selection recorded as bullet ids');
+  assert.equal(matched.match.mode, 'selection');
+  assert.equal(matched.match.bullets[0].text, pool[0].text, 'selected bullets are verbatim pool text');
   const staged = stageArtifacts(dataDir, job.id, { tex, pdf });
   assert.equal(staged.status, 'rendered', 'default mode waits for manual review');
   assert.equal(staged.approvalMode, null);
 }
-assert.equal(existsSync(ghLog), false, 'matching multiple JDs must never invoke gh');
-assert.equal(statSync(libraryPath).mtimeMs, libraryBefore.mtimeMs, 'campaign must not rewrite Tier 0 sources');
+assert.throws(
+  () => selectBullets(dataDir, synced.added[0].id, [pool[0].id, 'deadbeef']),
+  /outside the verified pool/,
+  'out-of-pool bullet ids must be rejected — fabrication is structurally impossible'
+);
+assert.equal(existsSync(ghLog), false, 'selection must never invoke gh');
+assert.equal(statSync(libraryPath).mtimeMs, libraryBefore.mtimeMs, 'campaign must not rewrite experience sources');
 
 const first = synced.added[0];
 addFeedback(dataDir, first.id, 'Lead with the retry and observability work.');

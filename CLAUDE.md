@@ -24,6 +24,12 @@ the harness and optional Chrome extension.
   schemas, never against another skill's code; `.agents/lib/` holds shared
   low-level script utilities (e.g. the atomic JSON writer), and the console
   server may import sibling skill libs as glue.
+- Two-module pipeline: Module 1 (supply) generates bullets JD-free from repo
+  contexts and the user reviews them INTO profile.json (`source`+`verifiedAt`
+  provenance) — the profile IS the verified pool. Module 2 (demand) follows a
+  JD and strictly SELECTS verbatim bullets from that pool (`campaign.mjs
+  pool`/`select`, out-of-pool ids rejected); rewording always goes back
+  through Module 1's review gate.
 - Onboarding: `setup` skill; operating cycle: `start` skill. The
   form-filling/submission modules (extension tier-1, agent browser-use) all
   implement `docs/OPERATOR.md` — the operator contract (inputs, COFORCE_STATUS

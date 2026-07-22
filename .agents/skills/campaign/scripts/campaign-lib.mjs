@@ -12,6 +12,7 @@ import {
   statSync,
   writeFileSync,
 } from 'node:fs';
+import { createHash } from 'node:crypto';
 import { execFileSync } from 'node:child_process';
 import { basename, dirname, extname, join, resolve, sep } from 'node:path';
 import { writeJsonAtomic } from '../../../lib/fs-atomic.mjs';
@@ -329,93 +330,84 @@ const STOP = new Set([
   '岗位', '工作', '要求', '负责', '相关', '以及', '我们', '能够', '具有',
 ]);
 
-const tokens = value => {
-  const found = String(value || '').toLowerCase().match(/[a-z][a-z0-9.+#-]{1,30}|[\u4e00-\u9fff]{2,8}/g) || [];
-  return [...new Set(found.filter(token => token.length > 1 && !STOP.has(token)))];
-};
+// ---- Module 2: JD → strict selection from the verified bullet pool ---------
+// Module 1 (repo-bullets / profile skills) generates bullets JD-free and the
+// user reviews them INTO profile.json — so the profile IS the verified pool.
+// Selection can only reference pool ids; fabrication is structurally
+// impossible, not prompt-discouraged.
 
-const sourceUrl = entry => entry.source_url || entry.sources?.find(source => source.type !== 'repository')?.url || entry.sources?.[0]?.url || '';
+const bulletId = text => createHash('sha256').update(text).digest('hex').slice(0, 8);
 
-export function matchJob(dataDir, id, experienceIndexFile) {
+export function bulletPool(dataDir) {
+  const profilePath = join(dataDir, 'profile.json');
+  if (!existsSync(profilePath)) throw new Error('profile.json is missing — run the profile skill first');
+  const profile = readJson(profilePath);
+  const pool = [];
+  const push = (bullet, origin) => {
+    const text = String(typeof bullet === 'string' ? bullet : bullet?.text || '').trim();
+    if (!text) return;
+    pool.push({
+      id: bulletId(text),
+      text,
+      origin,
+      source: (typeof bullet === 'object' && bullet?.source) || null,
+      verifiedAt: (typeof bullet === 'object' && bullet?.verifiedAt) || null,
+    });
+  };
+  for (const item of profile.experience || []) {
+    for (const bullet of item.description || []) push(bullet, `experience · ${[item.company, item.title].filter(Boolean).join(' — ')}`);
+  }
+  for (const item of profile.projects || []) {
+    for (const bullet of item.description || []) push(bullet, `project · ${item.name || ''}`);
+  }
+  for (const section of profile.customSections || []) {
+    for (const entry of section.entries || []) {
+      for (const bullet of entry.description || []) push(bullet, `${section.title || 'custom'} · ${entry.heading || ''}`);
+    }
+  }
+  if (!pool.length) {
+    throw new Error('profile.json has no bullet points — build the verified pool first (repo-bullets or profile skill), then retry');
+  }
+  return pool;
+}
+
+export function selectBullets(dataDir, id, bulletIds) {
+  const ids = [...new Set((bulletIds || []).map(value => String(value).trim()).filter(Boolean))];
+  if (!ids.length) throw new Error('no bullet ids given');
+  const pool = bulletPool(dataDir);
+  const byId = new Map(pool.map(bullet => [bullet.id, bullet]));
+  const unknown = ids.filter(item => !byId.has(item));
+  if (unknown.length) {
+    throw new Error(`selection includes bullets outside the verified pool: ${unknown.join(', ')} — only reviewed profile bullets may reach a resume`);
+  }
   const { job } = findJob(dataDir, id);
   const jdPath = join(jobDir(dataDir, job), 'job-description.md');
   if (!existsSync(jdPath)) throw new Error('job-description.md is missing');
-  if (!existsSync(experienceIndexFile)) {
-    throw new Error(`Tier 0 experience index is missing: ${experienceIndexFile}. Run $experience refresh.`);
-  }
-  const experienceIndex = readJson(experienceIndexFile);
-  if (experienceIndex.tier !== 0) throw new Error('Experience index must declare tier: 0');
-  const entries = Array.isArray(experienceIndex.entries) ? experienceIndex.entries : [];
-  if (!entries.length) throw new Error('Tier 0 experience index has no entries');
-  const jd = readFileSync(jdPath, 'utf8');
-  const jdTokens = tokens(jd).slice(0, 180);
-  const ranked = entries.map(entry => {
-    const title = String(entry.title || '').toLowerCase();
-    const body = String(entry.body || '').toLowerCase();
-    const tags = (entry.tags || []).join(' ').toLowerCase();
-    const files = (entry.files || []).join(' ').toLowerCase();
-    const matched = [];
-    let score = 0;
-    for (const term of jdTokens) {
-      let weight = 0;
-      if (title.includes(term)) weight = 5;
-      else if (tags.includes(term)) weight = 4;
-      else if (body.includes(term)) weight = 2;
-      else if (files.includes(term)) weight = 1;
-      if (weight) {
-        matched.push(term);
-        score += weight;
-      }
-    }
-    if (entry.artifact === 'pull_request') score += 2;
-    if (entry.status === 'merged') score += 2;
-    return { entry, score, matched: [...new Set(matched)].slice(0, 12) };
-  }).filter(item => item.score > 0)
-    .sort((a, b) => b.score - a.score || String(b.entry.authored_at || '').localeCompare(String(a.entry.authored_at || '')));
+  const bullets = ids.map(item => byId.get(item));
 
-  const selected = [];
-  const perProject = new Map();
-  for (const item of ranked) {
-    const project = item.entry.project_id || 'unknown';
-    if ((perProject.get(project) || 0) >= 4) continue;
-    selected.push(item);
-    perProject.set(project, (perProject.get(project) || 0) + 1);
-    if (selected.length === 12) break;
-  }
-  const matchedTerms = new Set(selected.flatMap(item => item.matched));
-  const score = Math.min(100, Math.round((matchedTerms.size / Math.max(12, Math.min(60, jdTokens.length))) * 100));
   const report = [
-    `# Match Report — ${job.role} at ${job.company}`,
+    `# Selection Report — ${job.role} at ${job.company}`,
     '',
     `- Job: ${job.url}`,
-    `- Tier 0 Experience Index: ${(experienceIndex.authors || []).join(', ') || 'local profile'} · ${entries.length} entries`,
-    `- Index generated: ${experienceIndex.generatedAt || 'unknown'}`,
-    `- Source fingerprint: \`${experienceIndex.sourceFingerprint || 'unknown'}\``,
-    `- Deterministic keyword coverage: **${score}/100**`,
-    `- Matched JD terms: ${[...matchedTerms].slice(0, 30).map(term => `\`${term}\``).join(', ') || 'none'}`,
+    `- Verified pool: ${pool.length} bullets from profile.json`,
+    `- Selected: **${bullets.length}**`,
     '',
-    '## Grounded Evidence Shortlist',
+    '## Selected Bullets (verbatim — the resume may reorder and cut, never rewrite)',
     '',
-    ...selected.flatMap(({ entry, matched }) => [
-      `### ${entry.project_name || entry.project_id} — ${entry.title || entry.id}`,
-      '',
-      `- Evidence ID: \`${entry.id}\``,
-      `- Source: ${sourceUrl(entry) || 'local evidence record'}`,
-      `- Why it matches: ${matched.map(term => `\`${term}\``).join(', ') || 'related project evidence'}`,
-      `- Supported tags: ${(entry.tags || []).slice(0, 12).map(tag => `\`${tag}\``).join(', ')}`,
-      '',
+    ...bullets.flatMap(bullet => [
+      `- \`${bullet.id}\` — ${bullet.text}`,
+      `  - ${bullet.origin}${bullet.source ? ` · ${bullet.source}` : ''}`,
     ]),
-    '## Writing Guardrail',
     '',
-    'Use only facts supported by the evidence IDs above or by the curated profile. Do not invent metrics, ownership, outcomes, employers, dates, or technologies.',
+    '## Iron Law',
+    '',
+    'Every resume line must be one of the selected bullets, verbatim. Rewording goes back through Module 1 (generate → review → profile), never happens here.',
   ].join('\n');
 
   const updated = updateJob(dataDir, id, current => {
     current.status = 'matched';
-    current.matchScore = score;
-    current.evidenceIds = selected.map(item => item.entry.id);
-    current.experienceIndexGeneratedAt = experienceIndex.generatedAt || null;
-    current.experienceIndexFingerprint = experienceIndex.sourceFingerprint || null;
+    current.matchScore = bullets.length;
+    current.evidenceIds = ids;
     current.error = null;
     current.approvedAt = null;
     current.approvalMode = null;
@@ -423,21 +415,11 @@ export function matchJob(dataDir, id, experienceIndexFile) {
   const dir = jobDir(dataDir, updated);
   writeFileSync(join(dir, 'match-report.md'), `${report.trim()}\n`);
   writeJsonAtomic(join(dir, 'match.json'), {
-    score,
-    experienceIndexGeneratedAt: experienceIndex.generatedAt || null,
-    experienceIndexFingerprint: experienceIndex.sourceFingerprint || null,
-    jdTokens,
-    matchedTerms: [...matchedTerms],
-    evidence: selected.map(({ entry, matched, score: evidenceScore }) => ({
-      id: entry.id,
-      projectId: entry.project_id,
-      title: entry.title,
-      author: entry.author || null,
-      url: sourceUrl(entry),
-      tags: entry.tags || [],
-      matched,
-      score: evidenceScore,
-    })),
+    schemaVersion: CAMPAIGN_SCHEMA,
+    mode: 'selection',
+    selectedAt: now(),
+    poolSize: pool.length,
+    bullets,
   });
   return updated;
 }

@@ -1,6 +1,6 @@
 ---
 name: campaign
-description: Build and review a batch of job-specific resumes — sync discovered jobs, fetch full JDs, match them against the local Tier 0 experience index, render the user's LaTeX template to PDF, collect feedback/approval in the CoForce Review console, and export approved job folders as one ZIP. Use for "$campaign", "批量岗位匹配", "生成岗位简历", "review resumes", or when start finds queued/revision-requested campaign jobs.
+description: Build and review a batch of job-specific resumes — sync discovered jobs, fetch full JDs, strictly select verbatim bullets from the verified pool in profile.json, render the user's LaTeX template to PDF, collect feedback/approval in the CoForce Review console, and export approved job folders as one ZIP. Use for "$campaign", "批量岗位匹配", "生成岗位简历", "review resumes", or when start finds queued/revision-requested campaign jobs.
 ---
 
 # Campaign — jobs → grounded resumes → review → ZIP
@@ -57,12 +57,14 @@ Require these values in `~/.coforce/apply-config.json`:
   a complete successfully rendered resume is automatically approved and the
   ZIP is refreshed after the full batch completes.
 
-Require `~/.coforce/experience/experience-index.json`, produced by the sibling
-`experience` skill. If it is missing, stop and tell the user to run
-`$experience refresh` (Codex) or `/experience refresh` (Claude Code). A campaign
-must never discover repositories, invoke `gh`, refresh evidence, or silently
-replace a stale index. Profile-only changes use `$experience build`, which is
-network-free.
+Require a non-empty **verified bullet pool**: the bullet points already
+reviewed into `~/.coforce/profile.json` (Module 1: the `repo-bullets` /
+`profile` skills generate bullets JD-free from repo contexts and the user
+approves them into the profile). If `campaign.mjs pool` reports none, stop and
+send the user to Module 1 first. A campaign must never discover repositories,
+invoke `gh`, or generate new bullet text — it only *selects*. The sibling
+`experience` skill's evidence index is Module-1 raw material, not a campaign
+input anymore.
 
 ## Cycle
 
@@ -77,15 +79,16 @@ network-free.
    and `revision_requested` jobs. Existing approved jobs are left alone; reuse
    any valid artifacts already present instead of starting over.
 
-2. **Verify Tier 0 is readable** without refreshing it:
+2. **Load the verified bullet pool**:
 
    ```sh
-   node "<experience-skill>/scripts/experience.mjs" status
+   node "<campaign-skill>/scripts/campaign.mjs" pool
    ```
 
-   `ready` continues. `profile_changed` or `evidence_changed` requires the
-   network-free `$experience build`. `sources_changed` or `missing` requires
-   the explicit, separate `$experience refresh` action.
+   Every bullet the user has reviewed into profile.json, with a stable 8-char
+   content id, its origin (which experience/project it belongs to) and
+   provenance (`source`, `verifiedAt` when present). The pool is small — read
+   it whole; there is no tag index and no relevance pre-filter.
 
 3. **Hydrate the full JD** for each queued job:
 
@@ -103,31 +106,34 @@ network-free.
 
    Do not substitute a search snippet, company careers index, or guessed JD.
 
-4. **Build a deterministic evidence shortlist from Tier 0 only**:
+4. **Select bullets for this JD — strictly from the pool.** Read the full JD
+   and the full pool, pick the bullets that genuinely fit (typically 6–14),
+   then record the selection:
 
    ```sh
-   node "<campaign-skill>/scripts/campaign.mjs" match --id <job-id>
+   node "<campaign-skill>/scripts/campaign.mjs" select --id <job-id> --bullets <id1,id2,…>
    ```
 
-   This reads only `~/.coforce/experience/experience-index.json` and writes
-   `match-report.md` plus machine-readable `match.json`. Both preserve the Tier
-   0 generation timestamp and source fingerprint. Treat the numeric score as
-   keyword coverage, not a hiring probability.
+   The command **rejects any id outside the pool** — fabrication is
+   structurally impossible, not just discouraged. It writes `match-report.md`
+   (human-readable selection) and `match.json` (`mode: "selection"`, verbatim
+   bullets with provenance) and sets the job to `matched`.
 
-   Alongside the score, check the JD against `~/.coforce/preferences.json`
+   Alongside the selection, check the JD against `~/.coforce/preferences.json`
    (canonical user intent — `needsSponsorship`, `workMode`, `locations`,
    `salaryFloor`; schema in the setup skill): a posting that violates a hard
    preference (e.g. "no sponsorship" while `needsSponsorship` is true, or
    onsite-only against `workMode: remote`) gets flagged in `match-report.md`
    so the user sees the conflict at review time instead of after applying.
 
-5. **Write the job-specific resume**. Read the JD, match report, curated
-   `~/.coforce/profile.json`, the cited evidence records, and the user's
-   template. Copy the template into the job folder as `resume.tex`; preserve its
-   packages, macros, typography, spacing, and section order. Tailor by selecting,
-   reordering, and evidence-bounded rewriting. Never invent metrics, outcomes,
-   ownership, dates, employers, or technologies. Every GitHub-derived claim
-   must be traceable to an evidence ID included in the match report.
+5. **Assemble the job-specific resume from the selection — verbatim.** Copy
+   the template into the job folder as `resume.tex`; preserve its packages,
+   macros, typography, spacing, and section order. Every resume bullet must be
+   one of the selected bullets, **word for word** (LaTeX escaping aside);
+   tailoring means choosing, ordering, and cutting — never rewriting. If a
+   bullet should be phrased better, that is Module 1 work: regenerate →
+   user review → profile, then reselect. The one-page cut drops the
+   least-relevant selected bullets first, never edits them.
 
    For a revision-requested job, read every open feedback item first and
    regenerate the existing `resume.tex`; do not create parallel drafts.

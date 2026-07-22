@@ -171,7 +171,7 @@ export default function Review({ state, onChanged }) {
   const matchUrl = `/campaign/files/jobs/${encodeURIComponent(selected.folder)}/match-report.md`;
   const jdUrl = `/campaign/files/jobs/${encodeURIComponent(selected.folder)}/job-description.md`;
   const hasPdf = !!selected.artifacts?.['resume.pdf'];
-  const evidence = selected.match?.evidence || [];
+  const bullets = selected.match?.bullets || [];
 
   return (
     <div className="review-shell flex-1 min-h-0 grid bg-well">
@@ -255,21 +255,20 @@ export default function Review({ state, onChanged }) {
         <div className="h3">Match signal</div>
         <div className="flex items-end gap-2">
           <span className="font-display text-3xl text-accentsoft">{selected.matchScore ?? '—'}</span>
-          <span className="text-[10px] text-dim mb-1">/ 100 keyword coverage</span>
+          <span className="text-[10px] text-dim mb-1">bullets selected from your verified pool</span>
         </div>
-        <div className="h-1.5 bg-well rounded-full overflow-hidden mt-2"><div className="h-full bg-accent" style={{ width: `${selected.matchScore || 0}%` }} /></div>
         <div className="flex gap-2 mt-3">
           {selected.artifacts?.['job-description.md'] && <a className="mini" href={jdUrl} target="_blank" rel="noreferrer">JD</a>}
           {selected.artifacts?.['match-report.md'] && <a className="mini" href={matchUrl} target="_blank" rel="noreferrer">Full report</a>}
         </div>
 
-        <div className="h3">Evidence shortlist</div>
-        {evidence.length ? evidence.slice(0, 6).map(item => (
-          <a key={item.id} href={item.url || '#'} target="_blank" rel="noreferrer" className="block border-l-2 border-rule2 hover:border-accent pl-2.5 py-1.5 mb-1.5 group">
-            <span className="text-[11px] text-ink2 group-hover:text-accentsoft line-clamp-2">{item.title}</span>
-            <span className="text-[9px] text-dim mt-1 block">{item.projectId} · {(item.matched || []).slice(0, 4).join(' · ')}</span>
+        <div className="h3">Selected bullets (verbatim)</div>
+        {bullets.length ? bullets.slice(0, 8).map(item => (
+          <a key={item.id} href={item.source || '#'} target="_blank" rel="noreferrer" className="block border-l-2 border-rule2 hover:border-accent pl-2.5 py-1.5 mb-1.5 group">
+            <span className="text-[11px] text-ink2 group-hover:text-accentsoft line-clamp-2">{item.text}</span>
+            <span className="text-[9px] text-dim mt-1 block">{item.origin}{item.verifiedAt ? ` · verified ${String(item.verifiedAt).slice(0, 10)}` : ''}</span>
           </a>
-        )) : <div className="text-[11px] text-dim">Evidence appears after JD matching.</div>}
+        )) : <div className="text-[11px] text-dim">Bullets appear after selection from the verified pool.</div>}
 
         <div className="h3">Review notes</div>
         {!reviewRequired && <div className="text-[10px] text-dim mb-2">Auto mode is enabled. Turn “Require resume review” on in Settings if the next revision should wait for manual approval.</div>}

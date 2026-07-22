@@ -8,9 +8,10 @@ import {
   approveJob,
   campaignView,
   exportCampaign,
+  bulletPool,
   hydrateJob,
-  matchJob,
   renderResume,
+  selectBullets,
   stageArtifacts,
   syncJobs,
 } from './campaign-lib.mjs';
@@ -46,9 +47,12 @@ async function main() {
     console.log(JSON.stringify(await hydrateJob(dataDir, id, { file, text }), null, 2));
     return;
   }
-  if (command === 'match') {
-    const experienceIndex = resolve(option('--index', join(dataDir, 'experience', 'experience-index.json')));
-    console.log(JSON.stringify(matchJob(dataDir, need('--id'), experienceIndex), null, 2));
+  if (command === 'pool') {
+    console.log(JSON.stringify(bulletPool(dataDir), null, 2));
+    return;
+  }
+  if (command === 'select') {
+    console.log(JSON.stringify(selectBullets(dataDir, need('--id'), need('--bullets').split(',')), null, 2));
     return;
   }
   if (command === 'stage') {
@@ -77,7 +81,7 @@ async function main() {
     console.log(JSON.stringify(campaignView(dataDir), null, 2));
     return;
   }
-  throw new Error('usage: campaign.mjs sync|hydrate|match|stage|render|feedback|approve|export|show [options]');
+  throw new Error('usage: campaign.mjs sync|hydrate|pool|select|stage|render|feedback|approve|export|show [options]');
 }
 
 main().catch(error => {

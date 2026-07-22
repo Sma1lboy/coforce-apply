@@ -23,4 +23,8 @@ is required.
   submission and resume only after explicit user confirmation. The full
   operator contract (inputs, COFORCE_STATUS events, iron laws, tier ladder)
   is `docs/OPERATOR.md`.
+- Two-module pipeline: Module 1 generates bullets JD-free and the user
+  reviews them into profile.json (the verified pool); Module 2 follows a JD
+  and strictly selects verbatim pool bullets (`campaign.mjs pool`/`select`).
+  No module ever writes resume lines that skipped the review gate.
 - Run `npm run harness` for the deterministic pipeline checks.

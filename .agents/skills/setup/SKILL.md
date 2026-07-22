@@ -1,6 +1,6 @@
 ---
 name: setup
-description: One-time onboarding for CoForce Apply — create ~/.coforce, build the user's profile, collect job-search preferences up front (level, directions, sponsorship/H1B, work mode/days, locations, salary floor → canonical preferences.json), configure the runtime, build the Tier 0 experience index, set the LaTeX template, application consents, and job sources, write standing instructions, then show the console. Use for "帮我 set up", "初始化", "onboarding", "$setup" in Codex, "/setup" in Claude Code, or when any other skill finds ~/.coforce files missing.
+description: One-time onboarding for CoForce Apply — create ~/.coforce, build the user's profile, collect job-search preferences up front (level, directions, sponsorship/H1B, work mode/days, locations, salary floor → canonical preferences.json), configure the runtime, build the verified bullet pool (evidence + JD-free bullets reviewed into the profile), set the LaTeX template, application consents, and job sources, write standing instructions, then show the console. Use for "帮我 set up", "初始化", "onboarding", "$setup" in Codex, "/setup" in Claude Code, or when any other skill finds ~/.coforce files missing.
 ---
 
 # Setup — one-time onboarding
@@ -78,17 +78,17 @@ jobright-ai has one repo per track (2026-Software-Engineer-Internship,
 2026-Engineer-Internship, 2026-Product-Management-New-Grad, Daily-H1B-Jobs-In-
 Tech…) — swap/add the ones matching the user's target roles.
 
-## 4. Tier 0 experience index
+## 4. Verified bullet pool (Module 1)
 
-Ask the user to paste the GitHub repository, PR, or commit URLs that represent
-their experience. Pass each URL to `$experience`; the experience agent infers
-the repository and author and updates its internal source state. Summarize the
-inferred mappings as `owner/repo ← author` and ask for correction only when one
-is wrong—do not ask the user to maintain `sources.json` or provide author fields
-up front. Then run `$experience refresh` once. It reads only those accepted
-sources, combines source-backed commits/PRs with `profile.json`, and writes the
-compact tagged index. Future job campaigns read it without network access;
-profile-only edits use `$experience build`.
+The campaign selects resume lines ONLY from bullets the user has reviewed into
+`profile.json` — so build that pool now. Ask the user to paste the GitHub
+repository/PR/commit URLs that represent their experience. Feed each to
+`$experience` (evidence collection) and `$repo-bullets` (full-context, JD-free
+bullet generation), then walk the user through approving the generated bullets
+into the profile — each approved bullet stamped with `source` and `verifiedAt`.
+A profile imported from an existing resume already counts as reviewed. If the
+user skips this stage, campaigns will stop at `campaign.mjs pool` and send
+them back here.
 
 ## 5. Standing instructions → `~/.coforce/instructions.md`
 

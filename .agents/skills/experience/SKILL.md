@@ -9,6 +9,12 @@ Tier 0 is the **only** CoForce layer allowed to scan GitHub. It runs once during
 setup and again only when the user explicitly asks to refresh. `$start`,
 `$campaign`, and per-JD matching must never call GitHub or refresh this index.
 
+> **Position in the two-module design:** the evidence this skill collects is
+> **Module-1 raw material** — context for generating truthful bullets
+> (repo-bullets skill) that the user then reviews into profile.json. The
+> tagged index is no longer on the campaign matching path: Module 2 selects
+> from the profile's verified bullet pool directly (`campaign.mjs pool`).
+
 All output stays under `~/.coforce/experience/`:
 
 ```text

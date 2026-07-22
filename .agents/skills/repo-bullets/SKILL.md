@@ -34,3 +34,19 @@ evidence (commits, diffs, code) — never in the README's marketing copy alone.
 
 - No fabricated metrics, users, or impact. Evidence or user-supplied only.
 - Bullets describe what the user did, not what the project is.
+
+## Module 1 of the two-module pipeline
+
+This skill is the **supply side** of CoForce's two-module design:
+
+1. **Generate (this skill)** — bullets are written from the FULL repo context,
+   never from a job description. A JD is one employer's lens, not a standard;
+   generating against it biases and narrows the bullet. Give the model
+   everything and write the best truthful version of what was actually done.
+2. **Review gate (the user)** — nothing enters `profile.json` without the
+   user approving it. On merge, stamp each bullet with `source` (the repo/PR
+   URL it came from) and `verifiedAt` (ISO date of the user's approval).
+3. **The profile is the verified pool** — the campaign skill (Module 2,
+   demand side) may only *select* from these bullets, verbatim, per JD. It can
+   never write new ones. Rewording a bullet means coming back here through the
+   review gate.

@@ -52,3 +52,12 @@ tell the user the file path or print the JSON.
 - Never fabricate experience, dates, or metrics. Unknown → omit or ask.
 - Never commit `~/.coforce/profile.json` anywhere or paste its contents into
   commits/PRs.
+
+## The profile is the verified bullet pool
+
+Every `description` bullet may carry two optional provenance fields alongside
+`text`: `source` (URL of the repo/PR/commit it derives from) and `verifiedAt`
+(ISO date the user approved it into the profile). Nothing enters the profile
+without explicit user approval — which is exactly why downstream resume
+generation (the campaign skill) is allowed to select ONLY from these bullets,
+verbatim. Editors must preserve unknown/optional fields on save.
