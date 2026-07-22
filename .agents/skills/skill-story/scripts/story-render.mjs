@@ -213,7 +213,7 @@ try {
   concat.push(concat.at(-2));
   writeFileSync(join(pngDir, 'concat.txt'), `${concat.join('\n')}\n`);
   execFileSync('ffmpeg', ['-y', '-f', 'concat', '-safe', '0', '-i', join(pngDir, 'concat.txt'),
-    '-vf', `crop=iw:min(ih\\,iw*${(height / width).toFixed(4)}):0:0,scale=1280:-2:flags=lanczos,format=yuv420p`, '-r', '30', join(storyDir, 'story.mp4')], { stdio: 'pipe' });
+    '-vf', `crop=iw:min(ih\\,iw*${(height / width).toFixed(4)}),scale=1280:-2:flags=lanczos,format=yuv420p`, '-r', '30', join(storyDir, 'story.mp4')], { stdio: 'pipe' });
     video = join(storyDir, 'story.mp4');
 } catch (err) {
   video = `skipped (${String(err.message).split('\n')[0]})`;
