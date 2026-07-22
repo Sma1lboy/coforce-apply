@@ -185,8 +185,9 @@ Standalone repo: [Sma1lboy/skill-story](https://github.com/Sma1lboy/skill-story)
 - `yarn lint` — ESLint
 
 Key paths: `.agents/skills/` (the canonical distributable skills + scripts),
-`harness/` (mock E2E), `src/` (extension). Full design history in
-[docs/ROADMAP.md](docs/ROADMAP.md); the CoForce merge plan in
+`harness/` (mock E2E), `src/` (extension). Architecture & flow (mermaid,
+living doc) in [docs/ARCHITECTURE.md](docs/ARCHITECTURE.md); full design
+history in [docs/ROADMAP.md](docs/ROADMAP.md); the CoForce merge plan in
 [docs/MIGRATION.md](docs/MIGRATION.md).
 
 ## Privacy

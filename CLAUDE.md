@@ -43,4 +43,7 @@ the harness and optional Chrome extension.
   JetBrains Mono. Board and any UI follow it.
 - Extension (tier-1 form-fill, `src/`): `yarn build:chrome`; dev
   `yarn dev:chrome`. Mock E2E: `yarn harness` (fixtures in `harness/`).
-- Roadmap: `docs/ROADMAP.md`; CoForce merge plan: `docs/MIGRATION.md`.
+- Architecture & design invariants: `docs/ARCHITECTURE.md` (living mermaid
+  doc — edit incrementally, never redraw; review-round history on the share
+  server series `coforce-arch`). Roadmap: `docs/ROADMAP.md`; CoForce merge
+  plan: `docs/MIGRATION.md`.
