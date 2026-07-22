@@ -82,8 +82,8 @@ function BulletList({ list, onChange }) {
   );
 }
 
-/* ---------- AI import dialog ---------- */
-function ImportDialog({ open, onClose, onImported }) {
+/* ---------- AI dialogs (full import + additive supplement) ---------- */
+function AgentTextDialog({ open, onClose, agentName, title, blurb, placeholder, run, onDone }) {
   const [text, setText] = useState('');
   const [busy, setBusy] = useState(false);
   const [err, setErr] = useState('');
@@ -95,20 +95,20 @@ function ImportDialog({ open, onClose, onImported }) {
           onClick={e => e.target === e.currentTarget && !busy && onClose()}>
           <motion.div initial={{ opacity: 0, y: 24, scale: 0.97 }} animate={{ opacity: 1, y: 0, scale: 1 }} exit={{ opacity: 0, y: 12 }} transition={spring}
             className="w-[620px] max-w-[calc(100vw-48px)] bg-paper2 border border-rule2 rounded-2xl p-5">
-            <h3 className="font-display font-semibold text-base mb-1">Import resume with AI</h3>
-            <p className="text-[11px] text-dim mb-3">Paste resume text (PDF copy, LinkedIn, anything). Local headless {agentName} parses it — nothing saves until you review and hit Save profile.</p>
-            <textarea className="inp min-h-[260px] resize-y" spellCheck={false} placeholder="Paste resume text here…"
+            <h3 className="font-display font-semibold text-base mb-1">{title}</h3>
+            <p className="text-[11px] text-dim mb-3">{blurb}</p>
+            <textarea className="inp min-h-[260px] resize-y" spellCheck={false} placeholder={placeholder}
               value={text} onChange={e => setText(e.target.value)} />
             <div className="flex items-center justify-between mt-3 gap-3">
               <span className={`text-[11px] ${err ? 'text-bad' : 'text-accentsoft'}`}>
-                {busy ? `${agentName} is reading your resume… (~30s)` : err}
+                {busy ? `${agentName} is working… (~30s)` : err}
               </span>
               <button className="btn" disabled={busy} onClick={async () => {
-                if (!text.trim()) { setErr('Paste some resume text first.'); return; }
+                if (!text.trim()) { setErr('Paste something first.'); return; }
                 setBusy(true); setErr('');
                 try {
-                  const parsed = await api.importResume(text);
-                  onImported(parsed);
+                  onDone(await run(text));
+                  setText('');
                   onClose();
                 } catch (e) { setErr(String(e.message)); } finally { setBusy(false); }
               }}>
@@ -128,8 +128,46 @@ export default function Profile({ state, onChanged }) {
   const [p, setP] = useState(clone(state.profile));
   const [status, setStatus] = useState('');
   const [importOpen, setImportOpen] = useState(false);
+  const [addOpen, setAddOpen] = useState(false);
   const set = patch => setP(prev => ({ ...prev, ...patch }));
   const setList = (key, fn) => setP(prev => ({ ...prev, [key]: fn(clone(prev[key] || [])) }));
+
+  // Merge agent-proposed additions into the draft; nothing persists until Save.
+  // verifiedAt is stamped here because the Save click IS the user's approval.
+  const mergeAdditions = add => {
+    const today = new Date().toISOString().slice(0, 10);
+    const stamp = list => (list || []).map(e => ({
+      ...e,
+      ...(e.description ? { description: e.description.map(b => ({ ...b, verifiedAt: b.verifiedAt || today })) } : {}),
+    }));
+    let count = 0;
+    setP(prev => {
+      const next = clone(prev);
+      for (const k of ['experience', 'projects', 'education', 'certifications']) {
+        if (!add[k]?.length) continue;
+        next[k] = [...(next[k] || []), ...stamp(add[k])];
+        count += add[k].length;
+      }
+      if (add.skills?.length) {
+        const have = new Set((next.skills || []).map(s => s.toLowerCase()));
+        const fresh = add.skills.filter(s => !have.has(s.toLowerCase()));
+        next.skills = [...(next.skills || []), ...fresh];
+        count += fresh.length;
+      }
+      for (const s of add.customSections || []) {
+        if (!s.entries?.length) continue;
+        next.customSections = next.customSections || [];
+        const hit = next.customSections.find(x => x.title?.toLowerCase() === s.title?.toLowerCase());
+        if (hit) hit.entries = [...(hit.entries || []), ...stamp(s.entries)];
+        else next.customSections.push({ ...s, entries: stamp(s.entries) });
+        count += s.entries.length;
+      }
+      return next;
+    });
+    setStatus(count
+      ? `Added ${count} ${count === 1 ? 'entry' : 'entries'}${add.notes ? ` — ${add.notes}` : ''} — review, then Save profile.`
+      : add.notes || 'Nothing new to add.');
+  };
 
   const save = async () => {
     const clean = clone(p);
@@ -183,6 +221,7 @@ export default function Profile({ state, onChanged }) {
       <div className="flex-1 min-w-0 flex flex-col gap-2.5">
         <div className="flex items-center gap-2.5">
           <button className="btn-ghost" onClick={() => setImportOpen(true)}>⇪ Import resume (AI)</button>
+          <button className="btn-ghost" onClick={() => setAddOpen(true)}>＋ Add with AI</button>
           <span className="text-[11px] text-accentsoft flex-1 text-right">{status}</span>
           <button className="btn" onClick={save}>Save profile</button>
         </div>
@@ -259,8 +298,18 @@ export default function Profile({ state, onChanged }) {
           </button>
         </div>
       </div>
-      <ImportDialog open={importOpen} onClose={() => setImportOpen(false)}
-        onImported={parsed => { setP(parsed); setStatus('Imported — review, then Save profile.'); }} />
+      <AgentTextDialog open={importOpen} onClose={() => setImportOpen(false)} agentName={agentName}
+        title="Import resume with AI"
+        blurb={`Paste resume text (PDF copy, LinkedIn, anything). Local headless ${agentName} parses it into a full profile — nothing saves until you review and hit Save profile.`}
+        placeholder="Paste resume text here…"
+        run={api.importResume}
+        onDone={parsed => { setP(parsed); setStatus('Imported — review, then Save profile.'); }} />
+      <AgentTextDialog open={addOpen} onClose={() => setAddOpen(false)} agentName={agentName}
+        title="Add to profile with AI"
+        blurb={`Drop anything new: a work-experience story in your own words, an award announcement (link + what you won), a certificate, a pasted LinkedIn section. ${agentName} structures it into new entries — existing content is untouched, and nothing saves until you review and hit Save profile.`}
+        placeholder={'e.g. "Won 1st place at XYZ Hackathon 2025 among 200 teams — https://…/results" or "At Acme (2023–2024) I led the checkout rewrite that cut p99 latency 40%…"'}
+        run={api.addToProfile}
+        onDone={mergeAdditions} />
     </div>
   );
 }

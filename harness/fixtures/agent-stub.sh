@@ -60,6 +60,9 @@ case "$*" in
       echo "COFORCE_STATUS: SUBMITTED"
     fi
     ;;
+  *'Additive only'*)
+    printf '%s' '{"customSections":[{"title":"Awards","entries":[{"heading":"Stub Hackathon — 1st Place","date":"2025","description":[{"text":"Won 1st place among 200 teams","source":"https://example.com/results"}]}]}],"skills":["Rust"],"notes":"team size not stated"}'
+    ;;
   *)
     printf '%s' '{"name":"Stub Person","email":"stub@example.com","skills":["Go","Kubernetes"],"experience":[{"company":"Stub Corp","title":"Engineer","date":"2024","description":[{"text":"Did the thing end to end"}]}]}'
     ;;

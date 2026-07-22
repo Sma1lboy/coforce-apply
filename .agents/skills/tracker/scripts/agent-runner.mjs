@@ -33,6 +33,16 @@ const IMPORT_PROMPT = `Parse the resume text from stdin into a JSON object with 
 Sections that are not Experience/Projects/Education/Skills (Awards, Publications, Certifications, Leadership, Volunteering…) go into customSections with their original section title.
 Rules: linkedin/github are bare handles, not URLs; keep bullet text verbatim; dates verbatim; never invent data that is not in the text. Output ONLY the JSON object, no markdown fences, no commentary.`;
 
+const ADD_PROMPT = `Stdin is JSON {"profile": <the user's current profile>, "material": <new raw material they want added>}. The material may be a work-experience story, an award or competition result (possibly just a URL plus a note), a certificate, a publication, or a pasted LinkedIn section. Return ONLY the new entries to append, as a JSON object using this partial profile shape (include only the keys you are adding to):
+{"skills":[string],"experience":[{"company","title","date","location","url","description":[{"text","source"}]}],"projects":[{"name","technologies","dateRange","url","description":[{"text","source"}]}],"education":[{"institution","degree","date","location"}],"certifications":[{"name","issuer","date"}],"customSections":[{"title","entries":[{"heading","subheading","date","description":[{"text","source"}]}]}],"notes":string}
+Rules:
+- Additive only: never restate entries already in the profile; if the material duplicates an existing entry, return {} with a note saying so.
+- Awards/honors/competitions/publications/leadership go into customSections — reuse an existing section title from the profile when one fits (e.g. "Awards"), otherwise pick a conventional one.
+- Rewrite narrative into concise STAR resume bullets (action verb + what + measurable result), but never invent facts, metrics, or dates that are not in the material; dates verbatim.
+- If the material contains URLs, set them as the entry "url" and as "source" on the bullets they evidence. If the material is only a URL and your tooling lets you fetch it, extract verbatim facts from the page; otherwise use what you were given.
+- Put anything you could NOT determine (missing date, missing metric worth asking the user for) into "notes" as one short sentence.
+Output ONLY the JSON object, no markdown fences, no commentary.`;
+
 function agentRun(agent, mode, job, dataDir) {
   if (agent === 'codex') {
     const bin = process.env.COFORCE_CODEX_BIN || 'codex';
@@ -157,18 +167,26 @@ export function applyJobStatus(job) {
   return 'running';
 }
 
-export function runAgentImport(agent, text, dataDir) {
+function runAgentPrompt(agent, prompt, input, dataDir) {
   const bin = agent === 'codex'
     ? process.env.COFORCE_CODEX_BIN || 'codex'
     : process.env.COFORCE_CLAUDE_BIN || 'claude';
   const args = agent === 'codex'
-    ? ['exec', '--ephemeral', '--skip-git-repo-check', '-C', dataDir, IMPORT_PROMPT]
-    : ['-p', IMPORT_PROMPT];
+    ? ['exec', '--ephemeral', '--skip-git-repo-check', '-C', dataDir, prompt]
+    : ['-p', prompt];
   return execFileSync(bin, args, {
     cwd: dataDir,
-    input: text,
+    input,
     encoding: 'utf8',
     timeout: 180_000,
     maxBuffer: 10 * 1024 * 1024,
   });
+}
+
+export function runAgentImport(agent, text, dataDir) {
+  return runAgentPrompt(agent, IMPORT_PROMPT, text, dataDir);
+}
+
+export function runAgentAdd(agent, material, profile, dataDir) {
+  return runAgentPrompt(agent, ADD_PROMPT, JSON.stringify({ profile, material }), dataDir);
 }

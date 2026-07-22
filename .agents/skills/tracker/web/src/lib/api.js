@@ -14,6 +14,7 @@ export const api = {
   savePrefs: p => post('/api/prefs', JSON.stringify(p)),
   saveInstructions: text => post('/api/instructions', text, 'text/plain'),
   importResume: text => post('/api/import', JSON.stringify({ text })),
+  addToProfile: text => post('/api/profile/add', JSON.stringify({ text })),
   campaign: () => fetch('/api/campaign').then(j),
   syncCampaign: () => post('/api/campaign/sync', '{}'),
   campaignFeedback: (id, text) => post(`/api/campaign/jobs/${encodeURIComponent(id)}/feedback`, JSON.stringify({ text })),

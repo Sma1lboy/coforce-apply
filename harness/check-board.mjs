@@ -231,6 +231,35 @@ try {
   });
   assert.equal(impEmpty.status, 500, 'empty import rejected');
 
+  // Additive AI channel: raw material (award link + note) → agent returns ONLY
+  // new entries with link provenance; profile on disk stays untouched until
+  // the user reviews and saves client-side
+  const profileBefore = readFileSync(join(outDir, 'profile.json'), 'utf8');
+  const add = await fetch(`${base}/api/profile/add`, {
+    method: 'POST',
+    headers: { 'content-type': 'application/json' },
+    body: JSON.stringify({ text: 'Won 1st place at Stub Hackathon 2025 — https://example.com/results' }),
+  });
+  assert.equal(add.status, 200, 'profile add accepted');
+  const additions = await add.json();
+  assert.equal(additions.customSections?.[0]?.title, 'Awards', 'add flow returns award section');
+  assert.equal(
+    additions.customSections[0].entries[0].description[0].source,
+    'https://example.com/results',
+    'award bullet carries link provenance'
+  );
+  assert.equal(
+    readFileSync(join(outDir, 'profile.json'), 'utf8'),
+    profileBefore,
+    'add flow never writes profile.json directly'
+  );
+  const addEmpty = await fetch(`${base}/api/profile/add`, {
+    method: 'POST',
+    headers: { 'content-type': 'application/json' },
+    body: JSON.stringify({ text: ' ' }),
+  });
+  assert.equal(addEmpty.status, 500, 'empty material rejected');
+
   const apps = await (await fetch(`${base}/api/apps`)).json();
   const moved = apps.map(a =>
     a.id === '1752900000000' ? { ...a, status: 'applied' } : a

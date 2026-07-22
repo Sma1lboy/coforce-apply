@@ -38,6 +38,7 @@ import { experienceView } from '../../experience/scripts/experience-lib.mjs';
 import {
   agentLabel,
   applyJobStatus,
+  runAgentAdd,
   runAgentImport,
   selectedAgent,
   spawnAgent,
@@ -578,6 +579,34 @@ if (serve) {
             throw new Error('parser returned a non-object');
           res.writeHead(200, { 'content-type': 'application/json' });
           res.end(JSON.stringify(profile));
+        } catch (err) {
+          const hint = /ENOENT/.test(String(err.message))
+            ? 'configured agent CLI not found — check Settings → Agent runtime or edit ~/.coforce/apply-config.json'
+            : err.message;
+          res.writeHead(500, { 'content-type': 'text/plain' });
+          res.end(String(hint));
+        }
+      });
+      return;
+    }
+    // Additive channel: raw material (experience story, award link, certificate)
+    // → agent returns ONLY new entries; the client reviews and merges — the
+    // profile on disk is untouched until the user saves.
+    if (req.url === '/api/profile/add' && req.method === 'POST') {
+      readBody(req, res, body => {
+        try {
+          const { text } = JSON.parse(body);
+          if (!text?.trim()) throw new Error('empty material');
+          const config = readJsonSafe(join(dataDir, 'apply-config.json')) ?? {};
+          const agent = selectedAgent(config);
+          const profile = readJsonSafe(profilePath) ?? {};
+          const out = runAgentAdd(agent, text, profile, dataDir);
+          const jsonText = out.slice(out.indexOf('{'), out.lastIndexOf('}') + 1);
+          const additions = JSON.parse(jsonText);
+          if (!additions || typeof additions !== 'object' || Array.isArray(additions))
+            throw new Error('agent returned a non-object');
+          res.writeHead(200, { 'content-type': 'application/json' });
+          res.end(JSON.stringify(additions));
         } catch (err) {
           const hint = /ENOENT/.test(String(err.message))
             ? 'configured agent CLI not found — check Settings → Agent runtime or edit ~/.coforce/apply-config.json'
