@@ -86,6 +86,13 @@ network-free.
    0 generation timestamp and source fingerprint. Treat the numeric score as
    keyword coverage, not a hiring probability.
 
+   Alongside the score, check the JD against `~/.coforce/preferences.json`
+   (canonical user intent — `needsSponsorship`, `workMode`, `locations`,
+   `salaryFloor`; schema in the setup skill): a posting that violates a hard
+   preference (e.g. "no sponsorship" while `needsSponsorship` is true, or
+   onsite-only against `workMode: remote`) gets flagged in `match-report.md`
+   so the user sees the conflict at review time instead of after applying.
+
 5. **Write the job-specific resume**. Read the JD, match report, curated
    `~/.coforce/profile.json`, the cited evidence records, and the user's
    template. Copy the template into the job folder as `resume.tex`; preserve its

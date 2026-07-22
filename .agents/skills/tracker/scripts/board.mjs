@@ -1701,7 +1701,16 @@ if (serve) {
           const prefs = JSON.parse(body);
           if (!prefs || typeof prefs !== 'object' || Array.isArray(prefs))
             throw new Error('expected a JSON object');
-          writeFileSync(prefsPath, `${JSON.stringify(prefs, null, 2)}\n`);
+          // preferences.json is the canonical user-intent file (schema: setup
+          // skill); the console only edits the keys it knows, so merge into
+          // whatever setup collected instead of clobbering the whole file
+          const existing = readJsonSafe(prefsPath);
+          const merged = {
+            ...(existing && typeof existing === 'object' ? existing : {}),
+            ...prefs,
+            version: 1,
+          };
+          writeFileSync(prefsPath, `${JSON.stringify(merged, null, 2)}\n`);
           res.writeHead(204).end();
         } catch (err) {
           res.writeHead(400, { 'content-type': 'text/plain' });

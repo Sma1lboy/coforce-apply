@@ -24,9 +24,13 @@ first in line for resume generation.
    company+role match — never double-apply) and every `never-apply` company,
    tracks the rest as `pending` with a discovery history event. Report the
    summary (new / already-tracked / blocked).
-2. **Filter for fit**: from the new `pending` entries, drop ones that clearly
-   contradict `instructions.md` preferences (location, role type) — mark those
-   `rejected` with a history note "filtered: <reason>" so they don't resurface.
+2. **Filter for fit**: read `~/.coforce/preferences.json` (canonical user
+   intent — level, directions, `needsSponsorship`, `workMode`, `locations`,
+   `salaryFloor`; schema in the setup skill) plus `instructions.md`. From the
+   new `pending` entries, drop ones that clearly contradict either (wrong
+   level, no-sponsorship posting when `needsSponsorship` is true, onsite-only
+   when `workMode` is remote, excluded location) — mark those `rejected` with
+   a history note "filtered: <reason>" so they don't resurface.
 3. **Build the resume campaign**: invoke the sibling `campaign` skill. Sync
    pending jobs, verify the existing Tier 0 experience index, fetch every full
    JD, create the grounded match report, fill the user's LaTeX template, compile

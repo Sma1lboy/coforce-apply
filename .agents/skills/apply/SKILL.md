@@ -21,10 +21,15 @@ Before the first application, ask ONCE and save to `~/.coforce/apply-config.json
   "autoRegister": true,               // may I create ATS accounts for you?
   "mailboxAccess": "browser | paste", // how to fetch verification codes
   "resumePdf": "path/to/resume.pdf",
-  "workAuthorization": "...", "needsSponsorship": false,
   "headlessApply": false              // explicit consent; setup manages this
 }
 ```
+
+Work authorization / sponsorship answers live in the canonical
+`~/.coforce/preferences.json` (`workAuthorization`, `needsSponsorship`,
+schema in the setup skill) — read them from there; fall back to the same
+keys in apply-config.json only for installs set up before preferences.json
+existed.
 
 Subsequent runs read this file and only ask about gaps.
 
@@ -35,7 +40,10 @@ Subsequent runs read this file and only ask about gaps.
    company means stop and tell the user, not apply anyway.
 1. Read `~/.coforce/profile.json`. Missing → run the `profile` skill's init
    first; don't guess values.
-2. Read `~/.coforce/apply-config.json`; missing → run Setup above. Batch any
+2. Read `~/.coforce/preferences.json` — canonical user intent (sponsorship,
+   work mode, locations). Screening answers about visa/sponsorship come from
+   here, never invented.
+3. Read `~/.coforce/apply-config.json`; missing → run Setup above. Batch any
    remaining per-job questions up front; don't drip.
 
 ## Flow
