@@ -165,24 +165,15 @@ input anymore.
    selected bullets, word for word). A failed metric blocks automatic approval
    in code; fix and re-render, don't argue.
 
-   Then the LLM judge rubric on top:
-
-   > Judge this rendered resume against the JD as a recruiter with 6 seconds
-   > and as an engineer with 6 minutes. Score each 1–5 and give one concrete
-   > fix per point below 4: (1) first-glance fit — does the top third answer
-   > the JD's headline requirements? (2) ordering — strongest, most relevant
-   > bullets first within each entry? (3) balance — no section bloated or
-   > starved, no orphan entry with one weak bullet; (4) layout — clean single
-   > page, no widows/overflow, dates and headers aligned; (5) truthfulness of
-   > presentation — nothing implies scope beyond what the bullets state.
-   > Any score below 4 → reselect/reorder/cut and re-render before human
-   > review. You may not rewrite bullet text to fix a score.
-
-   Finally the **adversarial hiring-side pass**: score the resume with the
-   employer-side rubric in `references/hiring-judge.md` (adapted from
-   HackerRank's hiring-agent, MIT). Use its deduction reasons and
-   areas_for_improvement as the fix list; run it 3× and take the median
-   score when a number matters.
+   Then the LLM judge — **one spec, run context-free**: spawn a fresh
+   subagent (Claude Code: Task tool; Codex: new `codex exec`) whose entire
+   context is the resume text, the JD, and `references/resume-judge.md`.
+   The agent that assembled the resume never judges it; do not pass it the
+   pool or your selection rationale. Run 3× and take the median when the
+   score drives a decision. Its `deductions.reasons` + `fixes` are the
+   regenerate work list; structural findings (e.g. "projects need repo
+   links") get sedimented into Module 1's generation rules, not patched
+   per-resume.
 
 6. **Render and inspect**:
 

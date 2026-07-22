@@ -53,6 +53,14 @@ tell the user the file path or print the JSON.
 - Never commit `~/.coforce/profile.json` anywhere or paste its contents into
   commits/PRs.
 
+## Entries carry their links
+
+Projects should carry `url` (repo) and optionally `demo` (live deployment);
+experience entries may carry `url`. The resume assembly renders these as
+links on the heading line, and the top-level `website` field joins the
+contact header. Employer-side screeners deduct hard for unlinked projects —
+a resume should be born with its links, not have them patched in review.
+
 ## The profile is the verified bullet pool
 
 Every `description` bullet may carry two optional provenance fields alongside
