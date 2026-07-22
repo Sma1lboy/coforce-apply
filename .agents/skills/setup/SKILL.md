@@ -1,6 +1,6 @@
 ---
 name: setup
-description: One-time onboarding for CoForce Apply — create ~/.coforce, build the user's profile, configure the runtime, build the Tier 0 experience index, set the LaTeX template, application consents, and job sources, write standing instructions, then show the console. Use for "帮我 set up", "初始化", "onboarding", "$setup" in Codex, "/setup" in Claude Code, or when any other skill finds ~/.coforce files missing.
+description: One-time onboarding for CoForce Apply — create ~/.coforce, build the user's profile, collect job-search preferences up front (level, directions, sponsorship/H1B, work mode/days, locations, salary floor → canonical preferences.json), configure the runtime, build the Tier 0 experience index, set the LaTeX template, application consents, and job sources, write standing instructions, then show the console. Use for "帮我 set up", "初始化", "onboarding", "$setup" in Codex, "/setup" in Claude Code, or when any other skill finds ~/.coforce files missing.
 ---
 
 # Setup — one-time onboarding
@@ -14,16 +14,45 @@ stage — don't drip.
 `~/.coforce/profile.json` missing → run the `profile` skill's init (interview or
 import an existing resume PDF/JSON).
 
-## 2. Apply config → `~/.coforce/apply-config.json`
+## 2. Preferences → `~/.coforce/preferences.json`
 
-Set `agent` to the current runtime (`"codex"` when this skill is running in
-Codex, `"claude"` in Claude Code). Then ask once: absolute path to the user's
-LaTeX resume template (`latexTemplate`) · whether each generated resume must
-wait for manual review (`requireResumeReview`, default `true`; `false` enables
-automatic approval and ZIP export after successful rendering) · account
-email (Gmail) for ATS registrations · `autoRegister` consent
-· `mailboxAccess` (`browser`/`paste`) · resume PDF path · work authorization /
-sponsorship · **`headlessApply` consent** — "may the console's Apply button run
+The user's job-search intent, collected ONCE here, up front. This file is the
+**canonical preference schema** — every downstream skill (start/discovery,
+campaign matching, apply screening answers) reads it; the console's Discover
+wizard and Settings tab only *edit* these values, they are not the collection
+point. Ask in one batch and write:
+
+```json
+{
+  "version": 1,
+  "level": "internship | newgrad | any",
+  "directions": ["frontend", "backend", "ml", "…"],
+  "needsSponsorship": false,
+  "workAuthorization": "e.g. F-1 OPT / citizen / H-1B transfer",
+  "workMode": "remote | hybrid | onsite | any",
+  "workDays": "optional free text, e.g. no weekends, 4-day week OK",
+  "locations": ["Bay Area", "Remote US"],
+  "salaryFloor": null
+}
+```
+
+Omit what the user declines to answer; never invent values. `needsSponsorship`
+and `workAuthorization` live HERE (not in apply-config — older installs may
+still carry them there; skills fall back for compatibility). If
+`needsSponsorship` is true, offer to add a sponsorship-focused job source
+(e.g. jobright-ai `Daily-H1B-Jobs-In-Tech`) when seeding sources below.
+
+## 3. Apply config → `~/.coforce/apply-config.json`
+
+Runtime configuration and consents ONLY — user intent belongs in
+`preferences.json` above. Set `agent` to the current runtime (`"codex"` when
+this skill is running in Codex, `"claude"` in Claude Code). Then ask once:
+absolute path to the user's LaTeX resume template (`latexTemplate`) · whether
+each generated resume must wait for manual review (`requireResumeReview`,
+default `true`; `false` enables automatic approval and ZIP export after
+successful rendering) · account email (Gmail) for ATS registrations
+· `autoRegister` consent · `mailboxAccess` (`browser`/`paste`) · resume PDF
+path · **`headlessApply` consent** — "may the console's Apply button run
 the configured agent in the background and control your visible Chrome (fills
 everything, always stops for your confirmation before submitting)?" This is
 what makes one-click Apply work; it runs the configured agent non-interactively
@@ -49,7 +78,7 @@ jobright-ai has one repo per track (2026-Software-Engineer-Internship,
 2026-Engineer-Internship, 2026-Product-Management-New-Grad, Daily-H1B-Jobs-In-
 Tech…) — swap/add the ones matching the user's target roles.
 
-## 3. Tier 0 experience index
+## 4. Tier 0 experience index
 
 Ask the user to paste the GitHub repository, PR, or commit URLs that represent
 their experience. Pass each URL to `$experience`; the experience agent infers
@@ -61,7 +90,7 @@ sources, combines source-backed commits/PRs with `profile.json`, and writes the
 compact tagged index. Future job campaigns read it without network access;
 profile-only edits use `$experience build`.
 
-## 4. Standing instructions → `~/.coforce/instructions.md`
+## 5. Standing instructions → `~/.coforce/instructions.md`
 
 The user's will, injected into every skill run. Ask for: companies to NEVER
 apply to, location/role preferences, anything else they want respected. Write:
@@ -80,7 +109,7 @@ apply to, location/role preferences, anything else they want respected. Write:
 `## never-apply` must keep this exact structure — the start skill's
 `hunt.mjs` parses it mechanically; the rest is freeform for skills to read.
 
-## 5. Done — show, don't tell
+## 6. Done — show, don't tell
 
 Serve and open the console per the `tracker` skill — the Profile tab should
 now show the freshly built profile as a resume preview, Instructions the rules

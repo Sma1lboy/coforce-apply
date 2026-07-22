@@ -47,8 +47,11 @@ One kobe-Hallmark-themed local site with these primary tabs:
 - **Discover** (home tab) — local job discovery: fetches the configured
   sources through the start skill's `hunt.mjs` (sibling install), lists
   postings not yet tracked (dedup + never-apply applied) with company logos.
-  First visit opens a preference wizard (internship/new-grad + directions →
-  `~/.coforce/preferences.json`); a left filter panel (search, level,
+  `~/.coforce/preferences.json` is the canonical user-intent file, normally
+  pre-filled by the setup skill (level, directions, sponsorship, work mode,
+  locations…); if it is missing a first-visit wizard collects level +
+  directions, and console edits merge into it (POST /api/prefs) without
+  touching keys the console does not show. A left filter panel (search, level,
   direction with keyword classification, source) narrows the list. Each row's
   **Build resume** button queues the posting into both the tracker and current
   resume campaign. The next start/campaign cycle hydrates the JD and renders

@@ -198,7 +198,7 @@ try {
   const prefPost = await fetch(`${base}/api/prefs`, {
     method: 'POST',
     headers: { 'content-type': 'application/json' },
-    body: JSON.stringify({ level: 'internship', directions: ['backend', 'general'] }),
+    body: JSON.stringify({ level: 'internship', directions: ['backend', 'general'], needsSponsorship: true, workMode: 'remote' }),
   });
   assert.equal(prefPost.status, 204, 'prefs saved');
   assert.equal((await (await fetch(`${base}/api/prefs`)).json()).level, 'internship', 'prefs persisted');
@@ -207,7 +207,13 @@ try {
     headers: { 'content-type': 'application/json' },
     body: JSON.stringify({ level: 'any', directions: [] }),
   });
-  assert.equal((await (await fetch(`${base}/api/prefs`)).json()).level, 'any', 'prefs overwrite');
+  const mergedPrefs = await (await fetch(`${base}/api/prefs`)).json();
+  assert.equal(mergedPrefs.level, 'any', 'prefs overwrite');
+  // console edits merge into the canonical file — setup-collected intent
+  // (sponsorship, work mode) must survive a wizard save that omits them
+  assert.equal(mergedPrefs.needsSponsorship, true, 'prefs merge keeps sponsorship');
+  assert.equal(mergedPrefs.workMode, 'remote', 'prefs merge keeps work mode');
+  assert.equal(mergedPrefs.version, 1, 'prefs stamped with schema version');
 
   // AI import: stubbed configured agent parses pasted text into a profile object
   const imp = await fetch(`${base}/api/import`, {
