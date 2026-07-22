@@ -170,10 +170,24 @@ input anymore.
    context is the resume text, the JD, and `references/resume-judge.md`.
    The agent that assembled the resume never judges it; do not pass it the
    pool or your selection rationale. Run 3× and take the median when the
-   score drives a decision. Its `deductions.reasons` + `fixes` are the
-   regenerate work list; structural findings (e.g. "projects need repo
-   links") get sedimented into Module 1's generation rules, not patched
-   per-resume.
+   score drives a decision. Isolation is two-way — the selection/assembly
+   steps above must never read the judge spec: a generator that sees the
+   rubric games the score instead of telling the truth.
+
+   Its `deductions.reasons` + `fixes` are the regenerate work list, split by
+   root cause into the **improvement loop**:
+
+   - *selection problem* (wrong bullets, ordering, sparse page) → fix this
+     resume: reselect/reorder, re-render, re-judge.
+   - *generation-rule problem* (a whole class of resumes would fail the same
+     way: missing project links, unevidenced skills, no demo URLs) → sediment
+     a rule change into Module 1's prompts (repo-bullets / profile SKILL.md)
+     with the user's sign-off, then regenerate downstream. Judge findings are
+     how the generation prompts iterate — never edit the judge to make a
+     finding go away.
+
+   Already-sedimented examples: full page ⇒ select more bullets (never
+   inflate text); projects are born with repo/demo links.
 
 6. **Render and inspect**:
 
