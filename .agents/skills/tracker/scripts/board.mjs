@@ -217,6 +217,7 @@ function spawnAgent(job, mode, extraLog) {
   });
   child.stderr.on('data', append);
   child.on('exit', code => {
+    clearTimeout(job.watchdog);
     if (job.agent === 'codex' && job.stdoutBuffer) {
       captureCodexSession(job, '\n', true);
     }
@@ -224,6 +225,15 @@ function spawnAgent(job, mode, extraLog) {
     job.confirming = false;
     append(`\n[${job.agent} exited ${code}]\n`);
   });
+  // watchdog: a silently hung agent must not pin the job in running/confirming forever
+  clearTimeout(job.watchdog);
+  job.watchdog = setTimeout(() => {
+    if (!job.exited) {
+      append(`\n[watchdog: ${job.agent} produced no exit for 15 min — killing run]\n`);
+      child.kill();
+    }
+  }, 15 * 60_000);
+  job.watchdog.unref?.();
   child.on('error', err => {
     job.exited = true;
     job.confirming = false;
@@ -271,6 +281,25 @@ function runAgentImport(agent, text) {
     encoding: 'utf8',
     timeout: 180_000,
     maxBuffer: 10 * 1024 * 1024,
+  });
+}
+
+const BODY_LIMIT = 2 * 1024 * 1024; // ponytail: 2MB covers resume pastes; raise if a legit payload ever hits it
+function readBody(req, res, onBody) {
+  let body = '';
+  let over = false;
+  req.on('data', chunk => {
+    if (over) return;
+    body += chunk;
+    if (body.length > BODY_LIMIT) {
+      over = true;
+      res.writeHead(413, { 'content-type': 'text/plain' });
+      res.end('request body too large');
+      req.destroy();
+    }
+  });
+  req.on('end', () => {
+    if (!over) onBody(body);
   });
 }
 
@@ -1481,9 +1510,7 @@ if (serve) {
       return;
     }
     if (req.url === '/api/queue' && req.method === 'POST') {
-      let body = '';
-      req.on('data', chunk => { body += chunk; });
-      req.on('end', () => {
+      readBody(req, res, body => {
         try {
           const job = JSON.parse(body);
           if (!job?.url || !job?.role || !job?.company)
@@ -1554,9 +1581,7 @@ if (serve) {
     }
     const feedbackMatch = req.url?.match(/^\/api\/campaign\/jobs\/([^/]+)\/feedback$/);
     if (feedbackMatch && req.method === 'POST') {
-      let body = '';
-      req.on('data', chunk => { body += chunk; });
-      req.on('end', () => {
+      readBody(req, res, body => {
         try {
           const payload = JSON.parse(body);
           const job = addFeedback(dataDir, decodeURIComponent(feedbackMatch[1]), payload.text);
@@ -1593,9 +1618,7 @@ if (serve) {
       return;
     }
     if (req.url === '/api/apply' && req.method === 'POST') {
-      let body = '';
-      req.on('data', chunk => { body += chunk; });
-      req.on('end', () => {
+      readBody(req, res, body => {
         try {
           const config = readJsonSafe(join(dataDir, 'apply-config.json'));
           if (!config?.headlessApply) {
@@ -1670,9 +1693,7 @@ if (serve) {
       return;
     }
     if (req.url === '/api/config' && req.method === 'POST') {
-      let body = '';
-      req.on('data', chunk => { body += chunk; });
-      req.on('end', () => {
+      readBody(req, res, body => {
         try {
           const patch = JSON.parse(body);
           if (!patch || typeof patch !== 'object' || Array.isArray(patch))
@@ -1694,9 +1715,7 @@ if (serve) {
       return;
     }
     if (req.url === '/api/prefs' && req.method === 'POST') {
-      let body = '';
-      req.on('data', chunk => { body += chunk; });
-      req.on('end', () => {
+      readBody(req, res, body => {
         try {
           const prefs = JSON.parse(body);
           if (!prefs || typeof prefs !== 'object' || Array.isArray(prefs))
@@ -1725,9 +1744,7 @@ if (serve) {
       return;
     }
     if (req.url === '/api/profile' && req.method === 'POST') {
-      let body = '';
-      req.on('data', chunk => { body += chunk; });
-      req.on('end', () => {
+      readBody(req, res, body => {
         try {
           const profile = JSON.parse(body);
           if (!profile || typeof profile !== 'object' || Array.isArray(profile))
@@ -1742,9 +1759,7 @@ if (serve) {
       return;
     }
     if (req.url === '/api/import' && req.method === 'POST') {
-      let body = '';
-      req.on('data', chunk => { body += chunk; });
-      req.on('end', () => {
+      readBody(req, res, body => {
         try {
           const { text } = JSON.parse(body);
           if (!text?.trim()) throw new Error('empty resume text');
@@ -1768,9 +1783,7 @@ if (serve) {
       return;
     }
     if (req.url === '/api/instructions' && req.method === 'POST') {
-      let body = '';
-      req.on('data', chunk => { body += chunk; });
-      req.on('end', () => {
+      readBody(req, res, body => {
         writeFileSync(instructionsPath, body);
         res.writeHead(204).end();
       });
@@ -1782,9 +1795,7 @@ if (serve) {
       return;
     }
     if (req.url === '/api/apps' && req.method === 'POST') {
-      let body = '';
-      req.on('data', chunk => { body += chunk; });
-      req.on('end', () => {
+      readBody(req, res, body => {
         try {
           const apps = JSON.parse(body);
           if (!Array.isArray(apps)) throw new Error('expected array');
@@ -1799,7 +1810,7 @@ if (serve) {
     }
     res.writeHead(404).end();
   };
-  server.listen(port, () => {
+  server.listen(port, '127.0.0.1', () => {
     const actual = server.address().port;
     console.log(`console: http://localhost:${actual} (writes ${input})`);
   });

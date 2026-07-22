@@ -98,7 +98,17 @@ export default function ApplyDialog({ job, mode, agent = 'claude', onClose, onQu
 
   const confirm = async () => {
     setPhase('submitting');
-    await fetch(`/api/apply/${jobIdRef.current}/confirm`, { method: 'POST' }).catch(() => {});
+    setErr('');
+    try {
+      const res = await fetch(`/api/apply/${jobIdRef.current}/confirm`, { method: 'POST' });
+      if (!res.ok) {
+        setErr((await res.text()) || `confirm failed (HTTP ${res.status})`);
+        setPhase('awaiting_confirm');
+      }
+    } catch (e) {
+      setErr(`confirm request failed: ${e.message}`);
+      setPhase('awaiting_confirm');
+    }
   };
   const cancel = async () => {
     if (jobIdRef.current && !['submitted', 'failed', 'manual'].includes(phase))
@@ -157,6 +167,9 @@ export default function ApplyDialog({ job, mode, agent = 'claude', onClose, onQu
                   <div className="flex flex-col gap-2.5">
                     {headlessSteps.map(([label, st], i) => <Step key={i} i={i} state={st}>{label}</Step>)}
                   </div>
+                  {err && (
+                    <div className="mt-3 text-bad text-xs whitespace-pre-wrap">{err} — try Confirm again in a moment.</div>
+                  )}
                   {tail && phase !== 'submitted' && (
                     <pre ref={logRef} className="mt-4 bg-well border border-rule rounded-lg p-3 text-[10.5px] leading-relaxed text-faint max-h-36 overflow-y-auto whitespace-pre-wrap">{tail}</pre>
                   )}

@@ -9,6 +9,7 @@ import {
   mkdirSync,
   readFileSync,
   renameSync,
+  rmdirSync,
   statSync,
   writeFileSync,
 } from 'node:fs';
@@ -97,6 +98,40 @@ export function loadCampaign(dataDir) {
   return manifest;
 }
 
+// Advisory lock around manifest read-modify-write cycles: the CLI and the
+// console server can mutate the same campaign concurrently, and a lost update
+// here silently drops approvals. Reentrant within the process.
+// ponytail: dir-lock + busy-wait; a proper lockfile lib only if contention grows.
+let campaignLockHeld = false;
+function withCampaignLock(dataDir, fn) {
+  if (campaignLockHeld) return fn();
+  const lockPath = join(ensureDir(campaignPaths(dataDir).root), '.manifest-lock');
+  const deadline = Date.now() + 5000;
+  for (;;) {
+    try {
+      mkdirSync(lockPath);
+      break;
+    } catch (err) {
+      if (err.code !== 'EEXIST') throw err;
+      try {
+        if (Date.now() - statSync(lockPath).mtimeMs > 30_000) {
+          rmdirSync(lockPath); // stale lock from a crashed process
+          continue;
+        }
+      } catch {}
+      if (Date.now() > deadline) throw new Error('campaign manifest is locked by another process');
+      Atomics.wait(new Int32Array(new SharedArrayBuffer(4)), 0, 0, 50);
+    }
+  }
+  campaignLockHeld = true;
+  try {
+    return fn();
+  } finally {
+    campaignLockHeld = false;
+    try { rmdirSync(lockPath); } catch {}
+  }
+}
+
 export function saveCampaign(dataDir, manifest) {
   const paths = campaignPaths(dataDir);
   manifest.schemaVersion = CAMPAIGN_SCHEMA;
@@ -134,6 +169,7 @@ const persistJobSnapshot = (dataDir, job) => {
 
 export function syncJobs(dataDir, incoming) {
   if (!Array.isArray(incoming)) throw new Error('jobs must be an array');
+  return withCampaignLock(dataDir, () => {
   const manifest = loadCampaign(dataDir);
   const byUrl = new Map(manifest.jobs.map(job => [job.url, job]));
   const folders = new Set(manifest.jobs.map(job => job.folder));
@@ -178,6 +214,7 @@ export function syncJobs(dataDir, incoming) {
     saveCampaign(dataDir, manifest);
   }
   return { manifest, added };
+  });
 }
 
 export function findJob(dataDir, id) {
@@ -187,19 +224,21 @@ export function findJob(dataDir, id) {
   return { manifest, job };
 }
 
-const updateJob = (dataDir, id, updater) => {
-  const { manifest, job } = findJob(dataDir, id);
-  updater(job);
-  job.updatedAt = now();
-  persistJobSnapshot(dataDir, job);
-  saveCampaign(dataDir, manifest);
-  return job;
-};
+const updateJob = (dataDir, id, updater) =>
+  withCampaignLock(dataDir, () => {
+    const { manifest, job } = findJob(dataDir, id);
+    updater(job);
+    job.updatedAt = now();
+    persistJobSnapshot(dataDir, job);
+    saveCampaign(dataDir, manifest);
+    return job;
+  });
 
 export function applyResumeReviewPolicy(dataDir) {
   const reviewRequired = resumeReviewRequired(dataDir);
   if (reviewRequired) return { reviewRequired, autoApproved: 0, exported: null };
 
+  return withCampaignLock(dataDir, () => {
   const manifest = loadCampaign(dataDir);
   let autoApproved = 0;
   for (const job of manifest.jobs) {
@@ -223,6 +262,7 @@ export function applyResumeReviewPolicy(dataDir) {
     ? exportCampaign(dataDir)
     : null;
   return { reviewRequired, autoApproved, exported };
+  });
 }
 
 const decodeEntity = (_, named, decimal, hex) => {
@@ -273,19 +313,20 @@ export async function hydrateJob(dataDir, id, options = {}) {
     });
     throw new Error('JD content is incomplete; browser capture required');
   }
-  const target = updateJob(dataDir, id, current => {
+  // write the JD to disk BEFORE flipping status — a crash between the two must
+  // not leave the manifest claiming jd_ready with no file behind it
+  const { job: pending } = findJob(dataDir, id);
+  writeFileSync(
+    join(ensureDir(jobDir(dataDir, pending)), 'job-description.md'),
+    `# ${pending.role} — ${pending.company}\n\nSource: ${pending.url}\nCaptured via: ${source}\n\n${text.trim()}\n`
+  );
+  return updateJob(dataDir, id, current => {
     current.status = 'jd_ready';
     current.jdSource = source;
     current.error = null;
     current.approvedAt = null;
     current.approvalMode = null;
   });
-  const dir = jobDir(dataDir, target);
-  writeFileSync(
-    join(dir, 'job-description.md'),
-    `# ${target.role} — ${target.company}\n\nSource: ${target.url}\nCaptured via: ${source}\n\n${text.trim()}\n`
-  );
-  return target;
 }
 
 const STOP = new Set([
@@ -557,7 +598,11 @@ export function createZip(entries, output) {
   let offset = 0;
   const stamp = dosDateTime(new Date());
   for (const entry of entries) {
-    const name = Buffer.from(entry.name.replaceAll('\\', '/'));
+    const safeName = entry.name.replaceAll('\\', '/');
+    if (safeName.startsWith('/') || safeName.split('/').includes('..')) {
+      throw new Error(`unsafe zip entry name: ${entry.name}`);
+    }
+    const name = Buffer.from(safeName);
     const data = Buffer.isBuffer(entry.data) ? entry.data : Buffer.from(entry.data);
     const crc = crc32(data);
     const local = Buffer.alloc(30);
@@ -611,6 +656,7 @@ export function createZip(entries, output) {
 }
 
 export function exportCampaign(dataDir, output = null) {
+  return withCampaignLock(dataDir, () => {
   const manifest = loadCampaign(dataDir);
   if (!manifest.jobs.length) throw new Error('Campaign has no jobs');
   const unapproved = manifest.jobs.filter(job => job.status !== 'approved');
@@ -637,6 +683,7 @@ export function exportCampaign(dataDir, output = null) {
   manifest.lastExport = { path: target, exportedAt: exportManifest.exportedAt, jobCount: manifest.jobs.length };
   saveCampaign(dataDir, manifest);
   return manifest.lastExport;
+  });
 }
 
 export function campaignView(dataDir) {
