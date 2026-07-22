@@ -129,9 +129,12 @@ input anymore.
    > (3) diversity beats repetition — max ~2 bullets making the same point;
    > (4) respect entry coherence: bullets you pick determine which
    > experience/project entries appear, so avoid orphan entries with one weak
-   > bullet; (5) 6–14 bullets total, one page after layout; (6) output ONLY
-   > pool ids in display order — you cannot edit text, and ids outside the
-   > pool will be rejected.
+   > bullet; (5) 6–14 bullets total, one page after layout; (6) every entry
+   > you include MUST lead with its introductory bullet — the one that says
+   > what the project/product IS (type, purpose, scale) — before any detail
+   > bullets; an entry whose intro bullet doesn't fit doesn't fit; (7) output
+   > ONLY pool ids in display order — you cannot edit text, and ids outside
+   > the pool will be rejected.
 
    Alongside the selection, check the JD against `~/.coforce/preferences.json`
    (canonical user intent — `needsSponsorship`, `workMode`, `locations`,

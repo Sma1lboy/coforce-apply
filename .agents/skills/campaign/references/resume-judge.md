@@ -45,8 +45,9 @@ already show `onePage: true`, `fullPage: true`, `verbatim: true`.
 > - technical_skills (0–10): breadth + problem-solving evidence in bullets.
 >
 > **Presentation (0–20)** — recruiter 6-second + engineer 6-minute pass:
-> top third answers the JD's headline requirements (0–8); strongest bullets
-> first within entries (0–4); section balance, no orphan entries (0–4);
+> top third answers the JD's headline requirements (0–8); each entry opens
+> with a bullet that says what the project/product IS, then strongest detail
+> bullets (0–4); section balance, no orphan entries (0–4);
 > clean layout, aligned dates, no widows (0–4).
 >
 > **Bonus (≤10)**: founder +3–5, portfolio site +2, LinkedIn +1, quality

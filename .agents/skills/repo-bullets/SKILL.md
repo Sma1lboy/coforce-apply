@@ -46,11 +46,17 @@ This skill is the **supply side** of CoForce's two-module design:
 2. **Review gate (the user)** — nothing enters `profile.json` without the
    user approving it. On merge, stamp each bullet with `source` (the repo/PR
    URL it came from) and `verifiedAt` (ISO date of the user's approval).
-3. **Born with links** — when merging a project entry, always record the
+3. **Born with an intro bullet** — every project entry's bullet set must
+   include one bullet that establishes what the project IS: its type, what it
+   does, and its scale ("Developed a microservice-based platform for sharing
+   50,000+ songs…"). Detail bullets are meaningless to a reader who doesn't
+   know what the thing is; the selection layer is required to lead with this
+   bullet whenever the entry appears.
+4. **Born with links** — when merging a project entry, always record the
    repo URL as the entry's `url` (and a live deployment as `demo`). Hiring
    screeners hard-deduct unlinked projects; capturing the link is generation
    work, not review patching.
-4. **The profile is the verified pool** — the campaign skill (Module 2,
+5. **The profile is the verified pool** — the campaign skill (Module 2,
    demand side) may only *select* from these bullets, verbatim, per JD. It can
    never write new ones. Rewording a bullet means coming back here through the
    review gate.
