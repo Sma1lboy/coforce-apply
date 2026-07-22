@@ -12,10 +12,8 @@ extension handles the in-browser last mile. All of your data stays on your
 machine.
 
 <p align="center">
-  <a href="docs/assets/skill-story-demo.mp4">
-    <img src="docs/assets/skill-story-demo.gif" alt="A real /setup session — AskUserQuestion batches, PDF profile import, preferences, consents — captured and re-rendered by skill-story" width="880">
-  </a>
-  <br><em>A real <code>/setup</code> session end to end (7× speed) — <a href="docs/assets/skill-story-demo.mp4">full-quality video</a>.</em>
+  <img src="docs/assets/skill-story-demo.gif" alt="A real /setup session — AskUserQuestion batches, PDF profile import, preferences, consents — captured and re-rendered by skill-story" width="880">
+  <br><em>A real <code>/setup</code> session end to end (7× speed).</em>
 </p>
 
 ```
@@ -153,8 +151,7 @@ outcome, sediment findings back into the skill's prompts.
 
 The animated demo at the top of this README is a skill-story artifact: a real
 `/setup` run recorded via `npm run story:record` and re-rendered via
-`npm run story:render` (capture once, render many —
-[full-quality video](docs/assets/skill-story-demo.mp4)).
+`npm run story:render` (capture once, render many).
 Standalone repo: [Sma1lboy/skill-story](https://github.com/Sma1lboy/skill-story).
 
 ## Development (this repo)
