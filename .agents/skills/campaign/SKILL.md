@@ -119,6 +119,20 @@ input anymore.
    (human-readable selection) and `match.json` (`mode: "selection"`, verbatim
    bullets with provenance) and sets the job to `matched`.
 
+   **Best-fit selection prompt** — run the choice with this rubric, not vibes:
+
+   > You are selecting resume bullets for ONE job. Inputs: the full JD, the
+   > full verified pool (id + text + origin), and preferences.json. Rules:
+   > (1) cover the JD's top 3–5 required capabilities first — every one of
+   > them should have at least one bullet if the pool has it; (2) prefer
+   > bullets with concrete, verifiable outcomes over activity descriptions;
+   > (3) diversity beats repetition — max ~2 bullets making the same point;
+   > (4) respect entry coherence: bullets you pick determine which
+   > experience/project entries appear, so avoid orphan entries with one weak
+   > bullet; (5) 6–14 bullets total, one page after layout; (6) output ONLY
+   > pool ids in display order — you cannot edit text, and ids outside the
+   > pool will be rejected.
+
    Alongside the selection, check the JD against `~/.coforce/preferences.json`
    (canonical user intent — `needsSponsorship`, `workMode`, `locations`,
    `salaryFloor`; schema in the setup skill): a posting that violates a hard
@@ -137,6 +151,30 @@ input anymore.
 
    For a revision-requested job, read every open feedback item first and
    regenerate the existing `resume.tex`; do not create parallel drafts.
+
+   **Judge every render before it reaches review.** Machine metrics first:
+
+   ```sh
+   node "<campaign-skill>/scripts/campaign.mjs" judge --id <job-id>
+   ```
+
+   `judge.json` must show `onePage: true` (exactly one page — a two-page or
+   half-empty render is a failed product) and `verbatim: true` (every
+   `\resumeItem` is one of the selected bullets, word for word). A failed
+   metric blocks automatic approval in code; fix and re-render, don't argue.
+
+   Then the LLM judge rubric on top:
+
+   > Judge this rendered resume against the JD as a recruiter with 6 seconds
+   > and as an engineer with 6 minutes. Score each 1–5 and give one concrete
+   > fix per point below 4: (1) first-glance fit — does the top third answer
+   > the JD's headline requirements? (2) ordering — strongest, most relevant
+   > bullets first within each entry? (3) balance — no section bloated or
+   > starved, no orphan entry with one weak bullet; (4) layout — clean single
+   > page, no widows/overflow, dates and headers aligned; (5) truthfulness of
+   > presentation — nothing implies scope beyond what the bullets state.
+   > Any score below 4 → reselect/reorder/cut and re-render before human
+   > review. You may not rewrite bullet text to fix a score.
 
 6. **Render and inspect**:
 

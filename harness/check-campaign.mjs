@@ -7,6 +7,7 @@ import { tmpdir } from 'node:os';
 import { dirname, join, resolve } from 'node:path';
 import {
   addFeedback,
+  judgeResume,
   selectBullets,
   applyResumeReviewPolicy,
   approveJob,
@@ -159,6 +160,25 @@ assert.throws(
 assert.equal(existsSync(ghLog), false, 'selection must never invoke gh');
 assert.equal(statSync(libraryPath).mtimeMs, libraryBefore.mtimeMs, 'campaign must not rewrite experience sources');
 
+// judge: verbatim metric against the selection, and the auto-approve gate
+{
+  const jobView = campaignView(dataDir).jobs.find(item => item.id === synced.added[0].id);
+  const jobTexDir = join(dataDir, 'campaigns', 'current', 'jobs', jobView.folder);
+  writeFileSync(join(jobTexDir, 'resume.tex'),
+    `\\documentclass{article}\\begin{document}\\newcommand{\\resumeItem}[1]{#1}\n\\resumeItem{${pool[0].text}}\n\\end{document}\n`);
+  const good = judgeResume(dataDir, synced.added[0].id);
+  assert.equal(good.verbatim, true, 'pool bullet verbatim passes the judge');
+  assert.equal(good.itemCount, 1);
+  if (good.pageCount !== null) assert.equal(good.onePage, true, 'fixture pdf is one page');
+  writeFileSync(join(jobTexDir, 'resume.tex'),
+    '\\documentclass{article}\\begin{document}\\newcommand{\\resumeItem}[1]{#1}\n\\resumeItem{Invented a claim that is not in the pool}\n\\end{document}\n');
+  const bad = judgeResume(dataDir, synced.added[0].id);
+  assert.equal(bad.verbatim, false, 'out-of-pool resume line fails the judge');
+  assert.equal(bad.unknownLines.length, 1);
+  stageArtifacts(dataDir, synced.added[0].id, { tex, pdf });
+  judgeResume(dataDir, synced.added[0].id); // restore a clean judge for the flow below
+}
+
 const first = synced.added[0];
 addFeedback(dataDir, first.id, 'Lead with the retry and observability work.');
 assert.equal(campaignView(dataDir).jobs.find(job => job.id === first.id).status, 'revision_requested');
@@ -197,6 +217,20 @@ assert.equal(reconciled.autoApproved, 1, 'disabling review reconciles a complete
 assert.ok(reconciled.exported?.path, 'disabling review auto-exports a completed campaign');
 assert.equal(campaignView(autoDir).jobs[0].approvalMode, 'automatic');
 assert.equal(campaignView(autoDir).reviewRequired, false);
+
+// a failed judge metric must block auto-approval even with review disabled
+const gateDir = mkdtempSync(join(tmpdir(), 'coforce-campaign-gate-'));
+const gateJob = syncJobs(gateDir, [{ id: 'gate-1', company: 'Gate Labs', role: 'Engineer', url: 'https://jobs.example/gate-1' }]).added[0];
+stageArtifacts(gateDir, gateJob.id, { jd: autoJd, match: autoMatch, tex, pdf });
+const gateView = campaignView(gateDir).jobs[0];
+const gateJobDir = join(gateDir, 'campaigns', 'current', 'jobs', gateView.folder);
+writeFileSync(join(gateJobDir, 'match.json'), JSON.stringify({ bullets: [{ text: 'Real bullet' }] }));
+writeFileSync(join(gateJobDir, 'resume.tex'),
+  '\\documentclass{article}\\begin{document}\\newcommand{\\resumeItem}[1]{#1}\n\\resumeItem{Fabricated line}\n\\end{document}\n');
+writeFileSync(join(gateDir, 'apply-config.json'), JSON.stringify({ requireResumeReview: false }));
+const gated = applyResumeReviewPolicy(gateDir);
+assert.equal(gated.autoApproved, 0, 'failed verbatim metric blocks auto-approval');
+assert.equal(campaignView(gateDir).jobs[0].status, 'rendered', 'job stays in review instead of shipping');
 
 const autoSecond = syncJobs(autoDir, [{
   id: 'auto-2', company: 'Auto Labs', role: 'Platform Engineer', url: 'https://jobs.example/auto-2',

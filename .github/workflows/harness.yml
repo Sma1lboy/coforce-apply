@@ -15,5 +15,5 @@ jobs:
         with:
           node-version: 22
       - name: Install pandoc (format round-trip check; harness skips it gracefully if absent)
-        run: sudo apt-get update && sudo apt-get install -y pandoc
+        run: sudo apt-get update && sudo apt-get install -y pandoc poppler-utils
       - run: npm run harness

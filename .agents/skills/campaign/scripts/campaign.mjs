@@ -10,6 +10,7 @@ import {
   exportCampaign,
   bulletPool,
   hydrateJob,
+  judgeResume,
   renderResume,
   selectBullets,
   stageArtifacts,
@@ -61,6 +62,10 @@ async function main() {
     }), null, 2));
     return;
   }
+  if (command === 'judge') {
+    console.log(JSON.stringify(judgeResume(dataDir, need('--id')), null, 2));
+    return;
+  }
   if (command === 'render') {
     console.log(JSON.stringify(renderResume(dataDir, need('--id'), option('--tex')), null, 2));
     return;
@@ -81,7 +86,7 @@ async function main() {
     console.log(JSON.stringify(campaignView(dataDir), null, 2));
     return;
   }
-  throw new Error('usage: campaign.mjs sync|hydrate|pool|select|stage|render|feedback|approve|export|show [options]');
+  throw new Error('usage: campaign.mjs sync|hydrate|pool|select|stage|render|judge|feedback|approve|export|show [options]');
 }
 
 main().catch(error => {

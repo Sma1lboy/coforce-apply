@@ -240,6 +240,15 @@ export function applyResumeReviewPolicy(dataDir) {
     const dir = jobDir(dataDir, job);
     const missing = REQUIRED_EXPORT_FILES.filter(name => !existsSync(join(dir, name)));
     if (missing.length) continue;
+    let judge = null;
+    try {
+      judge = existsSync(join(dir, 'judge.json')) ? readJson(join(dir, 'judge.json')) : judgeResume(dataDir, job.id);
+    } catch {
+      continue;
+    }
+    // null = unverifiable (no pdfinfo / template without \resumeItem); only a
+    // FAILED metric blocks auto-approval — humans can still approve manually
+    if (judge.onePage === false || judge.verbatim === false) continue;
     job.status = 'approved';
     job.approvedAt = now();
     job.approvalMode = 'automatic';
@@ -502,6 +511,7 @@ export function renderResume(dataDir, id, texSource = null) {
       current.error = null;
     });
     writeFileSync(join(dir, 'render.log'), output);
+    judgeResume(dataDir, id);
     if (!resumeReviewRequired(dataDir)) {
       applyResumeReviewPolicy(dataDir);
       return findJob(dataDir, id).job;
@@ -514,6 +524,78 @@ export function renderResume(dataDir, id, texSource = null) {
     });
     throw error;
   }
+}
+
+// ---- Resume judge: machine metrics every render must pass ------------------
+// onePage (pdfinfo, exact) and verbatim (every \resumeItem is one of the
+// selected pool bullets) are deterministic; the LLM rubric on top of them
+// lives in SKILL.md. Auto-approval refuses any resume with a failed metric.
+const unescapeTex = value => String(value)
+  .replace(/\\textbackslash\{\}/g, '\\')
+  .replace(/\\([&%#_$])/g, '$1')
+  .replace(/\s+/g, ' ')
+  .trim();
+
+const texResumeItems = tex => {
+  const items = [];
+  const needle = '\\resumeItem{';
+  let idx = 0;
+  for (;;) {
+    const at = tex.indexOf(needle, idx);
+    if (at === -1) break;
+    let depth = 1;
+    let i = at + needle.length;
+    const start = i;
+    while (i < tex.length && depth > 0) {
+      if (tex[i] === '{') depth += 1;
+      else if (tex[i] === '}') depth -= 1;
+      i += 1;
+    }
+    items.push(tex.slice(start, i - 1));
+    idx = i;
+  }
+  return items;
+};
+
+export function judgeResume(dataDir, id) {
+  const { job } = findJob(dataDir, id);
+  const dir = jobDir(dataDir, job);
+  const pdfPath = join(dir, 'resume.pdf');
+  const texPath = join(dir, 'resume.tex');
+  if (!existsSync(pdfPath) || !existsSync(texPath)) {
+    throw new Error('render resume.tex + resume.pdf before judging');
+  }
+  let pageCount = null;
+  const pdfinfo = findBinary(['pdfinfo']);
+  if (pdfinfo) {
+    const info = execFileSync(pdfinfo, [pdfPath], { encoding: 'utf8' });
+    pageCount = Number(info.match(/^Pages:\s+(\d+)/m)?.[1] || 0) || null;
+  }
+  const onePage = pageCount === null ? null : pageCount === 1;
+  // judge only the document body — the preamble's macro definitions contain
+  // \resumeItem{#1} and are not resume content
+  const texSource = readFileSync(texPath, 'utf8');
+  const bodyStart = texSource.indexOf('\\begin{document}');
+  const items = texResumeItems(bodyStart === -1 ? texSource : texSource.slice(bodyStart)).map(unescapeTex);
+  const matchPath = join(dir, 'match.json');
+  let verbatim = null;
+  const unknownLines = [];
+  if (items.length && existsSync(matchPath)) {
+    const allowed = new Set((readJson(matchPath).bullets || []).map(bullet => bullet.text.replace(/\s+/g, ' ').trim()));
+    for (const item of items) if (!allowed.has(item)) unknownLines.push(item);
+    verbatim = unknownLines.length === 0;
+  }
+  const judge = {
+    schemaVersion: CAMPAIGN_SCHEMA,
+    judgedAt: now(),
+    pageCount,
+    onePage,
+    itemCount: items.length,
+    verbatim,
+    unknownLines,
+  };
+  writeJsonAtomic(join(dir, 'judge.json'), judge);
+  return judge;
 }
 
 export function addFeedback(dataDir, id, text) {
