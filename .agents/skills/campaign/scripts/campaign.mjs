@@ -2,6 +2,7 @@
 
 import { existsSync, readFileSync } from 'node:fs';
 import { homedir } from 'node:os';
+import { dataHome } from '../../../lib/data-home.mjs';
 import { join, resolve } from 'node:path';
 import {
   addFeedback,
@@ -24,7 +25,7 @@ const option = (name, fallback = null) => {
   const index = argv.indexOf(name);
   return index === -1 ? fallback : argv[index + 1];
 };
-const dataDir = resolve(option('--data-dir', join(homedir(), '.coforce')));
+const dataDir = resolve(option('--data-dir', dataHome()));
 const need = (name, value = option(name)) => {
   if (!value) throw new Error(`${name} is required`);
   return value;

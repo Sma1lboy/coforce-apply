@@ -1,6 +1,11 @@
 # ignore haters
 haters/
 
+# in-repo data home guard: personal data never lands in a public checkout.
+# Private-fork mode (setup skill) appends a negation block at the END of this
+# file after verifying the fork is private -- later patterns win.
+/.coforce/
+
 # personal career data (profile, tracker, per-application archives) — root only
 /profile/
 

@@ -3,6 +3,7 @@
 import { execFileSync } from 'node:child_process';
 import { existsSync, mkdirSync } from 'node:fs';
 import { homedir } from 'node:os';
+import { dataHome } from '../../../lib/data-home.mjs';
 import { dirname, join, resolve } from 'node:path';
 import { fileURLToPath } from 'node:url';
 import {
@@ -33,7 +34,7 @@ const positionalArgs = () => {
   }
   return values;
 };
-const dataDir = resolve(option('--data-dir', join(homedir(), '.coforce')));
+const dataDir = resolve(option('--data-dir', dataHome()));
 const paths = experiencePaths(dataDir);
 const scripts = resolve(dirname(fileURLToPath(import.meta.url)), '../../shushu-internship-tool/scripts');
 const python = option('--python', process.env.COFORCE_PYTHON || 'python3');

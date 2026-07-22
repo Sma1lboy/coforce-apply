@@ -5,8 +5,13 @@ discoverable product lives under `.agents/skills/`. Users clone the repository
 and run Codex or Claude Code from that checkout; no global skill installation
 is required.
 
-- User data lives under `~/.coforce/`; never commit profile, application,
-  account, resume, or instruction data.
+- User data lives in the CoForce data home. Wherever docs say `~/.coforce`,
+  resolve it as: `$COFORCE_HOME` env override -> `<checkout>/.coforce/` if it
+  exists (private-fork mode: the user's PRIVATE fork syncs data in-repo; the
+  setup skill verifies privacy before enabling) -> `~/.coforce`. Scripts share
+  this rule via `.agents/lib/data-home.mjs`. Outside private-fork mode, never
+  commit profile, application, account, resume, or instruction data -- and
+  never push the data home to the canonical public repo in any mode.
 - `.claude/skills` is a project-local compatibility symlink to
   `.agents/skills`, so both Codex and Claude Code discover the same canonical
   files without maintaining two copies.

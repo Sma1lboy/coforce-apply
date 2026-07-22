@@ -20,6 +20,24 @@ const root = join(here, '..');
 const outDir = join(here, 'out');
 mkdirSync(outDir, { recursive: true });
 
+// --- 0. data-home resolution: env override → in-repo (private fork) → ~ ---
+{
+  const { dataHome } = await import(
+    join(root, '.agents/lib/data-home.mjs')
+  );
+  const { homedir } = await import('node:os');
+  process.env.COFORCE_HOME = join(outDir, 'env-home');
+  assert.equal(dataHome(), join(outDir, 'env-home'), 'COFORCE_HOME wins');
+  delete process.env.COFORCE_HOME;
+  const forkRoot = join(outDir, 'fake-fork');
+  mkdirSync(join(forkRoot, '.coforce'), { recursive: true });
+  assert.equal(dataHome(forkRoot), join(forkRoot, '.coforce'), 'in-repo .coforce wins when present');
+  const bareRoot = join(outDir, 'fake-clone');
+  mkdirSync(bareRoot, { recursive: true });
+  assert.equal(dataHome(bareRoot), join(homedir(), '.coforce'), 'falls back to ~/.coforce');
+  console.log('data home: env → in-repo → ~ resolution ✓');
+}
+
 // --- 1. static render from fixtures ---
 const out = join(outDir, 'board.html');
 execFileSync(

@@ -22,6 +22,7 @@ import { execFileSync } from 'node:child_process';
 import { randomUUID } from 'node:crypto';
 import { createServer } from 'node:http';
 import { homedir } from 'node:os';
+import { dataHome } from '../../../lib/data-home.mjs';
 import { dirname, extname, join, resolve, sep } from 'node:path';
 import { fileURLToPath } from 'node:url';
 import {
@@ -65,7 +66,7 @@ const MIME = {
   '.map': 'application/json',
 };
 
-const HOME = join(homedir(), '.coforce');
+const HOME = dataHome();
 const args = process.argv.slice(2);
 const serveIdx = args.indexOf('--serve');
 const serve = serveIdx !== -1;

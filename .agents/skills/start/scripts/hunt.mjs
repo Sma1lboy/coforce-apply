@@ -13,6 +13,7 @@
 
 import { readFileSync, writeFileSync, existsSync } from 'node:fs';
 import { homedir } from 'node:os';
+import { dataHome } from '../../../lib/data-home.mjs';
 import { dirname, join, basename } from 'node:path';
 
 const args = process.argv.slice(2);
@@ -22,7 +23,7 @@ const flag = name => {
 };
 const track = args.includes('--track');
 const configPath =
-  flag('config') ?? join(homedir(), '.coforce', 'apply-config.json');
+  flag('config') ?? join(dataHome(), 'apply-config.json');
 const profileDir = dirname(configPath);
 const appsPath = flag('apps') ?? join(profileDir, 'applications.json');
 const instructionsPath =

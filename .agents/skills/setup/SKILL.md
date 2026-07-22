@@ -1,13 +1,51 @@
 ---
 name: setup
-description: One-time onboarding for CoForce Apply — create ~/.coforce, build the user's profile, collect job-search preferences up front (level, directions, sponsorship/H1B, work mode/days, locations, salary floor → canonical preferences.json), configure the runtime, build the verified bullet pool (evidence + JD-free bullets reviewed into the profile), set the LaTeX template, application consents, and job sources, write standing instructions, then show the console. Use for "帮我 set up", "初始化", "onboarding", "$setup" in Codex, "/setup" in Claude Code, or when any other skill finds ~/.coforce files missing.
+description: One-time onboarding for CoForce Apply — choose the data home (local-only ~/.coforce or private-fork in-repo sync), build the user's profile, collect job-search preferences up front (level, directions, sponsorship/H1B, work mode/days, locations, salary floor → canonical preferences.json), configure the runtime, build the verified bullet pool (evidence + JD-free bullets reviewed into the profile), set the LaTeX template, application consents, and job sources, write standing instructions, then show the console. Use for "帮我 set up", "初始化", "onboarding", "$setup" in Codex, "/setup" in Claude Code, or when any other skill finds ~/.coforce files missing.
 ---
 
 # Setup — one-time onboarding
 
-Everything lands in `~/.coforce/` (create it first: `mkdir -p ~/.coforce`).
-Run stages in order, skip any that are already complete. Batch questions per
-stage — don't drip.
+Everything lands in the CoForce data home — `~/.coforce/` by default (create
+it first: `mkdir -p ~/.coforce`). Run stages in order, skip any that are
+already complete. Batch questions per stage — don't drip.
+
+## 0. Data home — local-only or private-fork sync
+
+Wherever this skill (or any skill) says `~/.coforce`, the actual home is
+resolved as: `$COFORCE_HOME` env override → `<checkout>/.coforce/` if it
+exists → `~/.coforce`. Two supported modes; ask which the user wants (default
+local-only):
+
+- **Local-only** (default): `~/.coforce/` on this machine. Nothing to do.
+- **Private-fork sync**: the user forked this repository, made the fork
+  PRIVATE, and keeps their data inside the checkout at `.coforce/` — profile,
+  tracker, instructions, and archives then sync across machines through their
+  fork (`git pull` on the other machine), and `git pull upstream main` keeps
+  the tool itself current.
+
+Enabling private-fork mode has an IRON GATE — verify before creating anything:
+1. `git remote get-url origin` must NOT be the canonical public repo
+   (`Sma1lboy/coforce-apply`) — data in a clone of the public repo can never
+   be pushed anywhere safe.
+2. `gh repo view --json isPrivate -q .isPrivate` must print `true`. If `gh`
+   is unavailable or there is no remote yet, STOP and make the user confirm
+   explicitly that the remote is (or will be) private before continuing.
+Refusal is the default: when in doubt, stay local-only.
+
+Once verified: `mkdir -p .coforce` in the checkout, then append exactly this
+block to the END of the repo's `.gitignore` (later patterns override the
+public-checkout guard above them):
+
+```
+# coforce private-fork mode — fork verified private; data home syncs in-repo
+!/.coforce/
+/.coforce/out/
+```
+
+Tell the user what does NOT sync: `out/` (regenerable artifacts) and ATS
+passwords (macOS Keychain only, never files — re-register or re-enter
+credentials per machine). Committing and pushing the data home is the user's
+normal git flow afterwards; skills never auto-push.
 
 **Every question to the user goes through the AskUserQuestion tool** (Claude
 Code) — one call per stage with the stage's questions batched, concrete

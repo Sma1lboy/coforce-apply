@@ -6,9 +6,13 @@ symlink to that same tree. Clone the repository and run Claude Code from the
 checkout—no global skill installation is required.** The repo also contains
 the harness and optional Chrome extension.
 
-- User data home: `~/.coforce/` — profile.json (schema canonical in the
-  `profile` skill), applications.json, instructions.md, apply-config.json,
-  accounts.json, applications/<id>/ archives, out/. Never commit user data.
+- User data home: `~/.coforce/` by default — profile.json (schema canonical
+  in the `profile` skill), applications.json, instructions.md,
+  apply-config.json, accounts.json, applications/<id>/ archives, out/.
+  Resolution rule (shared via `.agents/lib/data-home.mjs`): `$COFORCE_HOME`
+  env -> `<checkout>/.coforce/` if present (private-fork mode — user's PRIVATE
+  fork syncs data in-repo; setup verifies privacy first) -> `~/.coforce`.
+  Never commit user data to the public repo.
 - `~/.coforce/instructions.md` = standing user instructions (never-apply list,
   preferences). EVERY skill/action touching applications reads it first and
   treats it as overriding metadata.

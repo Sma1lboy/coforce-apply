@@ -46,6 +46,28 @@ symlink to the same canonical tree, so Claude Code sees identical skills
 without a second copy or any global installation. Enable the appropriate
 Chrome integration before using the `apply` flow.
 
+### Best practice: a private fork as your career data repo
+
+Clone works, but a **private fork** is better: your profile, tracker, standing
+instructions, and per-application archives live inside the checkout at
+`.coforce/` and sync across machines through your fork — supplement your
+profile on the laptop, apply from the desktop, everything follows.
+
+```sh
+gh repo fork Sma1lboy/coforce-apply --clone --fork-name my-coforce
+cd my-coforce
+gh repo edit --visibility private --accept-visibility-change-consequences
+codex   # or: claude — then run $setup and pick "private-fork sync"
+```
+
+Setup refuses to create an in-repo data home until it verifies the fork is
+actually private. Every skill resolves the data home the same way:
+`$COFORCE_HOME` env override → `<checkout>/.coforce/` if present →
+`~/.coforce`. Sync is your normal git flow (`git pull` / `git push` on the
+fork; `git pull upstream main` to update the tool); generated `out/`
+artifacts never sync, and ATS passwords stay in the local Keychain — never in
+files.
+
 Skills carry their own scripts (`tracker/scripts/board.mjs`,
 `experience/scripts/experience.mjs`, `start/scripts/hunt.mjs`,
 `campaign/scripts/campaign.mjs`) — core operation needs Node ≥ 22 and Python 3.
