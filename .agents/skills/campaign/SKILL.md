@@ -178,6 +178,12 @@ input anymore.
    > Any score below 4 → reselect/reorder/cut and re-render before human
    > review. You may not rewrite bullet text to fix a score.
 
+   Finally the **adversarial hiring-side pass**: score the resume with the
+   employer-side rubric in `references/hiring-judge.md` (adapted from
+   HackerRank's hiring-agent, MIT). Use its deduction reasons and
+   areas_for_improvement as the fix list; run it 3× and take the median
+   score when a number matters.
+
 6. **Render and inspect**:
 
    ```sh
