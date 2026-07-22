@@ -300,7 +300,7 @@ export async function hydrateJob(dataDir, id, options = {}) {
     text = type.includes('html') || /<html/i.test(raw) ? htmlToText(raw) : raw.trim();
     source = `http:${response.url}`;
   }
-  if (text.length < 400 || /enable javascript|access denied|captcha|cloudflare/i.test(text.slice(0, 2000))) {
+  if (text.length < 400 || /enable javascript|access denied|verify you are human|captcha/i.test(text.slice(0, 2000))) {
     updateJob(dataDir, id, current => {
       current.status = 'needs_browser_jd';
       current.error = 'The listing did not expose a complete JD over HTTP; capture it with Chrome.';

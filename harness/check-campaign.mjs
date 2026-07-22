@@ -62,6 +62,15 @@ const jd = `Build reliable TypeScript backend APIs and agent workflows. ${'Desig
 for (const job of synced.added) await hydrateJob(dataDir, job.id, { text: jd, source: 'fixture' });
 assert.ok(htmlToText('<h1>Role</h1><script>bad()</script><p>Backend &amp; API</p>').includes('Backend & API'));
 
+// regression: a JD that merely MENTIONS Cloudflare (e.g. Cloudflare's own
+// postings) must not trip the bot-wall heuristic into needs_browser_jd
+{
+  const cfDir = mkdtempSync(join(tmpdir(), 'coforce-cf-'));
+  const cfJob = syncJobs(cfDir, [{ url: 'https://example.com/cf-job', company: 'Cloudflare', role: 'SWE Intern' }]).added[0];
+  const cfHydrated = await hydrateJob(cfDir, cfJob.id, { text: `Cloudflare runs one of the largest networks in the world. ${'Build and operate systems at Internet scale with Go, Rust and TypeScript. '.repeat(10)}`, source: 'fixture' });
+  assert.equal(cfHydrated.status, 'jd_ready', "mentioning 'cloudflare' is not a bot wall");
+}
+
 const experience = experiencePaths(dataDir);
 const libraryPath = experience.library;
 mkdirSync(dirname(libraryPath), { recursive: true });
