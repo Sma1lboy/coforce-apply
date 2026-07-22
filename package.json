@@ -31,7 +31,9 @@
     "lint:fix": "eslint . --ext .ts,.tsx --fix",
     "sandbox": "node harness/sandbox.mjs",
     "record:setup": "node harness/record-setup.mjs",
-    "record:session": "node harness/record-session.mjs"
+    "record:session": "node harness/record-session.mjs",
+    "story:record": "node harness/story-record.mjs",
+    "story:render": "node harness/story-render.mjs"
   },
   "dependencies": {
     "@ai-sdk/openai": "^1.3.6",

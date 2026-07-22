@@ -32,12 +32,23 @@ const KICKOFF = `Run the setup skill of this repository now (skill file: .claude
 IMPORTANT sandbox override for this entire session: use ${sandbox} as the CoForce data home instead of ~/.coforce — never touch the real ~/.coforce.
 Walk me through setup stage by stage. Ask me your questions in batches per stage and WAIT for my answers; do not invent answers on my behalf. Start with stage 1 now.`;
 
-const USER_TURNS = [
-  `Import my profile from this resume text instead of an interview:
+// Real input, sandboxed output: point COFORCE_RESUME_PDF (or _TXT) at your
+// actual resume to capture the real import conversation; the fixture persona
+// is only the fallback so anyone can run this.
+const resumePdf = process.env.COFORCE_RESUME_PDF;
+const resumeTxt = process.env.COFORCE_RESUME_TXT;
+const profileTurn = resumePdf
+  ? `Import my profile from my real resume PDF at ${resumePdf} — read the file directly.`
+  : resumeTxt
+    ? `Import my profile from my real resume text file at ${resumeTxt} — read the file directly.`
+    : `Import my profile from this resume text instead of an interview:
 Jane Builder — Software Engineer. jane@example.com · 555-0100 · github: janebuilder · linkedin: jane-builder
 Experience: Acme Robotics, Backend Intern (2025): built a Go telemetry ingestion service handling 50k msgs/min; cut p99 latency 45% with Redis caching. Orchard Labs, Full-stack Intern (2024): shipped a React + Spring Boot inventory app used by 30 stores.
 Projects: trailmap (github.com/janebuilder/trailmap): open-source hiking route planner, 800 stars, Next.js + PostGIS.
-Education: State University, BS Computer Science, 2026. Skills: Go, TypeScript, Java, React, Spring Boot, PostgreSQL, Redis, Docker.`,
+Education: State University, BS Computer Science, 2026. Skills: Go, TypeScript, Java, React, Spring Boot, PostgreSQL, Redis, Docker.`;
+
+const USER_TURNS = [
+  profileTurn,
   `Preferences: internship level; directions backend and fullstack; I need visa sponsorship (F-1 OPT); work mode remote or hybrid; locations US Remote or Seattle; no salary floor.`,
   `Apply config: LaTeX template at ${join(repoRoot, '.agents/skills/tailor/assets/resume_template.tex')}; yes require resume review; email jane.sandbox@example.com; do NOT auto-register ATS accounts; mailbox access paste; resume pdf at ${join(sandbox, 'resume.pdf')}; headless apply NO. Keep the default job sources.`,
   `Skip the experience/Tier-0 stage for now. Standing instructions: never apply to EvilCorp or DataHarvest Inc; prefer remote-first teams; keep a professional, concise tone.`,
