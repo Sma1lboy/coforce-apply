@@ -5,10 +5,9 @@
 # CoForce Apply
 
 **Your job hunt on autopilot.** CoForce Apply is a skill-first job application
-agent: Codex or Claude Code discovers postings, matches them against your real
-GitHub work, builds reviewable resumes, submits approved applications, and
-tracks everything locally — while a slim Chrome
-extension handles the in-browser last mile. All of your data stays on your
+agent: Claude Code discovers postings, matches them against your real GitHub
+work, builds reviewable resumes, fills and submits approved applications in
+your own Chrome, and tracks everything locally. All of your data stays on your
 machine.
 
 <p align="center">
@@ -27,24 +26,23 @@ sources (GitHub job lists)          ~/.coforce/ (your data, local only)
                                                                    │ approved
                                                                    ▼
                      ZIP export ◀── job folders            apply ──▶ board
-                                                             tier 1: form-fill
-                                                             tier 2: Chrome agent
+                                                          (your visible Chrome,
+                                                       stops before submit)
 ```
 
 ## Use from a clone
 
-Clone the repository, enter the checkout, and start either agent there:
+Clone the repository, enter the checkout, and start Claude Code there:
 
 ```sh
 git clone https://github.com/Sma1lboy/coforce-apply
 cd coforce-apply
-codex   # or: claude
+claude
 ```
 
-Codex discovers `.agents/skills` directly. `.claude/skills` is a compatibility
-symlink to the same canonical tree, so Claude Code sees identical skills
-without a second copy or any global installation. Enable the appropriate
-Chrome integration before using the `apply` flow.
+The canonical skill tree is `.agents/skills`; `.claude/skills` is a symlink to
+it, so Claude Code sees the skills without a second copy or any global
+installation. Enable Claude in Chrome before using the `apply` flow.
 
 ### Best practice: a private fork as your career data repo
 
@@ -57,7 +55,7 @@ profile on the laptop, apply from the desktop, everything follows.
 gh repo fork Sma1lboy/coforce-apply --clone --fork-name my-coforce
 cd my-coforce
 gh repo edit --visibility private --accept-visibility-change-consequences
-codex   # or: claude — then run $setup and pick "private-fork sync"
+claude   # then run /setup and pick "private-fork sync"
 ```
 
 Setup refuses to create an in-repo data home until it verifies the fork is
@@ -84,8 +82,7 @@ The layout rule is the only requirement: the skill directories and a sibling
 recipe works for any agent runtime with a global skills directory. In this
 mode the data home resolves to `~/.coforce` (or `$COFORCE_HOME`); the
 `coforce` router skill ships with the set, so intent navigation works without
-the repo's AGENTS.md/CLAUDE.md; skip `harness` (repo-dev-only). Building the
-Chrome extension is the one thing that still needs the repo.
+the repo's CLAUDE.md; skip `harness` (repo-dev-only).
 
 Skills carry their own scripts (`tracker/scripts/board.mjs`,
 `experience/scripts/experience.mjs`, `start/scripts/hunt.mjs`,
@@ -97,34 +94,31 @@ rendering needs `latexmk`, `pdflatex`, or `tectonic`. All personal data lives in
 
 ## Use
 
-1. **`$setup`** — one-time onboarding: import or interview your background,
+1. **`/setup`** — one-time onboarding: import or interview your background,
    provide your LaTeX template, set email/consents, name the
    companies you never want to apply to,
    confirm job sources (seeded with
    [2027-SWE-College-Jobs](https://github.com/speedyapply/2027-SWE-College-Jobs)
    and [Summer2027-Internships](https://github.com/vanshb03/Summer2027-Internships)).
-2. **`$experience https://github.com/owner/repo`** — paste a repository, PR, or
+2. **`/experience https://github.com/owner/repo`** — paste a repository, PR, or
    commit URL. The agent infers the repository and author, then maintains the
    compact source list internally; you only correct it if the inference is wrong.
-3. **`$experience refresh`** — build Tier 0 from only that allowlist: fetch the
+3. **`/experience refresh`** — build Tier 0 from only that allowlist: fetch the
    declared authors' history, combine it with your curated profile, and persist
    a compact source-backed experience index.
-   Run `$experience build` after profile-only edits; it does not access GitHub.
-4. **`$start`** — one cycle: fetch sources → hydrate full JDs → match the local
+   Run `/experience build` after profile-only edits; it does not access GitHub.
+4. **`/start`** — one cycle: fetch sources → hydrate full JDs → match the local
    Tier 0 index → render PDFs → open the Review workspace. Existing
    approved jobs are left alone; saved feedback is applied on the next cycle.
-5. Use a Codex scheduled task when you want `$start` to run repeatedly.
+5. `/loop 30m /start` when you want that cycle to run repeatedly.
 6. By default, review each job/PDF, request changes or approve it, then export
    every approved job folder as one ZIP. Turn off **Require resume review** in
    Settings to auto-approve complete one-page PDFs and auto-refresh the ZIP.
-   Run `$apply <url>` later when you actually want to submit; final submit still
+   Run `/apply <url>` later when you actually want to submit; final submit still
    requires explicit confirmation in either mode.
 
-Type the `$...` invocations inside an interactive Codex session. `$apply`
-selects the Chrome integration internally, so `codex '$apply <url>'` is the
-complete command and operates the same visible, logged-in Chrome you already
-use. Claude Code uses the equivalent slash commands (`/setup`, `/start`,
-`/apply`, and so on) with its `--chrome` integration.
+`/apply` initializes Claude in Chrome itself and drives the same visible,
+logged-in Chrome you already use.
 
 ## What's inside
 
@@ -141,7 +135,6 @@ use. Claude Code uses the equivalent slash commands (`/setup`, `/start`,
 | `apply` | Chrome-backed application: fills forms, registers ATS accounts (Workday & co., passwords in macOS Keychain), stops before submit for your confirmation |
 | `tracker` | Application tracker + kanban board + per-application file archive |
 | `harness` | Mock-environment E2E test of the whole pipeline (repo-dev only) |
-| `shushu-internship-tool` | *Third-party sample* ([upstream](https://github.com/LiuMengxuan04/shushu-internship-tool), Apache-2.0): JD → find/adapt a real GitHub project → STAR resume lines + interview pack, wired into the CoForce profile/tracker. Review: [docs/third-party/shushu-judge.md](docs/third-party/shushu-judge.md) |
 
 **The console** (http://localhost:4517, served by the tracker skill) is a
 kobe-Hallmark-themed local workspace over `~/.coforce/`: five application pipeline
@@ -159,56 +152,43 @@ user instruction — preferences, caps, and a `## never-apply` company list that
 every skill and script respects. Duplicate applications are hard-blocked by
 URL and company+role matching.
 
-**Two-tier delivery.** The extension's Apply tab form-fills from your profile
-(tier 1); when a form resists, one click hands the job to the configured agent
-(tier 2, the `apply` skill) in your existing visible Chrome session — which can
-also register ATS accounts with
-locally-generated Keychain-stored passwords and fetch email verification
-codes, all gated on consents you grant once during setup.
+**Delivery.** The `apply` skill drives your existing visible Chrome session —
+filling forms, registering ATS accounts with locally-generated
+Keychain-stored passwords, and fetching email verification codes, all gated on
+consents you grant once during setup. It always stops before the final submit;
+the confirmation is yours. (A scripted form-filler Chrome extension used to
+sit in front of it as a free "tier 1"; it was deleted — the agent handles the
+same pages, and the second implementation cost more to maintain than the LLM
+calls it saved. See `docs/OPERATOR.md` for the contract a cheaper operator
+would have to satisfy to slot back in.)
 
-## Extension (optional, developer mode)
+## Testing a skill's conversation
 
-The tier-1 form-filler is a Chrome extension; building it is the one thing
-that needs the repo:
+A skill's real product surface is its interaction flow, and prompts are black
+boxes until you watch one run. `npm run record:session` drives a REAL agent
+session through a skill in a throwaway sandbox and captures the whole
+interaction script — every question, tool call, and reply — which is what you
+tune SKILL.md against. `npm run record:setup` does the deterministic
+scripted-driver version.
 
-```sh
-git clone https://github.com/Sma1lboy/coforce-apply && cd coforce-apply
-yarn install && yarn build:chrome
-```
-
-Load `extension/chrome` via `chrome://extensions` → Developer mode → Load
-unpacked. Options → Profile → "Import from JSON" accepts
-`~/.coforce/profile.json` as-is; the Apply tab syncs with the tracker via
-Export/Import JSON.
-
-## skill-story — test a skill's conversation like code
-
-Skills are described by features, but their real product surface is an
-interaction flow (setup interviews, adversarial reviewers, confirm-gated
-pipelines) — and prompts are black boxes until you watch one run. The
-bundled **skill-story** meta-skill turns any skill's flow into a visible,
-repeatable test: write the expected conversation script, run a REAL agent
-session in a sandbox, capture every frame with true colors, verify the
-outcome, sediment findings back into the skill's prompts.
-
-The animated demo at the top of this README is a skill-story artifact: a real
-`/setup` run recorded via `npm run story:record` and re-rendered via
-`npm run story:render` (capture once, render many).
-Standalone repo: [Sma1lboy/skill-story](https://github.com/Sma1lboy/skill-story).
+The animated demo at the top of this README came out of that loop, via
+[Sma1lboy/skill-story](https://github.com/Sma1lboy/skill-story) — the
+standalone meta-skill for recording and re-rendering skill conversations.
 
 ## Development (this repo)
 
-- `yarn dev:chrome` / `yarn build:chrome` — extension watch / production build
-- `yarn harness` — deterministic checks: evidence, campaign ZIP, two-tier apply, board, hunt
-- `yarn board` / `yarn board:serve` — static / live kanban
-- `yarn hunt` — one discovery pass (`--track` to record)
-- `yarn lint` — ESLint
+- `npm run harness` — deterministic checks: evidence, campaign ZIP, apply
+  lifecycle, board, hunt. No network, no LLM calls, stubbed agent CLI.
+- `npm run board` / `npm run board:serve` — static / live kanban
+- `npm run hunt` — one discovery pass (`--track` to record)
+
+The repo has no npm dependencies: every script runs on Node builtins, and the
+console (`.agents/skills/tracker/web/`) carries its own.
 
 Key paths: `.agents/skills/` (the canonical distributable skills + scripts),
-`harness/` (mock E2E), `src/` (extension). Architecture & flow (mermaid,
-living doc) in [docs/ARCHITECTURE.md](docs/ARCHITECTURE.md); full design
-history in [docs/ROADMAP.md](docs/ROADMAP.md); the CoForce merge plan in
-[docs/MIGRATION.md](docs/MIGRATION.md).
+`harness/` (mock E2E). Architecture & flow (mermaid,
+living doc) in [docs/ARCHITECTURE.md](docs/ARCHITECTURE.md); the CoForce merge
+plan in [docs/MIGRATION.md](docs/MIGRATION.md).
 
 ## Privacy
 

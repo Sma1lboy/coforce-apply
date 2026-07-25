@@ -1,6 +1,6 @@
 ---
 name: harness
-description: End-to-end mock-environment test of the whole pipeline — fixture profile + mock JD → tailored resume, then the two-tier apply check (tier-1 autofill assertions + tier-2 fallback trigger) against the mock ATS form. Use for "跑一遍 harness", "端到端测试", "run the e2e harness", or after changing autofill logic, the profile schema, or the tailor flow.
+description: End-to-end mock-environment test of the whole pipeline — fixture profile + mock JD → tailored resume, then the deterministic checks (formats, evidence, experience, campaign, board + apply lifecycle, hunt). Use for "跑一遍 harness", "端到端测试", "run the e2e harness", or after changing the apply lifecycle, the profile schema, or the tailor flow.
 ---
 
 # Harness — mock E2E
@@ -11,13 +11,15 @@ description: End-to-end mock-environment test of the whole pipeline — fixture 
 Everything runs against fixtures; the user's real `~/.coforce/profile.json` is
 never touched. Mock environment lives in `harness/`:
 
-- `harness/fixtures/profile.json` — John Doe fixture (schema: `src/types.ts`)
+- `harness/fixtures/profile.json` — John Doe fixture (schema: `profile` skill)
 - `harness/fixtures/reference.docx` — reference resume for the docx path
 - `harness/fixtures/applications.json` — tracker fixture (5 apps across statuses)
+- `harness/fixtures/agent-stub.sh` — stand-in for the Claude Code CLI
+  (`COFORCE_CLAUDE_BIN`), so apply/import flows run without a real agent
 - `harness/mock/jd.html` — mock job posting (Nimbus Analytics, Senior Full-Stack)
-- `harness/mock/apply-form.html` — mock ATS application form (Greenhouse-style)
-- `harness/check-autofill.mjs` / `check-formats.sh` / `check-board.mjs` —
-  deterministic checks (all three run via `yarn harness`)
+- `harness/check-formats.sh` / `check-github-evidence.py` /
+  `check-experience.mjs` / `check-campaign.mjs` / `check-board.mjs` /
+  `check-hunt.mjs` — deterministic checks (all six run via `yarn harness`)
 - `harness/out/` — run artifacts (gitignored)
 
 ## Stages (run all, report per-stage pass/fail)
@@ -36,21 +38,19 @@ Also exercise the alternate output/reference paths: regenerate the docx leg
 `harness/fixtures/reference.docx` back as a reference (mimic check: extraction
 succeeds and output honors its section order).
 
-**2. Deterministic checks (apply two-tier + formats + tracker board).**
+**2. Deterministic checks (formats, evidence, campaign, board, hunt).**
 ```sh
 yarn harness
 ```
-Asserts: tier-1 fills 8/9 mock-form fields with exact fixture values and leaves
-the screening question alone; that exact condition triggers the tier-2
-Chrome-backed agent fallback (`codex '$apply <url>'` or
-`claude --chrome "/apply <url>"`); docx reference extraction and md→docx
-round-trip work; the board generator renders all 7 status columns and fixture
-cards from `harness/fixtures/applications.json`. Exit code 0 = pass.
-
-**3. Extension build still green.**
-```sh
-yarn build:chrome
-```
+Asserts: docx reference extraction and md→docx round-trip work; the vendored
+GitHub evidence layer holds its attribution/pagination/writer guardrails and
+the experience index rebuilds offline; the campaign pipeline selects verbatim
+pool bullets and exports the approved ZIP; the board generator renders all 7
+status columns and fixture cards from `harness/fixtures/applications.json`,
+and the console's Chrome-backed apply lifecycle runs consent gate → fill
+(`READY_TO_SUBMIT`) → confirm → `SUBMITTED` against the agent stub; hunt
+parses, dedups against the tracker, and honors the never-apply list.
+Exit code 0 = pass.
 
 ## Report
 
@@ -79,8 +79,6 @@ the mock is the spec, the code is the suspect.
 
 ## Skill stories
 
-Interaction-flow capture/testing moved to its own meta-skill: **skill-story**
-(`.agents/skills/skill-story/`) — dive into any skill's conversation, record a
-real sandboxed session with true colors, verify against an expected script,
-and sediment findings. `npm run story:record` / `story:render` are its
-entry points; `harness/stories/` stays gitignored local material.
+Recording a skill's conversation as a shareable, re-renderable artifact lives
+in its own repo now: [Sma1lboy/skill-story](https://github.com/Sma1lboy/skill-story).
+The two recorders above stay here as the in-repo tuning loop.

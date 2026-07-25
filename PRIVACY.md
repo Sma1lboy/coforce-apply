@@ -1,67 +1,56 @@
-# Privacy Policy for Resume Generator
+# Privacy
 
-## Introduction
+CoForce Apply is a local tool, not a service. There is no CoForce server, no
+account, and no telemetry. Nothing in this repository transmits your data
+anywhere.
 
-This Privacy Policy describes how the Resume Generator Chrome extension ("we", "our", or "the extension") collects, uses, and shares your information when you use our service. We take your privacy seriously and are committed to protecting your personal information.
+## Where your data lives
 
-## Data Collection and Usage
+Everything personal sits in the data home on your own machine — `~/.coforce/`
+by default, or `<checkout>/.coforce/` in private-fork mode, or wherever
+`$COFORCE_HOME` points:
 
-### Information We Collect
+- `profile.json` — your background, the verified bullet pool
+- `preferences.json`, `instructions.md`, `apply-config.json` — your intent,
+  standing rules, and consents
+- `applications.json` + `applications/<id>/` — the tracker and per-application
+  archives
+- `out/` — generated resumes, ZIPs, and apply-run logs
 
-The Resume Generator extension collects the following types of information:
+ATS account passwords are generated locally and stored in the macOS Keychain,
+never in a file. `accounts.json` holds metadata only (host, email, Keychain
+service name).
 
-1. **User Profile Information**: Name, contact details, education, skills, work experience, and other resume content that you provide.
-2. **Job Descriptions**: Job descriptions that you input or allow the extension to access from web pages.
-3. **Generated Resumes**: Resumes created using our extension.
-4. **OpenAI API Settings**: Your API key if you choose to use your own OpenAI API account.
-5. **Usage Data**: Basic information about how you interact with the extension.
+In private-fork mode the data home is committed to **your own private fork**.
+Never enable it on a public checkout; setup verifies the fork is private
+before offering it.
 
-### How We Use Your Information
+## What leaves your machine
 
-All the information we collect is used solely for the purpose of:
+Three things, all of them at your direction:
 
-1. Generating tailored resumes based on job descriptions
-2. Saving your profile to avoid re-entering information
-3. Maintaining a history of your generated resumes
-4. Improving the extension's functionality
+1. **Your agent runtime.** CoForce runs inside Claude Code, so the parts of
+   your profile, job descriptions, and files the agent reads become prompt
+   context sent to Anthropic under [Anthropic's own
+   terms](https://www.anthropic.com/legal/privacy). This is the same exposure
+   as using Claude Code on any file — CoForce adds no separate transmission.
+2. **Job sources.** Discovery fetches public job lists (GitHub repositories,
+   job boards) and job description pages. Those sites see an ordinary request.
+   The explicit Tier 0 refresh calls the GitHub API with your `gh` credentials
+   to read your own commits and PRs.
+3. **The applications you approve.** `/apply` fills a form in your own visible,
+   logged-in Chrome and stops before the final submit. Nothing is submitted
+   without your explicit confirmation for that specific application.
 
-## Data Storage
+The console (http://localhost:4517) binds to localhost and serves only your
+own data home.
 
-### Local Storage
+## Deleting your data
 
-All your personal information is stored locally in your browser using Chrome's storage API. This includes:
+Delete the data home. There is nowhere else to look, and nothing to request
+from anyone.
 
-- Your user profile
-- Resume templates
-- Generated resumes
-- Application settings
+## Changes
 
-### External Services
-
-When you use the resume generation feature, the extension sends job descriptions and relevant parts of your profile to OpenAI's API to generate tailored content. This transmission is done securely, and we do not store your data on our servers during this process.
-
-## Data Sharing
-
-We do not sell, trade, or otherwise transfer your personally identifiable information to external parties. The only exception is sharing necessary data with OpenAI for the explicit purpose of generating resume content as requested by you.
-
-## User Control
-
-You have complete control over your data:
-
-- You can view all stored information in the extension settings
-- You can delete your profile or history of generated resumes at any time
-- You can opt to use your own OpenAI API key
-
-## Security
-
-We implement appropriate security measures to protect against unauthorized access to or unauthorized alteration, disclosure, or destruction of data. However, no method of transmission over the Internet or method of electronic storage is 100% secure.
-
-## Changes to This Privacy Policy
-
-We may update our Privacy Policy from time to time. We will notify you of any changes by posting the new Privacy Policy on the GitHub repository. You are advised to review this Privacy Policy periodically for any changes.
-
-## Contact Us
-
-If you have any questions about this Privacy Policy, please open an issue on our GitHub repository.
-
-Last updated: November 5, 2023
+This file is versioned in the repository; its history is the change log.
+Questions: open an issue.

@@ -1,8 +1,8 @@
 import React, { useEffect, useRef, useState } from 'react';
 import { AnimatePresence, motion } from 'framer-motion';
 
-// Apply-flow dialog. Headless mode (consented in setup): the server spawns the
-// configured local agent session, which fills everything and stops before
+// Apply-flow dialog. Headless mode (consented in setup): the server spawns a
+// local Claude session, which fills everything and stops before
 // submit. This dialog streams the log, then the user confirms and the same
 // session resumes to submit. Manual mode falls back to copy-the-command.
 
@@ -43,19 +43,15 @@ function Step({ i, state, children }) {
   );
 }
 
-export default function ApplyDialog({ job, mode, agent = 'claude', onClose, onQueued }) {
+export default function ApplyDialog({ job, mode, onClose, onQueued }) {
   const [phase, setPhase] = useState('queueing');
   const [tail, setTail] = useState('');
   const [err, setErr] = useState('');
   const jobIdRef = useRef(null);
   const pollRef = useRef(null);
   const logRef = useRef(null);
-  const agentName = agent === 'codex' ? 'Codex' : 'Claude';
-  const command = job
-    ? agent === 'codex'
-      ? `codex '$apply ${job.url}'`
-      : `claude --chrome "/apply ${job.url}"`
-    : '';
+  const agentName = 'Claude';
+  const command = job ? `claude --chrome "/apply ${job.url}"` : '';
 
   const stopPoll = () => { clearInterval(pollRef.current); pollRef.current = null; };
 

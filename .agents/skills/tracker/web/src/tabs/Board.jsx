@@ -127,7 +127,7 @@ export default function Board({ state, onChanged }) {
                     <div className="text-xs text-muted mt-0.5">{[a.company, a.position].filter(Boolean).join(' · ')}</div>
                   )}
                   {a.needsFallback && a.status === 'pending' && (
-                    <div className="inline-block mt-1.5 text-[11px] text-accentsoft bg-accent/12 border border-accent rounded-full px-2 py-px">⚑ needs agent fallback</div>
+                    <div className="inline-block mt-1.5 text-[11px] text-accentsoft bg-accent/12 border border-accent rounded-full px-2 py-px">⚑ needs you</div>
                   )}
                   {a.notes && <div className="text-xs text-faint border-l-2 border-rule2 pl-2 mt-1.5 line-clamp-3 whitespace-pre-wrap">{a.notes}</div>}
                   <div className="text-[11px] text-dim mt-2">{(a.updatedAt || '').slice(0, 10)}</div>

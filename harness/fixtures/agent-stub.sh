@@ -1,64 +1,39 @@
 #!/bin/sh
-# Harness stand-in for the Codex and Claude CLIs.
-#  - Chrome-backed "$apply"/"/apply" prompt → background first run: READY_TO_SUBMIT
-#  - resume "confirmed"   → submit run: SUBMITTED
-#  - anything else        → resume-import parse (fixed profile JSON)
+# Harness stand-in for the Claude Code CLI.
+#  - Chrome-backed "/apply" prompt → background first run: READY_TO_SUBMIT
+#  - resume "confirmed"            → submit run: SUBMITTED
+#  - "Additive only" prompt        → profile-add proposal
+#  - anything else                 → resume-import parse (fixed profile JSON)
 cat > /dev/null
-if [ "$1" = "exec" ]; then
-  case "$*" in
-    *--ask-for-approval*)
-      echo "codex exec does not accept --ask-for-approval" >&2
-      exit 64
-      ;;
-    *"/apply"*)
-      echo "Codex must invoke the skill as \$apply" >&2
-      exit 64
-      ;;
-  esac
-  case "$*" in
-    *'@Chrome'*)
-      echo "Codex apply commands should let the apply skill initialize Chrome internally" >&2
-      exit 64
-      ;;
-  esac
-else
-  case "$*" in
-    *'$apply'*)
-      echo "Claude Code must invoke the skill as /apply" >&2
-      exit 64
-      ;;
-  esac
-  case "$*" in
-    *"/apply"*|*confirmed*)
-      case "$*" in
-        *--chrome*) ;;
-        *)
-          echo "Claude apply runs must enable --chrome" >&2
-          exit 64
-          ;;
-      esac
-      ;;
-  esac
-fi
+
+# contract guards: the console must drive Claude with /apply, with Chrome enabled
 case "$*" in
-  *'$apply'*|*"/apply"*)
-    if [ "$1" = "exec" ]; then
-      echo '{"type":"thread.started","thread_id":"019d-stub-codex-thread"}'
-      echo '{"type":"item.completed","item":{"type":"reasoning","text":"Do not print COFORCE_STATUS: SUBMITTED before confirmation."}}'
-      echo '{"type":"item.completed","item":{"type":"agent_message","text":"COFORCE_STATUS: READY_TO_SUBMIT\\nSummary: name/email/resume filled."}}'
-    else
-      echo "[stub] filling application forms…"
-      echo "COFORCE_STATUS: READY_TO_SUBMIT"
-      echo "Summary: name/email/resume filled, 1 screening question answered."
-    fi
+  *'$apply'*)
+    echo "Claude Code must invoke the skill as /apply" >&2
+    exit 64
+    ;;
+esac
+case "$*" in
+  *"/apply"*|*confirmed*)
+    case "$*" in
+      *--chrome*) ;;
+      *)
+        echo "Claude apply runs must enable --chrome" >&2
+        exit 64
+        ;;
+    esac
+    ;;
+esac
+
+case "$*" in
+  *"/apply"*)
+    echo "[stub] filling application forms…"
+    echo "COFORCE_STATUS: READY_TO_SUBMIT"
+    echo "Summary: name/email/resume filled, 1 screening question answered."
     ;;
   *confirmed*)
-    if [ "$1" = "exec" ]; then
-      echo '{"type":"item.completed","item":{"type":"agent_message","text":"COFORCE_STATUS: SUBMITTED"}}'
-    else
-      echo "[stub] submitting…"
-      echo "COFORCE_STATUS: SUBMITTED"
-    fi
+    echo "[stub] submitting…"
+    echo "COFORCE_STATUS: SUBMITTED"
     ;;
   *'Additive only'*)
     printf '%s' '{"customSections":[{"title":"Awards","entries":[{"heading":"Stub Hackathon — 1st Place","date":"2025","description":[{"text":"Won 1st place among 200 teams","source":"https://example.com/results"}]}]}],"skills":["Rust"],"notes":"team size not stated"}'

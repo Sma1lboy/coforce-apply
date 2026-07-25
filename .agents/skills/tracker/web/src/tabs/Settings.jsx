@@ -61,7 +61,6 @@ export default function Settings({ state, onChanged, goWizard }) {
   if (!config) return <div className="flex-1 grid place-items-center text-dim">loading…</div>;
 
   const sources = config.sources || [];
-  const agent = config.agent ?? state.agent ?? 'claude';
 
   return (
     <div className="flex-1 min-h-0 overflow-y-auto p-6">
@@ -114,22 +113,15 @@ export default function Settings({ state, onChanged, goWizard }) {
               <span className="text-muted">{source.repo}</span> · read {source.authors.join(', ')}
             </div>
           ))}
-          <div className="text-[10px] text-faint mt-2"><code>$experience https://github.com/owner/repo</code><br /><code>$experience refresh</code> after adding URLs · <code>$experience build</code> after profile-only changes</div>
+          <div className="text-[10px] text-faint mt-2"><code>/experience https://github.com/owner/repo</code><br /><code>/experience refresh</code> after adding URLs · <code>/experience build</code> after profile-only changes</div>
         </div>
 
         <div className="h3">Apply</div>
-        <label className="flex flex-col gap-1 mb-2 max-w-xs">
-          <span className="flabel">Agent runtime</span>
-          <select className="inp" value={agent} onChange={e => saveConfig({ agent: e.target.value })}>
-            <option value="codex">Codex</option>
-            <option value="claude">Claude Code</option>
-          </select>
-        </label>
         <Toggle
           on={!!config.headlessApply}
           onChange={v => saveConfig({ headlessApply: v })}
           label="One-click background apply"
-          hint={`The Apply button runs a local background ${agent === 'codex' ? 'Codex' : 'Claude'} session against your visible Chrome. It always stops for your confirmation before submitting. Off = copy-the-command flow.`}
+          hint="The Apply button runs a local background Claude session against your visible Chrome. It always stops for your confirmation before submitting. Off = copy-the-command flow."
         />
         <Toggle
           on={!!config.autoRegister}

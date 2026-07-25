@@ -1,7 +1,8 @@
 # CoForce Apply — 架构与流程
 
-> 核心命题:**SKILL.md 编排层是产品本体**;推理运行时(claude ↔ codex)与
-> 操作模块(脚本 / browser-use / 小模型)都是可替换插槽。
+> 核心命题:**SKILL.md 编排层是产品本体**;推理运行时与操作模块都是插槽,
+> 各自当前只有一个实现(Claude Code / agent browser-use)——插槽的价值在
+> 于"换实现不动上层",不在于同时养多个实现。
 >
 > 本文是架构的本地沉淀版,随代码增量维护(改架构 = 改这里的 mermaid,
 > 不重画)。评审迭代历史(round 1–7)在
@@ -35,7 +36,6 @@ flowchart TB
     START[start · 发现入库]
     CAMP[campaign · 匹配+简历]
     APPLY[apply · 浏览器投递]
-    SHU[三方 skill 插件 · shushu]
   end
 
   subgraph WEB[web 层 · console,人驱动 —— 并行面 B]
@@ -71,8 +71,8 @@ flowchart TB
   BOARD -->|拖拽| C7
   EXP -->|写 索引| STATE
   subgraph EXEC[投递执行内部 —— 可替换插槽]
-    RT[推理运行时 · claude ↔ codex · session 可恢复]
-    OP[操作模块 · T1 脚本 → T2 browser-use → 小模型]
+    RT[推理运行时 · Claude Code · session 可恢复]
+    OP[操作模块 · agent browser-use]
   end
   CHATS[Chrome → ATS/招聘站]
   GATE{用户 Confirm ⛔}
@@ -82,7 +82,6 @@ flowchart TB
   OP --> CHATS
   OP -->|READY_TO_SUBMIT · 停| GATE
   GATE -->|resume 同一 session| OP
-  SHU -.->|证据增强 Tier 0| C4
 
   C1 -->|写| INTENT
   C3 -->|写 pending| STATE
@@ -107,7 +106,7 @@ needsSponsorship/workAuthorization、workMode、workDays、地点、薪资底线
 | 文件 | 角色 |
 |---|---|
 | `preferences.json` | canonical 用户意图 schema(唯一收集点:setup;console 的 Discover 向导 / Settings 只是编辑切片) |
-| `apply-config.json` | 运行时配置与 consents(agent 选择、模板路径、headlessApply 等),不放意图 |
+| `apply-config.json` | 运行时配置与 consents(模板路径、headlessApply、autoRegister 等),不放意图 |
 | `instructions.md` | 自由文本覆盖层,**优先级最高**;`## never-apply` 是结构化区块 + 自由散文共存的样板,hunt.mjs 机械解析 |
 
 (历史:偏好曾散在 3 个文件、2 个收集点 —— Discover 首开才问工作类型、
@@ -128,16 +127,16 @@ flowchart TB
   E --> F[③ Apply · 操作模块填表 · 停在提交前]
   F --> G{用户 Confirm ⛔ 唯一提交门}
   G -->|SUBMITTED| H[④ Track · applied → interviewing → offer]
-  G -->|FAILED| I[needsFallback · 升级 tier / 人工]
+  G -->|FAILED| I[needsFallback · 转人工]
 ```
 
-对照到实际使用(Claude Code 斜杠命令;Codex 为 `$` 前缀同名):
+对照到实际使用(Claude Code 斜杠命令):
 
 | 流程步骤 | 命令 / 入口 | 说明 |
 |---|---|---|
 | 一次性上线 | `/setup` | 数据家目录选择 → profile → 偏好 → 运行时/consents → verified 池 → 标准指令 |
 | 建 bullet 池(Module 1) | `/experience <repo url>` + `/repo-bullets` | repo 证据 → JD-free bullets → 人审入 profile;非 repo 材料走 `/profile` Supplement 或 console「＋ Add with AI」 |
-| ①→② 一轮循环 | `/start`(循环用 `/loop 30m /start` 或 Codex 定时任务) | 拉源→去重→过滤→JD→匹配→渲染,产物进 Review |
+| ①→② 一轮循环 | `/start`(循环用 `/loop 30m /start`) | 拉源→去重→过滤→JD→匹配→渲染,产物进 Review |
 | 审批 | console Review tab(端口 4517) | 反馈重渲 ↺ 或 approve;全 approved 一键 ZIP |
 | ③ 投递 | `/apply <url>` 或 console 一键 Apply | 填完一切、停在提交前;Confirm 后 resume 同一 session 提交 |
 | ④ 追踪 | console Board 看板 | 拖拽即状态机迁移,档案在卡片详情 |
@@ -145,7 +144,7 @@ flowchart TB
 ## 两个状态机
 
 左:campaign 简历生产(只产出、不提交);右:apply 投递(**唯一提交门在
-用户 Confirm**,两个运行时共用同一 `COFORCE_STATUS` 哨兵协议,契约全文
+用户 Confirm**,操作模块用 `COFORCE_STATUS` 哨兵协议汇报,契约全文
 见 [docs/OPERATOR.md](OPERATOR.md))。
 
 ```mermaid
@@ -172,7 +171,7 @@ stateDiagram-v2
   awaiting_confirm --> submitting: 用户 Confirm ⛔ 唯一提交门(resume 同一 session)
   submitting --> submitted: SUBMITTED → tracker 标 applied
   submitting --> failed: 提交失败
-  failed --> [*]: needsFallback(升级 tier / 转人工)
+  failed --> [*]: needsFallback(转人工)
   submitted --> [*]
 ```
 
@@ -184,11 +183,14 @@ stateDiagram-v2
    带 version;skill 剧本对 schema 编程,绝不 import 另一个 skill 的代码
    (board.mjs 作为外围胶水例外)。
 2. **操作模块是显式契约插槽**,不是散文约定:输入、`COFORCE_STATUS` 事件、
-   确认门铁律、成本阶梯(T1 脚本 → T2 browser-use → 小模型)全部在
-   [OPERATOR.md](OPERATOR.md);`needsFallback` 语义 = 升一档重试。
+   确认门铁律全部在 [OPERATOR.md](OPERATOR.md)。当前只有一个操作模块
+   (agent browser-use);`needsFallback` 语义 = 操作模块放弃、转人工。
+   (曾经有个扩展脚本填表当免费 T1,已删:agent 能覆盖同样的页面,维护
+   第二套实现比它省下的 LLM 调用更贵。想换回便宜实现,照 OPERATOR.md 接。)
 3. **运行时收敛在一个 adapter**(`tracker/scripts/agent-runner.mjs`):
-   codex JSONL / claude 行日志 → 归一化事件,状态机只消费归一化事件;
-   加第三个运行时 = 只写一个 adapter。
+   CLI 输出 → 归一化 `COFORCE_STATUS` 事件,状态机只消费归一化事件、
+   不含任何 per-runtime 分支。当前实现只有 Claude Code(codex 分支已删,
+   见该文件的 `TODO(codex)`);加回一个运行时 = 只动 `agentRun`/`parseLine`。
 4. **唯一提交门是用户 Confirm**。任何模式(headless、auto-approve)都
    不得移除;`requireResumeReview: false` 只免简历审批,不免提交确认。
 5. **两个操作面并行、不分层级**;新能力先落共享能力层,再决定暴露到
@@ -196,7 +198,7 @@ stateDiagram-v2
 6. **两模块简历管线**:Module 1 生成(JD-free、人审入池),Module 2 严格
    verbatim 选池(出池 id 结构性拒绝);改写必须回到 Module 1 的审核门。
 7. **harness 是契约守卫**(`npm run harness`,CI 同款):决定性、无外网、
-   双运行时覆盖 —— 动契约必须先让 harness 表达出来。
+   覆盖投递生命周期 —— 动契约必须先让 harness 表达出来。
 
 (当年评审提出的 6 项优化 —— 操作契约成文、数据契约版本化、adapter 收敛、
 board.mjs 拆分 + P0 安全、CI、合后小修 —— 已全部落地;代码级 review 明细

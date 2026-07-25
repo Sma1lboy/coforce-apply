@@ -4,7 +4,8 @@ Skill-first job application agent. **The canonical product is the shared skill
 set under `.agents/skills/`; `.claude/skills` is a project-local compatibility
 symlink to that same tree. Clone the repository and run Claude Code from the
 checkout—no global skill installation is required.** The repo also contains
-the harness and optional Chrome extension.
+the harness. `AGENTS.md` is a symlink to this file — one set of rules, two
+names, no drift.
 
 - User data home: `~/.coforce/` by default — profile.json (schema canonical
   in the `profile` skill), applications.json, instructions.md,
@@ -34,10 +35,11 @@ the harness and optional Chrome extension.
   JD and strictly SELECTS verbatim bullets from that pool (`campaign.mjs
   pool`/`select`, out-of-pool ids rejected); rewording always goes back
   through Module 1's review gate.
-- Onboarding: `setup` skill; operating cycle: `start` skill. The
-  form-filling/submission modules (extension tier-1, agent browser-use) all
-  implement `docs/OPERATOR.md` — the operator contract (inputs, COFORCE_STATUS
-  events, confirmation-gate iron laws, cost-ladder escalation).
+- Onboarding: `setup` skill; operating cycle: `start` skill. Submission runs
+  through the `apply` skill, the one operator, against `docs/OPERATOR.md` —
+  the operator contract (inputs, COFORCE_STATUS events, confirmation-gate
+  iron laws). Claude Code is the only implemented runtime; the console spawns
+  it via `tracker/scripts/agent-runner.mjs`, the single adapter seam.
 ## Skill routing
 
 When a request matches a CoForce workflow, the FIRST action is invoking the
@@ -55,15 +57,14 @@ stay in sync with it:
 - one specific JD -> one resume -> `tailor`
 - submit an application URL -> `apply`
 - application statuses / board / archives -> `tracker`
-- record/test a skill's conversation -> `skill-story`
 - vague job-hunt intent, "where do I start", "what next" -> `coforce` (routes by pipeline state)
 
 - Brand theme: kobe "Hallmark" tokens (`/Users/jacksonc/i/kobe/packages/
   kobe-landing/tokens.css`) — terracotta on warm dark, Space Grotesk +
   JetBrains Mono. Board and any UI follow it.
-- Extension (tier-1 form-fill, `src/`): `yarn build:chrome`; dev
-  `yarn dev:chrome`. Mock E2E: `yarn harness` (fixtures in `harness/`).
+- Mock E2E: `npm run harness` (fixtures in `harness/`). The repo has no
+  npm dependencies — every script runs on Node builtins; the console
+  (`tracker/web/`) carries its own.
 - Architecture & design invariants: `docs/ARCHITECTURE.md` (living mermaid
   doc — edit incrementally, never redraw; review-round history on the share
-  server series `coforce-arch`). Roadmap: `docs/ROADMAP.md`; CoForce merge
-  plan: `docs/MIGRATION.md`.
+  server series `coforce-arch`). CoForce merge plan: `docs/MIGRATION.md`.

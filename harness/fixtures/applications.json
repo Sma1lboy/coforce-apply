@@ -35,7 +35,7 @@
     "company": "Globex",
     "history": [
       { "date": "2026-07-17T08:00:00.000Z", "event": "tracked from JD page" },
-      { "date": "2026-07-17T08:05:00.000Z", "event": "tier-1 autofill failed: 0 filled, 3 required unfilled" },
+      { "date": "2026-07-17T08:05:00.000Z", "event": "agent apply failed: required sponsorship question unanswerable" },
       { "date": "2026-07-17T08:05:30.000Z", "event": "handed to agent fallback (command copied)" }
     ]
   },
@@ -51,8 +51,8 @@
     "notes": "Onsite scheduled 2026-07-24",
     "history": [
       { "date": "2026-07-10T12:00:00.000Z", "event": "tracked from JD page" },
-      { "date": "2026-07-10T12:20:00.000Z", "event": "tier-1 autofill: 7/8 fields" },
-      { "date": "2026-07-10T12:25:00.000Z", "event": "status: pending → applied (extension)" },
+      { "date": "2026-07-10T12:20:00.000Z", "event": "agent filled 7/8 fields, stopped before submit" },
+      { "date": "2026-07-10T12:25:00.000Z", "event": "status: pending → applied (confirmed in console)" },
       { "date": "2026-07-19T16:00:00.000Z", "event": "status: applied → interviewing — recruiter email" }
     ]
   },

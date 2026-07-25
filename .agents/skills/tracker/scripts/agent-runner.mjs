@@ -1,32 +1,29 @@
-// agent-runner.mjs — the console's one adapter onto the local agent CLIs
-// (Codex / Claude). Per-runtime differences live ONLY in agentRun (spawn args)
-// and parseLine (stdout → normalized COFORCE_STATUS marks). Everything else —
-// line buffering, per-run mark segments, the job state machine, the silence
-// watchdog — is shared, so adding a third runtime is one adapter entry, not
-// another status branch.
+// agent-runner.mjs — the console's adapter onto the local agent CLI.
+//
+// Claude Code is the only implemented runtime. Everything runtime-specific is
+// confined to two functions: agentRun (spawn args) and parseLine (stdout →
+// normalized COFORCE_STATUS marks). Everything else — line buffering, per-run
+// mark segments, the job state machine, the silence watchdog — is runtime-
+// neutral and consumes only normalized marks.
+//
+// TODO(codex): Codex support was removed (see git history for the `codex exec
+// --json` spawn args and the JSONL thread-event parser). Re-adding a runtime
+// means an entry in these two functions plus a runtime field on the job — the
+// state machine below must stay branch-free.
 import { appendFileSync } from 'node:fs';
 import { execFileSync, spawn } from 'node:child_process';
 
 const APPLY_STATUS_RE = /COFORCE_STATUS:\s*(READY_TO_SUBMIT|SUBMITTED|FAILED)/g;
 
-export function selectedAgent(config = null) {
-  const requested = process.env.COFORCE_AGENT || config?.agent;
-  if (requested === 'codex' || requested === 'claude') return requested;
-  if (process.env.COFORCE_CODEX_BIN) return 'codex';
-  if (process.env.COFORCE_CLAUDE_BIN) return 'claude';
-  if (process.env.CODEX_THREAD_ID || process.env.CODEX_CI) return 'codex';
-  if (process.env.CLAUDECODE || process.env.CLAUDE_CODE_ENTRYPOINT) return 'claude';
-  // Preserve existing installations; Codex setup writes agent: "codex".
-  return 'claude';
-}
+export const AGENT_LABEL = 'Claude';
 
-export const agentLabel = agent => (agent === 'codex' ? 'Codex' : 'Claude');
+const claudeBin = () => process.env.COFORCE_CLAUDE_BIN || 'claude';
 
 const CONFIRM_APPLY_PROMPT =
   'User confirmed in the CoForce console — continue in the same Chrome-backed application session and submit the application now. After the submission is verifiably in, print exactly "COFORCE_STATUS: SUBMITTED" and update ~/.coforce/applications.json (status applied + history event). If submission fails print "COFORCE_STATUS: FAILED" plus the reason.';
 
-const headlessApplyPrompt = (agent, url) =>
-  `${agent === 'codex' ? '$apply' : '/apply'} ${url}\n\nBACKGROUND MODE: no interactive terminal user is attached. The apply skill must initialize the configured Chrome integration itself and follow its background protocol exactly: read ~/.coforce data, complete the entire application (registering an ATS account only if apply-config consents), but STOP BEFORE the final submit. Then print exactly "COFORCE_STATUS: READY_TO_SUBMIT" followed by a short summary of what was filled. If you hit an unrecoverable blocker (captcha, missing required info, or unavailable Chrome integration), print "COFORCE_STATUS: FAILED" plus the reason. Never submit in this run.`;
+const headlessApplyPrompt = url =>
+  `/apply ${url}\n\nBACKGROUND MODE: no interactive terminal user is attached. The apply skill must initialize the configured Chrome integration itself and follow its background protocol exactly: read ~/.coforce data, complete the entire application (registering an ATS account only if apply-config consents), but STOP BEFORE the final submit. Then print exactly "COFORCE_STATUS: READY_TO_SUBMIT" followed by a short summary of what was filled. If you hit an unrecoverable blocker (captcha, missing required info, or unavailable Chrome integration), print "COFORCE_STATUS: FAILED" plus the reason. Never submit in this run.`;
 
 const IMPORT_PROMPT = `Parse the resume text from stdin into a JSON object with exactly this shape (all fields optional, omit anything absent):
 {"name","title","email","phone","location","linkedin","github","website","summary","skills":[string],"education":[{"institution","degree","date","location"}],"experience":[{"company","title","date","location","description":[{"text"}]}],"projects":[{"name","technologies","dateRange","description":[{"text"}]}],"customSections":[{"title","entries":[{"heading","subheading","date","description":[{"text"}]}]}]}
@@ -43,69 +40,25 @@ Rules:
 - Put anything you could NOT determine (missing date, missing metric worth asking the user for) into "notes" as one short sentence.
 Output ONLY the JSON object, no markdown fences, no commentary.`;
 
-function agentRun(agent, mode, job, dataDir) {
-  if (agent === 'codex') {
-    const bin = process.env.COFORCE_CODEX_BIN || 'codex';
-    if (mode === 'start') {
-      return {
-        bin,
-        args: [
-          'exec', '--json', '--sandbox', 'danger-full-access',
-          '--skip-git-repo-check', '-C', dataDir,
-          headlessApplyPrompt('codex', job.url),
-        ],
-      };
-    }
-    return {
-      bin,
-      args: [
-        'exec', 'resume', '--json', '--skip-git-repo-check',
-        job.sessionId, CONFIRM_APPLY_PROMPT,
-      ],
-    };
-  }
-
-  const bin = process.env.COFORCE_CLAUDE_BIN || 'claude';
+function agentRun(mode, job) {
   return mode === 'start'
-    ? {
-        bin,
-        args: [
-          '--chrome', '-p', '--session-id', job.sessionId,
-          '--dangerously-skip-permissions', headlessApplyPrompt('claude', job.url),
-        ],
-      }
-    : {
-        bin,
-        args: [
-          '--chrome', '-p', '--resume', job.sessionId,
-          '--dangerously-skip-permissions', CONFIRM_APPLY_PROMPT,
-        ],
-      };
+    ? [
+        '--chrome', '-p', '--session-id', job.sessionId,
+        '--dangerously-skip-permissions', headlessApplyPrompt(job.url),
+      ]
+    : [
+        '--chrome', '-p', '--resume', job.sessionId,
+        '--dangerously-skip-permissions', CONFIRM_APPLY_PROMPT,
+      ];
 }
 
-// stdout → normalized marks. Codex speaks JSONL thread events; Claude prints
-// the sentinels straight into its transcript output.
+// stdout → normalized marks. Claude prints the sentinels straight into its
+// transcript output.
 function parseLine(job, line) {
-  if (job.agent === 'codex') {
-    try {
-      const event = JSON.parse(line);
-      if (event.type === 'thread.started' && event.thread_id) {
-        job.sessionId = event.thread_id;
-      }
-      if (event.type === 'item.completed' && event.item?.type === 'agent_message') {
-        for (const m of String(event.item.text || '').matchAll(APPLY_STATUS_RE)) {
-          job.statusMarks.push(m[1]);
-        }
-      }
-    } catch {
-      // non-JSONL noise stays in the log only
-    }
-    return;
-  }
   for (const m of line.matchAll(APPLY_STATUS_RE)) job.statusMarks.push(m[1]);
 }
 
-// sentinels/JSONL can split across chunk boundaries — buffer to whole lines
+// sentinels can split across chunk boundaries — buffer to whole lines
 function feed(job, chunk, flush = false) {
   job.stdoutBuffer = `${job.stdoutBuffer || ''}${chunk}`;
   const lines = job.stdoutBuffer.split('\n');
@@ -114,13 +67,12 @@ function feed(job, chunk, flush = false) {
 }
 
 export function spawnAgent(job, mode, extraLog, dataDir) {
-  const { bin, args } = agentRun(job.agent, mode, job, dataDir);
   // fresh mark segment for EVERY spawn — a confirm/retry run must never be
   // judged by sentinels from the previous run
   job.statusMarks = [];
   job.stdoutBuffer = '';
   appendFileSync(job.logPath, extraLog);
-  const child = spawn(bin, args, {
+  const child = spawn(claudeBin(), agentRun(mode, job), {
     cwd: dataDir,
     stdio: ['ignore', 'pipe', 'pipe'],
   });
@@ -135,19 +87,19 @@ export function spawnAgent(job, mode, extraLog, dataDir) {
     if (job.stdoutBuffer) feed(job, '\n', true);
     job.exited = true;
     job.confirming = false;
-    append(`\n[${job.agent} exited ${code}]\n`);
+    append(`\n[${AGENT_LABEL} exited ${code}]\n`);
   });
   child.on('error', err => {
     clearTimeout(job.watchdog);
     job.exited = true;
     job.confirming = false;
-    append(`\n[${job.agent} failed to start: ${err.message}]\n`);
+    append(`\n[${AGENT_LABEL} failed to start: ${err.message}]\n`);
   });
   // watchdog: a silently hung agent must not pin the job in running/confirming forever
   clearTimeout(job.watchdog);
   job.watchdog = setTimeout(() => {
     if (!job.exited) {
-      append(`\n[watchdog: ${job.agent} produced no exit for 15 min — killing run]\n`);
+      append(`\n[watchdog: ${AGENT_LABEL} produced no exit for 15 min — killing run]\n`);
       child.kill();
     }
   }, 15 * 60_000);
@@ -167,14 +119,8 @@ export function applyJobStatus(job) {
   return 'running';
 }
 
-function runAgentPrompt(agent, prompt, input, dataDir) {
-  const bin = agent === 'codex'
-    ? process.env.COFORCE_CODEX_BIN || 'codex'
-    : process.env.COFORCE_CLAUDE_BIN || 'claude';
-  const args = agent === 'codex'
-    ? ['exec', '--ephemeral', '--skip-git-repo-check', '-C', dataDir, prompt]
-    : ['-p', prompt];
-  return execFileSync(bin, args, {
+function runAgentPrompt(prompt, input, dataDir) {
+  return execFileSync(claudeBin(), ['-p', prompt], {
     cwd: dataDir,
     input,
     encoding: 'utf8',
@@ -183,10 +129,10 @@ function runAgentPrompt(agent, prompt, input, dataDir) {
   });
 }
 
-export function runAgentImport(agent, text, dataDir) {
-  return runAgentPrompt(agent, IMPORT_PROMPT, text, dataDir);
+export function runAgentImport(text, dataDir) {
+  return runAgentPrompt(IMPORT_PROMPT, text, dataDir);
 }
 
-export function runAgentAdd(agent, material, profile, dataDir) {
-  return runAgentPrompt(agent, ADD_PROMPT, JSON.stringify({ profile, material }), dataDir);
+export function runAgentAdd(material, profile, dataDir) {
+  return runAgentPrompt(ADD_PROMPT, JSON.stringify({ profile, material }), dataDir);
 }

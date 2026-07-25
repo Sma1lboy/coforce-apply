@@ -37,11 +37,10 @@ import {
 } from '../../campaign/scripts/campaign-lib.mjs';
 import { experienceView } from '../../experience/scripts/experience-lib.mjs';
 import {
-  agentLabel,
+  AGENT_LABEL,
   applyJobStatus,
   runAgentAdd,
   runAgentImport,
-  selectedAgent,
   spawnAgent,
 } from './agent-runner.mjs';
 import { renderBoard } from './legacy-render.mjs';
@@ -83,8 +82,7 @@ const [
 ] = positional;
 
 // --- background Chrome apply job runner ---------------------------------
-// POST /api/apply starts the configured local agent (Codex or Claude) in the
-// background. The skill's background protocol stops BEFORE the final submit and
+// POST /api/apply starts Claude Code in the background. The skill's background protocol stops BEFORE the final submit and
 // prints COFORCE_STATUS: READY_TO_SUBMIT. The user confirms in the console
 // dialog → POST .../confirm resumes the same session to submit. Gated on the
 // user's standing consent (`headlessApply` in apply-config.json, retained for
@@ -114,13 +112,12 @@ const prefsPath = join(dataDir, 'preferences.json');
 
 // everything the legacy page needs, gathered here so legacy-render stays pure
 const renderCtx = () => {
-  const runtime = selectedAgent(readJsonSafe(join(dataDir, 'apply-config.json')));
   return {
     profile: loadProfile(),
     instructions: readText(instructionsPath),
     prefs: readJsonSafe(prefsPath),
-    runtime,
-    runtimeLabel: agentLabel(runtime),
+    runtime: 'claude',
+    runtimeLabel: AGENT_LABEL,
     filesRoot,
     instructionsPath,
     serve,
@@ -253,7 +250,7 @@ if (serve) {
           globalFiles: listFiles(filesRoot),
           experience: experienceView(dataDir),
           campaign: campaignView(dataDir),
-          agent: selectedAgent(config),
+          agent: 'claude',
           applyMode: config.headlessApply ? 'headless' : 'manual',
           config: { logoDevToken: config.logoDevToken || null },
         })
@@ -438,7 +435,7 @@ if (serve) {
           const job = {
             id,
             url,
-            agent: selectedAgent(config),
+            agent: 'claude',
             sessionId: null,
             logPath: join(applyLogsDir(), `apply-${id}.log`),
           };
@@ -476,7 +473,7 @@ if (serve) {
       if (!job) { res.writeHead(404).end(); return; }
       if (!job.sessionId) {
         res.writeHead(409, { 'content-type': 'text/plain' });
-        res.end(`${agentLabel(job.agent)} session id is not available yet`);
+        res.end(`${AGENT_LABEL} session id is not available yet`);
         return;
       }
       job.confirming = true;
@@ -572,8 +569,7 @@ if (serve) {
           const { text } = JSON.parse(body);
           if (!text?.trim()) throw new Error('empty resume text');
           const config = readJsonSafe(join(dataDir, 'apply-config.json')) ?? {};
-          const agent = selectedAgent(config);
-          const out = runAgentImport(agent, text, dataDir);
+          const out = runAgentImport(text, dataDir);
           const jsonText = out.slice(out.indexOf('{'), out.lastIndexOf('}') + 1);
           const profile = JSON.parse(jsonText);
           if (!profile || typeof profile !== 'object' || Array.isArray(profile))
@@ -582,7 +578,7 @@ if (serve) {
           res.end(JSON.stringify(profile));
         } catch (err) {
           const hint = /ENOENT/.test(String(err.message))
-            ? 'configured agent CLI not found — check Settings → Agent runtime or edit ~/.coforce/apply-config.json'
+            ? 'claude CLI not found on PATH — install Claude Code, or set $COFORCE_CLAUDE_BIN'
             : err.message;
           res.writeHead(500, { 'content-type': 'text/plain' });
           res.end(String(hint));
@@ -598,10 +594,8 @@ if (serve) {
         try {
           const { text } = JSON.parse(body);
           if (!text?.trim()) throw new Error('empty material');
-          const config = readJsonSafe(join(dataDir, 'apply-config.json')) ?? {};
-          const agent = selectedAgent(config);
           const profile = readJsonSafe(profilePath) ?? {};
-          const out = runAgentAdd(agent, text, profile, dataDir);
+          const out = runAgentAdd(text, profile, dataDir);
           const jsonText = out.slice(out.indexOf('{'), out.lastIndexOf('}') + 1);
           const additions = JSON.parse(jsonText);
           if (!additions || typeof additions !== 'object' || Array.isArray(additions))
@@ -610,7 +604,7 @@ if (serve) {
           res.end(JSON.stringify(additions));
         } catch (err) {
           const hint = /ENOENT/.test(String(err.message))
-            ? 'configured agent CLI not found — check Settings → Agent runtime or edit ~/.coforce/apply-config.json'
+            ? 'claude CLI not found on PATH — install Claude Code, or set $COFORCE_CLAUDE_BIN'
             : err.message;
           res.writeHead(500, { 'content-type': 'text/plain' });
           res.end(String(hint));

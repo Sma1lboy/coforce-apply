@@ -1,6 +1,6 @@
 ---
 name: coforce
-description: CoForce Apply entry point and skill router — use when a request is about job hunting, applications, or resumes but does not clearly match one specific CoForce skill, when the user asks what CoForce can do, where to start, or what to do next ("我想找工作", "开始求职", "接下来干嘛", "怎么用这个工具", "help me get a job", "what's next", "job hunt"), or when you are unsure which CoForce skill fits. Routes to the right skill by intent, or by pipeline state when the intent is vague. Invoke as "$coforce" in Codex or "/coforce" in Claude Code.
+description: CoForce Apply entry point and skill router — use when a request is about job hunting, applications, or resumes but does not clearly match one specific CoForce skill, when the user asks what CoForce can do, where to start, or what to do next ("我想找工作", "开始求职", "接下来干嘛", "怎么用这个工具", "help me get a job", "what's next", "job hunt"), or when you are unsure which CoForce skill fits. Routes to the right skill by intent, or by pipeline state when the intent is vague. Invoke as "/coforce".
 ---
 
 # CoForce — entry point & router
@@ -27,8 +27,6 @@ hoc or improvise the workflow inline.
 | One specific JD → one tailored resume (no tracker involvement) | `tailor` |
 | Submitting an application to a posting URL | `apply` |
 | "Where are my applications", board, statuses, notes, archives | `tracker` |
-| Testing/recording a skill's conversation flow | `skill-story` |
-| JD → find/adapt a real GitHub project to fill an experience gap | `shushu-internship-tool` |
 
 ## Route by state (when the intent is vague)
 
@@ -45,8 +43,8 @@ pick the FIRST stage that is incomplete:
 5. Approved jobs not yet applied → offer `apply` per job (submit still gated
    on the user's explicit Confirm — never skip it).
 6. Everything flowing → `start` for another cycle, or `tracker` to check
-   statuses; suggest a scheduler (`/loop 30m /start` in Claude Code, a
-   scheduled task in Codex) if the user wants it recurring.
+   statuses; suggest a scheduler (`/loop 30m /start`) if the user wants it
+   recurring.
 
 State never overrides an explicit ask: if the user names a job URL, route to
 `apply`/`campaign` regardless of missing earlier stages — those skills guard

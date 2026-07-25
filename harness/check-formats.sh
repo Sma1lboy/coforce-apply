@@ -1,6 +1,6 @@
 #!/bin/sh
 # Format harness: docx reference reading + md → docx generation round-trip.
-# Run: sh harness/check-formats.sh  (or via `yarn harness`)
+# Run: sh harness/check-formats.sh  (or via `npm run harness`)
 set -e
 cd "$(dirname "$0")"
 

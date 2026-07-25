@@ -1,13 +1,13 @@
 ---
 name: experience
-description: Maintain and refresh the Tier 0 experience index for CoForce Apply — accept a pasted GitHub repository, PR, or commit URL, infer the repository and whose work should count, fetch only those authors' commits and PRs on explicit refresh, and build a compact tagged index for local JD matching. Use for "$experience <github-url>", "$experience refresh", "构建经历标签", "更新 GitHub 经历", or when the user sends a GitHub URL as experience evidence.
+description: Maintain and refresh the Tier 0 experience index for CoForce Apply — accept a pasted GitHub repository, PR, or commit URL, infer the repository and whose work should count, fetch only those authors' commits and PRs on explicit refresh, and build a compact tagged index for local JD matching. Use for "/experience <github-url>", "/experience refresh", "构建经历标签", "更新 GitHub 经历", or when the user sends a GitHub URL as experience evidence.
 ---
 
 # Experience — Tier 0 source of truth
 
 Tier 0 is the **only** CoForce layer allowed to scan GitHub. It runs once during
-setup and again only when the user explicitly asks to refresh. `$start`,
-`$campaign`, and per-JD matching must never call GitHub or refresh this index.
+setup and again only when the user explicitly asks to refresh. `/start`,
+`/campaign`, and per-JD matching must never call GitHub or refresh this index.
 
 > **Position in the two-module design:** the evidence this skill collects is
 > **Module-1 raw material** — context for generating truthful bullets
@@ -136,7 +136,8 @@ Statuses:
 ## Contract for downstream skills
 
 - Input: `~/.coforce/experience/experience-index.json` only.
-- Tier 1 may rank/rephrase evidence but cannot mutate or refresh Tier 0.
+- Downstream skills may rank/rephrase evidence but cannot mutate or refresh
+  Tier 0.
 - Every GitHub-derived claim must cite an evidence ID from the index.
 - `generatedAt` and `sourceFingerprint` must be copied into match artifacts so
   reviewers can tell exactly which Tier 0 snapshot produced a resume.

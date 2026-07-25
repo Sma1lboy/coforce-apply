@@ -17,13 +17,13 @@ sys.path.insert(
         ROOT
         / ".agents"
         / "skills"
-        / "shushu-internship-tool"
+        / "experience"
         / "scripts"
     ),
 )
 
-from shushu_internship_tool.common import write_json  # noqa: E402
-from shushu_internship_tool.github_evidence import (  # noqa: E402
+from evidence.common import write_json  # noqa: E402
+from evidence.github_evidence import (  # noqa: E402
     GitHubClient,
     build_library,
     commit_entry,
@@ -35,7 +35,7 @@ from shushu_internship_tool.github_evidence import (  # noqa: E402
     run_external_writer,
     validate_writer_output,
 )
-from shushu_internship_tool.github_sources import discover_config  # noqa: E402
+from evidence.github_sources import discover_config  # noqa: E402
 
 
 def sample_pull(

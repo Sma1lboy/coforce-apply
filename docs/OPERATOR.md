@@ -7,20 +7,19 @@ written against THIS contract — not against any particular operator — so
 operators can be swapped or stacked by cost without touching the rest of the
 system.
 
-## Operator tiers (cost ladder)
+## The shipped operator
 
-| Tier | Operator | Cost | Today |
-|------|----------|------|-------|
-| T1 | Extension scripted autofill (`src/`) | free, instant | shipped |
-| T2 | Agent browser-use (`claude --chrome` / `codex exec` + Chrome, driven by the `apply` skill) | LLM session | shipped |
-| T2.5 | Small model + fast operations | cheap LLM | planned |
-| T3 | Pure script / ATS API integration | free, per-ATS | planned |
+One: **agent browser-use** — `claude --chrome`, driven by the `apply` skill in
+the user's own visible, logged-in Chrome.
 
-**Escalation rule:** start at the cheapest tier that can handle the page.
-`needsFallback` on a tracker entry means *"retry one tier up"*, not "give up":
-T1 marks it when a required field it cannot answer appears (e.g. sponsorship),
-and the next tier picks it up. A failure at the top tier goes back to the
-human.
+A scripted form-filler used to sit below it as a free "tier 1"; it was deleted
+(see git history) because the agent handles the same pages and the second
+implementation cost more to maintain than the LLM calls it saved. The contract
+below is what a cheaper operator would have to satisfy to slot back in — the
+skills and console are written against it, not against the agent.
+
+`needsFallback` on a tracker entry means *"the operator gave up; a human has to
+take this one"*. It is a hand-back, not a retry ladder.
 
 ## Inputs
 

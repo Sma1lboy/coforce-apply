@@ -124,7 +124,7 @@ function AgentTextDialog({ open, onClose, agentName, title, blurb, placeholder, 
 
 /* ---------- main ---------- */
 export default function Profile({ state, onChanged }) {
-  const agentName = state.agent === 'codex' ? 'Codex' : 'Claude';
+  const agentName = 'Claude';
   const [p, setP] = useState(clone(state.profile));
   const [status, setStatus] = useState('');
   const [importOpen, setImportOpen] = useState(false);

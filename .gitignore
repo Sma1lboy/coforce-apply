@@ -225,6 +225,10 @@ dist/
 !.agents/skills/tracker/web/dist/
 !.agents/skills/tracker/web/dist/**
 
-# skill-story captures are local dev material — tooling is committed, data is not
+# local capture material — tooling is committed, captures are not
 harness/stories/
 .DS_Store
+
+# python bytecode
+__pycache__/
+*.pyc

@@ -61,7 +61,7 @@ for (const status of [
 }
 assert.ok(!html.includes('data-status="fallback"'), 'fallback is not a column');
 assert.ok(!html.includes('data-status="failed"'), 'failed is not a column');
-assert.ok(html.includes('needs agent fallback'), 'needsFallback flag rendered');
+assert.ok(html.includes('needs you'), 'needsFallback flag rendered');
 assert.ok(html.includes('5 tracked'), 'header count');
 assert.ok(html.includes('Senior Full-Stack Engineer — Nimbus Analytics'));
 assert.ok(html.includes('Referred by Sam; recruiter: r.lee@acme.example'));
@@ -104,7 +104,7 @@ assert.ok(!probeHtml.includes('<img src=x'), 'notes/url markup escaped');
 assert.ok(probeHtml.includes('&lt;script&gt;alert(1)'), 'escaped title rendered');
 // legacy status normalized: card renders with the fallback flag in To Apply
 assert.ok(
-  probeHtml.includes('needs agent fallback'),
+  probeHtml.includes('needs you'),
   'legacy fallback status normalized to pending + flag'
 );
 console.log('board: escaping probe + legacy migration ✓');
@@ -137,13 +137,12 @@ copyFileSync(
 );
 writeFileSync(
   join(outDir, 'apply-config.json'),
-  JSON.stringify({ headlessApply: false, agent: 'codex' })
+  JSON.stringify({ headlessApply: false })
 );
 const server = spawn(process.execPath, ['.agents/skills/tracker/scripts/board.mjs', live, '--serve', '0'], {
   cwd: root,
   env: {
     ...process.env,
-    COFORCE_CODEX_BIN: join(here, 'fixtures/agent-stub.sh'),
     COFORCE_CLAUDE_BIN: join(here, 'fixtures/agent-stub.sh'),
     COFORCE_SOURCE_FILE: join(here, 'fixtures/source-jobs.md'),
   },
@@ -177,7 +176,7 @@ try {
   const bootstrap = await (await fetch(`${base}/api/state`)).json();
   assert.equal(bootstrap.profile.name, 'John Doe', 'state bootstrap profile');
   assert.equal(bootstrap.apps.length, 5, 'state bootstrap apps');
-  assert.equal(bootstrap.agent, 'codex', 'state exposes configured/detected agent');
+  assert.equal(bootstrap.agent, 'claude', 'state exposes the runtime');
   assert.equal(bootstrap.experience.tier, 0, 'state exposes Tier 0 experience status');
   assert.ok(Array.isArray(bootstrap.globalFiles), 'state bootstrap files');
 
@@ -385,7 +384,7 @@ try {
   });
   assert.equal(denied.status, 403, 'background apply gated on consent');
 
-  writeFileSync(join(outDir, 'apply-config.json'), JSON.stringify({ headlessApply: true, agent: 'codex' }));
+  writeFileSync(join(outDir, 'apply-config.json'), JSON.stringify({ headlessApply: true }));
   const started = await fetch(`${base}/api/apply`, {
     method: 'POST',
     headers: { 'content-type': 'application/json' },
@@ -407,30 +406,6 @@ try {
 
   await fetch(`${base}/api/apply/${applyId}/confirm`, { method: 'POST' });
   await waitFor('submitted');
-  console.log('board: Codex Chrome-backed apply lifecycle ✓');
-
-  // Claude remains a supported runtime through the same adapter.
-  writeFileSync(join(outDir, 'apply-config.json'), JSON.stringify({ headlessApply: true, agent: 'claude' }));
-  const claudeStarted = await fetch(`${base}/api/apply`, {
-    method: 'POST',
-    headers: { 'content-type': 'application/json' },
-    body: JSON.stringify({ url: 'https://jobs.example.com/claude' }),
-  });
-  assert.equal(claudeStarted.status, 200, 'Claude apply started');
-  const { id: claudeApplyId } = await claudeStarted.json();
-  for (let i = 0; i < 40; i += 1) {
-    const s = await (await fetch(`${base}/api/apply/${claudeApplyId}`)).json();
-    if (s.status === 'awaiting_confirm') break;
-    if (i === 39) throw new Error('Claude apply never reached awaiting_confirm');
-    await new Promise(r => setTimeout(r, 250));
-  }
-  await fetch(`${base}/api/apply/${claudeApplyId}/confirm`, { method: 'POST' });
-  for (let i = 0; i < 40; i += 1) {
-    const s = await (await fetch(`${base}/api/apply/${claudeApplyId}`)).json();
-    if (s.status === 'submitted') break;
-    if (i === 39) throw new Error('Claude apply never reached submitted');
-    await new Promise(r => setTimeout(r, 250));
-  }
   console.log('board: Claude Chrome-backed apply lifecycle ✓');
 } finally {
   server.kill();

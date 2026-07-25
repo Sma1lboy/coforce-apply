@@ -78,7 +78,7 @@ export function renderBoard(apps, ctx) {
         <div class="card" draggable="true" data-id="${esc(a.id)}" tabindex="0">
           <div class="card-title">${esc(a.title)}</div>
           ${a.company || a.position ? `<div class="meta">${esc([a.company, a.position].filter(Boolean).join(' · '))}</div>` : ''}
-          ${a.needsFallback && a.status === 'pending' ? '<div class="flag">⚑ needs agent fallback</div>' : ''}
+          ${a.needsFallback && a.status === 'pending' ? '<div class="flag">⚑ needs you</div>' : ''}
           ${a.notes ? `<div class="notes">${esc(a.notes)}</div>` : ''}
           <div class="date">${esc((a.updatedAt || '').slice(0, 10))}</div>
         </div>`;

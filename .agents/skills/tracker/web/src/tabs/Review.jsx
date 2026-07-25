@@ -24,11 +24,11 @@ const statusFor = (value, approvalMode) => {
 };
 const experienceLabel = experience => {
   if (experience.status === 'ready') return `${experience.counts?.entries || 0} experiences · ${experience.counts?.tags || 0} tags`;
-  if (experience.status === 'profile_changed') return 'profile changed · run $experience build';
-  if (experience.status === 'evidence_changed') return 'cached evidence changed · run $experience build';
-  if (experience.status === 'sources_changed') return 'repo/author scope changed · run $experience refresh';
-  if (experience.status === 'invalid') return 'invalid index · run $experience status';
-  return 'missing · run $experience refresh';
+  if (experience.status === 'profile_changed') return 'profile changed · run /experience build';
+  if (experience.status === 'evidence_changed') return 'cached evidence changed · run /experience build';
+  if (experience.status === 'sources_changed') return 'repo/author scope changed · run /experience refresh';
+  if (experience.status === 'invalid') return 'invalid index · run /experience status';
+  return 'missing · run /experience refresh';
 };
 
 function PdfPreview({ url, zoom }) {
@@ -297,7 +297,7 @@ export default function Review({ state, onChanged }) {
           </button>
         )}
       </aside>
-      <ApplyDialog job={applying} mode={state.applyMode} agent={state.agent}
+      <ApplyDialog job={applying} mode={state.applyMode}
         onClose={() => setApplying(null)} onQueued={onChanged} />
     </div>
   );

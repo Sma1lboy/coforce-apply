@@ -1,6 +1,6 @@
 ---
 name: repo-bullets
-description: Read a git repository (local path or GitHub URL) and generate resume-ready STAR bullet points from the user's actual contributions, then optionally merge them into ~/.coforce/profile.json as a project entry. Use when the user wants resume bullets for a repo/project, e.g. "把这个 repo 写成简历上的项目", "generate bullets for X", or invokes "$repo-bullets" in Codex.
+description: Read a git repository (local path or GitHub URL) and generate resume-ready STAR bullet points from the user's actual contributions, then optionally merge them into ~/.coforce/profile.json as a project entry. Use when the user wants resume bullets for a repo/project, e.g. "把这个 repo 写成简历上的项目", "generate bullets for X", or invokes "/repo-bullets".
 ---
 
 # Repo → STAR resume bullets

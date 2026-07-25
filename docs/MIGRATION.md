@@ -1,8 +1,8 @@
 # Migration: jd-resume-fitter → CoForce
 
-Phase 4 of the [roadmap](ROADMAP.md). In-repo rebrand (name, logo, manifest,
-README) is done. The two remaining steps touch GitHub / another repo, so they are
-run by the owner, not automated:
+In-repo rebrand (name, logo, manifest, README) is done. The two remaining
+steps touch GitHub / another repo, so they are run by the owner, not
+automated:
 
 ## 1. Rename the GitHub repo ✅ (done 2026-07-20)
 

@@ -36,7 +36,7 @@ const positionalArgs = () => {
 };
 const dataDir = resolve(option('--data-dir', dataHome()));
 const paths = experiencePaths(dataDir);
-const scripts = resolve(dirname(fileURLToPath(import.meta.url)), '../../shushu-internship-tool/scripts');
+const scripts = dirname(fileURLToPath(import.meta.url));
 const python = option('--python', process.env.COFORCE_PYTHON || 'python3');
 
 const runPython = (script, args) => {
