@@ -19,8 +19,9 @@ export function seedSandbox(root) {
   copyFileSync(join(here, 'fixtures/profile.json'), join(home, 'profile.json'));
   copyFileSync(join(here, 'fixtures/instructions.md'), join(home, 'instructions.md'));
   writeFileSync(join(home, 'applications.json'), '[]\n');
-  writeFileSync(join(home, 'preferences.json'), `${JSON.stringify({
-    version: 1,
+  writeFileSync(join(home, 'config.json'), `${JSON.stringify({
+    version: 2,
+    // intent
     level: 'internship',
     directions: ['backend', 'fullstack', 'general'],
     needsSponsorship: true,
@@ -28,9 +29,7 @@ export function seedSandbox(root) {
     workMode: 'any',
     locations: ['US Remote', 'Bay Area'],
     salaryFloor: null,
-  }, null, 2)}\n`);
-  writeFileSync(join(home, 'apply-config.json'), `${JSON.stringify({
-    agent: 'claude',
+    // runtime config + consents
     email: 'sandbox@example.com',
     autoRegister: false,
     mailboxAccess: 'paste',

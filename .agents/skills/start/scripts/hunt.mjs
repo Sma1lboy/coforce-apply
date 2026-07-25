@@ -14,6 +14,8 @@
 import { readFileSync, writeFileSync, existsSync } from 'node:fs';
 import { homedir } from 'node:os';
 import { dataHome } from '../../../lib/data-home.mjs';
+import { loadConfig } from '../../../lib/config.mjs';
+import { isNeverApply, neverApplyList } from '../../../lib/never-apply.mjs';
 import { dirname, join, basename } from 'node:path';
 
 const args = process.argv.slice(2);
@@ -22,8 +24,7 @@ const flag = name => {
   return i === -1 ? undefined : args[i + 1];
 };
 const track = args.includes('--track');
-const configPath =
-  flag('config') ?? join(dataHome(), 'apply-config.json');
+const configPath = flag('config') ?? join(dataHome(), 'config.json');
 const profileDir = dirname(configPath);
 const appsPath = flag('apps') ?? join(profileDir, 'applications.json');
 const instructionsPath =
@@ -56,23 +57,13 @@ const DEFAULT_SOURCES = [
   },
 ];
 
-const config = readJson(configPath, {});
+// Only touch the settings file when we actually need its sources — loadConfig
+// migrates a legacy data home on read, and an explicit --source-file run
+// (the harness, a one-off) must never write into someone's real data home.
+const configured = sourceFiles.length ? null : loadConfig(profileDir).sources;
 const sources = sourceFiles.length
   ? sourceFiles.map(f => ({ name: basename(f), file: f }))
-  : (config.sources?.length ? config.sources : DEFAULT_SOURCES);
-
-// --- never-apply list from the "## never-apply" section of instructions.md ---
-function neverApplyList(path) {
-  if (!existsSync(path)) return [];
-  const md = readFileSync(path, 'utf8');
-  const m = md.match(/^##\s*never-apply\s*$([\s\S]*?)(?=^##\s|\n*$(?![\s\S]))/im);
-  if (!m) return [];
-  return m[1]
-    .split('\n')
-    .map(l => l.match(/^\s*[-*]\s+(.+)$/)?.[1]?.trim())
-    .filter(Boolean)
-    .map(s => s.toLowerCase());
-}
+  : (configured?.length ? configured : DEFAULT_SOURCES);
 
 // --- parse a README markdown table into {company, role, location, url} ---
 const stripCell = s =>
@@ -142,7 +133,7 @@ for (const src of sources) {
       summary.skipped.tracked += 1;
       continue;
     }
-    if (blocked.some(b => job.company.toLowerCase().includes(b))) {
+    if (isNeverApply(job.company, blocked)) {
       summary.skipped.blocked += 1;
       continue;
     }

@@ -110,8 +110,7 @@ USER_TURNS.forEach((message, index) => {
 const wrote = name => existsSync(join(sandbox, name));
 const checks = {
   profile: wrote('profile.json'),
-  preferences: wrote('preferences.json'),
-  applyConfig: wrote('apply-config.json'),
+  config: wrote('config.json'),
   instructions: wrote('instructions.md'),
 };
 console.log('sandbox state:', JSON.stringify(checks));

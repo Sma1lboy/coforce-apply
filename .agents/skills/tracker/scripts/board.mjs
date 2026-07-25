@@ -23,6 +23,8 @@ import { randomUUID } from 'node:crypto';
 import { createServer } from 'node:http';
 import { homedir } from 'node:os';
 import { dataHome } from '../../../lib/data-home.mjs';
+import { intentOf, loadConfig, saveConfig } from '../../../lib/config.mjs';
+import { isNeverApply, neverApplyFor } from '../../../lib/never-apply.mjs';
 import { dirname, extname, join, resolve, sep } from 'node:path';
 import { fileURLToPath } from 'node:url';
 import {
@@ -85,8 +87,8 @@ const [
 // POST /api/apply starts Claude Code in the background. The skill's background protocol stops BEFORE the final submit and
 // prints COFORCE_STATUS: READY_TO_SUBMIT. The user confirms in the console
 // dialog → POST .../confirm resumes the same session to submit. Gated on the
-// user's standing consent (`headlessApply` in apply-config.json, retained for
-// compatibility with existing installations).
+// user's standing consent (`headlessApply` in config.json; the property name
+// is retained for compatibility with existing installations).
 const applyJobs = new Map(); // id → {url, sessionId, logPath, child}
 
 const applyLogsDir = () => {
@@ -108,14 +110,13 @@ const dataDir = dirname(input);
 const filesRoot = join(dataDir, 'applications');
 const profilePath = join(dataDir, 'profile.json');
 const instructionsPath = join(dataDir, 'instructions.md');
-const prefsPath = join(dataDir, 'preferences.json');
 
 // everything the legacy page needs, gathered here so legacy-render stays pure
 const renderCtx = () => {
   return {
     profile: loadProfile(),
     instructions: readText(instructionsPath),
-    prefs: readJsonSafe(prefsPath),
+    prefs: intentOf(loadConfig(dataDir)),
     runtime: 'claude',
     runtimeLabel: AGENT_LABEL,
     filesRoot,
@@ -237,16 +238,14 @@ if (serve) {
         ...a,
         _files: listFiles(join(filesRoot, a.id)),
       }));
-      const config = readJsonSafe(join(dataDir, 'apply-config.json')) ?? {};
+      const config = loadConfig(dataDir);
       res.writeHead(200, { 'content-type': 'application/json' });
       res.end(
         JSON.stringify({
           apps,
           profile: loadProfile(),
           instructions: readText(instructionsPath),
-          prefs: existsSync(prefsPath)
-            ? JSON.parse(readFileSync(prefsPath, 'utf8'))
-            : null,
+          prefs: intentOf(config),
           globalFiles: listFiles(filesRoot),
           experience: experienceView(dataDir),
           campaign: campaignView(dataDir),
@@ -301,7 +300,7 @@ if (serve) {
         process.execPath,
         [
           huntScript,
-          '--config', join(dataDir, 'apply-config.json'),
+          '--config', join(dataDir, 'config.json'),
           '--apps', input,
           '--instructions', instructionsPath,
           ...extra,
@@ -322,6 +321,15 @@ if (serve) {
           if (apps.some(a => a.url === job.url)) {
             res.writeHead(409, { 'content-type': 'text/plain' });
             res.end('already tracked');
+            return;
+          }
+          // instructions.md overrides everything, on EVERY path that queues a
+          // job — not just discovery. hunt.mjs filters what it fetches; this
+          // is the console's Build-resume button, which used to walk straight
+          // past the user's never-apply list.
+          if (isNeverApply(job.company, neverApplyFor(dataDir))) {
+            res.writeHead(403, { 'content-type': 'text/plain' });
+            res.end(`${job.company} is on your never-apply list (instructions.md)`);
             return;
           }
           const now = new Date().toISOString();
@@ -423,10 +431,10 @@ if (serve) {
     if (req.url === '/api/apply' && req.method === 'POST') {
       readBody(req, res, body => {
         try {
-          const config = readJsonSafe(join(dataDir, 'apply-config.json'));
+          const config = loadConfig(dataDir);
           if (!config?.headlessApply) {
             res.writeHead(403, { 'content-type': 'text/plain' });
-            res.end('background apply not enabled — set "headlessApply": true in ~/.coforce/apply-config.json (asked during setup)');
+            res.end('background apply not enabled — set "headlessApply": true in ~/.coforce/config.json (asked during setup)');
             return;
           }
           const { url } = JSON.parse(body);
@@ -494,7 +502,7 @@ if (serve) {
     }
     if (req.url === '/api/config' && req.method === 'GET') {
       res.writeHead(200, { 'content-type': 'application/json' });
-      res.end(JSON.stringify(readJsonSafe(join(dataDir, 'apply-config.json')) ?? {}));
+      res.end(JSON.stringify(loadConfig(dataDir)));
       return;
     }
     if (req.url === '/api/config' && req.method === 'POST') {
@@ -503,8 +511,7 @@ if (serve) {
           const patch = JSON.parse(body);
           if (!patch || typeof patch !== 'object' || Array.isArray(patch))
             throw new Error('expected a JSON object');
-          const merged = { ...(readJsonSafe(join(dataDir, 'apply-config.json')) ?? {}), ...patch };
-          writeFileSync(join(dataDir, 'apply-config.json'), `${JSON.stringify(merged, null, 2)}\n`);
+          saveConfig(dataDir, patch);
           if (patch.requireResumeReview === false) applyResumeReviewPolicy(dataDir);
           res.writeHead(204).end();
         } catch (err) {
@@ -516,25 +523,16 @@ if (serve) {
     }
     if (req.url === '/api/prefs' && req.method === 'GET') {
       res.writeHead(200, { 'content-type': 'application/json' });
-      res.end(existsSync(prefsPath) ? readFileSync(prefsPath, 'utf8') : 'null');
+      res.end(JSON.stringify(intentOf(loadConfig(dataDir))));
       return;
     }
     if (req.url === '/api/prefs' && req.method === 'POST') {
       readBody(req, res, body => {
         try {
-          const prefs = JSON.parse(body);
-          if (!prefs || typeof prefs !== 'object' || Array.isArray(prefs))
-            throw new Error('expected a JSON object');
-          // preferences.json is the canonical user-intent file (schema: setup
-          // skill); the console only edits the keys it knows, so merge into
-          // whatever setup collected instead of clobbering the whole file
-          const existing = readJsonSafe(prefsPath);
-          const merged = {
-            ...(existing && typeof existing === 'object' ? existing : {}),
-            ...prefs,
-            version: 1,
-          };
-          writeFileSync(prefsPath, `${JSON.stringify(merged, null, 2)}\n`);
+          // The console only ever edits the keys it knows — a filter click
+          // posts {level, directions}. saveConfig MERGES, so the keys it does
+          // not know (visa status, work mode, salary floor) survive.
+          saveConfig(dataDir, JSON.parse(body));
           res.writeHead(204).end();
         } catch (err) {
           res.writeHead(400, { 'content-type': 'text/plain' });
@@ -568,7 +566,6 @@ if (serve) {
         try {
           const { text } = JSON.parse(body);
           if (!text?.trim()) throw new Error('empty resume text');
-          const config = readJsonSafe(join(dataDir, 'apply-config.json')) ?? {};
           const out = runAgentImport(text, dataDir);
           const jsonText = out.slice(out.indexOf('{'), out.lastIndexOf('}') + 1);
           const profile = JSON.parse(jsonText);
@@ -614,6 +611,14 @@ if (serve) {
     }
     if (req.url === '/api/instructions' && req.method === 'POST') {
       readBody(req, res, body => {
+        // whole-file replace is right for a textarea, but an empty body is
+        // never a legitimate save — it would silently truncate the user's
+        // standing rules and never-apply list
+        if (!body.trim()) {
+          res.writeHead(400, { 'content-type': 'text/plain' });
+          res.end('refusing to save empty instructions — delete the file by hand if you mean it');
+          return;
+        }
         writeFileSync(instructionsPath, body);
         res.writeHead(204).end();
       });

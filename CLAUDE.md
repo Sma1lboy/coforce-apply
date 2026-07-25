@@ -8,8 +8,12 @@ the harness. `AGENTS.md` is a symlink to this file — one set of rules, two
 names, no drift.
 
 - User data home: `~/.coforce/` by default — profile.json (schema canonical
-  in the `profile` skill), applications.json, instructions.md,
-  apply-config.json, accounts.json, applications/<id>/ archives, out/.
+  in the `profile` skill), config.json (intent + runtime config + consents,
+  one flat object, `.agents/lib/config.mjs`; it replaced the overlapping
+  preferences.json + apply-config.json pair and migrates them on first read),
+  instructions.md, applications.json, accounts.json, campaigns/,
+  applications/<id>/ archives. `experience/` and `out/` are regenerable
+  caches, not contract files.
   Resolution rule (shared via `.agents/lib/data-home.mjs`): `$COFORCE_HOME`
   env -> `<checkout>/.coforce/` if present (private-fork mode — user's PRIVATE
   fork syncs data in-repo; setup verifies privacy first) -> `~/.coforce`.
@@ -35,6 +39,12 @@ names, no drift.
   JD and strictly SELECTS verbatim bullets from that pool (`campaign.mjs
   pool`/`select`, out-of-pool ids rejected); rewording always goes back
   through Module 1's review gate.
+  **Bullet ids are content hashes** — `sha256(text)[:8]`, computed at read
+  time (`campaign-lib.mjs`) and then persisted as `evidenceIds` in the
+  campaign manifest. So a bullet's id is stable only while its text is
+  byte-identical: never reformat, trim, re-wrap, or unicode-normalize
+  `description[].text` in profile.json. Doing so silently detaches every
+  already-matched job ("outside the verified pool").
 - Onboarding: `setup` skill; operating cycle: `start` skill. Submission runs
   through the `apply` skill, the one operator, against `docs/OPERATOR.md` —
   the operator contract (inputs, COFORCE_STATUS events, confirmation-gate

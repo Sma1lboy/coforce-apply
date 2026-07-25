@@ -1,13 +1,14 @@
 ---
 name: start
-description: Run one discover→resume-campaign cycle — fetch job sources, diff against the tracker, hydrate full JDs, select verbatim bullets from the verified pool in profile.json, render tailored PDFs, and refresh the Review console. Use for "开始", "跑一轮", "$start" in Codex, or "/start" in Claude Code; use the host's scheduled-task capability for recurring runs.
+description: Run one discover→resume-campaign cycle — fetch job sources, diff against the tracker, hydrate full JDs, select verbatim bullets from the verified pool in profile.json, render tailored PDFs, and refresh the Review console. Use for "开始", "跑一轮", or "/start"; use `/loop 30m /start` for recurring runs.
 ---
 
 # Start — one discover→resume-review cycle
 
-Setup must exist (`~/.coforce/apply-config.json`); missing → run the `setup`
-skill first. **Read `~/.coforce/instructions.md` before anything else** — it
-overrides every default below.
+Setup must exist (`~/.coforce/config.json`, or a legacy
+`apply-config.json`/`preferences.json` pair — those migrate on first read);
+missing → run the `setup` skill first. **Read `~/.coforce/instructions.md`
+before anything else** — it overrides every default below.
 
 The console's **Discover** tab is the interactive twin of discovery: postings
 queued there become pending tracker entries and campaign dossiers. Treat them as
@@ -24,8 +25,8 @@ first in line for resume generation.
    company+role match — never double-apply) and every `never-apply` company,
    tracks the rest as `pending` with a discovery history event. Report the
    summary (new / already-tracked / blocked).
-2. **Filter for fit**: read `~/.coforce/preferences.json` (canonical user
-   intent — level, directions, `needsSponsorship`, `workMode`, `locations`,
+2. **Filter for fit**: read `~/.coforce/config.json` (canonical user intent —
+   level, directions, `needsSponsorship`, `workMode`, `locations`,
    `salaryFloor`; schema in the setup skill) plus `instructions.md`. From the
    new `pending` entries, drop ones that clearly contradict either (wrong
    level, no-sponsorship posting when `needsSponsorship` is true, onsite-only
@@ -49,9 +50,8 @@ first in line for resume generation.
 
 ## Recurring
 
-Offer recurring execution once. In Codex, use its scheduled-task capability if
-available; otherwise tell the user to run `$start` again. In Claude Code, offer
-`/loop 30m /start`. Respect a `cadence` note in instructions.md if present.
+Offer recurring execution once: `/loop 30m /start`. Respect a `cadence` note in
+instructions.md if present.
 
 ## Rules
 

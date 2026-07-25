@@ -97,21 +97,34 @@ flowchart TB
 
 ## 用户意图(preferences)的收集设计
 
-意图**一次声明、处处生效**:setup 阶段 2 一批收齐,写入 canonical 的
-`preferences.json`(带 `version`)—— 工作类型与方向、
-needsSponsorship/workAuthorization、workMode、workDays、地点、薪资底线。
-下游 hunt(H1B 选源过滤)、campaign(JD 匹配)、apply(筛选题作答,铁律:
+意图**一次声明、处处生效**:setup 一批收齐,写入 `config.json`
+(扁平一层,带 `version: 2`)—— 工作类型与方向、
+needsSponsorship/workAuthorization、workMode、地点、薪资底线,以及运行时
+配置与 consents(模板路径、headlessApply、autoRegister、job sources)。
+下游 hunt(选源过滤)、campaign(JD 匹配)、apply(筛选题作答,铁律:
 绝不编造)统一读它。分工:
 
 | 文件 | 角色 |
 |---|---|
-| `preferences.json` | canonical 用户意图 schema(唯一收集点:setup;console 的 Discover 向导 / Settings 只是编辑切片) |
-| `apply-config.json` | 运行时配置与 consents(模板路径、headlessApply、autoRegister 等),不放意图 |
-| `instructions.md` | 自由文本覆盖层,**优先级最高**;`## never-apply` 是结构化区块 + 自由散文共存的样板,hunt.mjs 机械解析 |
+| `config.json` | 用户设置的唯一文件:意图 + 运行时配置 + consents。唯一收集点是 setup;console 的 Discover 向导 / Settings 只是编辑切片,写入永远是 **merge 不是 replace**(见下) |
+| `instructions.md` | 自由文本覆盖层,**优先级最高**;`## never-apply` 是结构化区块 + 自由散文共存的样板,`.agents/lib/never-apply.mjs` 机械解析 |
 
-(历史:偏好曾散在 3 个文件、2 个收集点 —— Discover 首开才问工作类型、
-work day 无字段。升格 preferences.json 后收敛为上表,评审 round 4 的
-盘点表见 share 系列。)
+三条硬约束,改这块前先看:
+
+1. **写入必须 merge**。console 的筛选点一下只发 `{level, directions}` 两个键;
+   若写成 replace,一次「Reset filters」就抹掉用户的签证状态。`saveConfig`
+   只做 merge,`check-config.mjs` 钉住这条。
+2. **"没设置过"必须仍然可检测**。`loadConfig` 对一个从没 setup 过的数据家
+   目录返回 `{}` 且**不写文件**;console 的欢迎向导靠 intent 切片为 null
+   触发(判据是 `level` 未设,不是"文件不存在")。
+3. **旧装机零操作迁移**。首次读到 legacy 的 `preferences.json` +
+   `apply-config.json` 时就地合成 config.json,旧文件留在盘上不删;
+   重叠键 preferences 胜(它本来就是 canonical 的那个)。
+
+(历史:意图曾散在 3 个文件、2 个收集点;升格 `preferences.json` 收敛过一次,
+但它与 `apply-config.json` 仍然重叠 —— `needsSponsorship` 两边都有、文档说
+已迁移而真实数据没迁,`workDays` 收集了却零消费者。合并为 config.json 时
+`workDays` 与 `agent` 一并删除。)
 
 ## 端到端流程
 

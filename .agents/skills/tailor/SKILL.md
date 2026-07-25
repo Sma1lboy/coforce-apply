@@ -1,6 +1,6 @@
 ---
 name: tailor
-description: Generate a tailored resume for a specific job description from the user's local profile — reads the JD (URL, file, or pasted text), selects and reorders the most relevant experience/projects/skills, and emits the resume as LaTeX/PDF or Word (.docx), optionally following a user-provided template or reference resume. Use for "给这个 JD 出一份简历", "tailor my resume for X", "$tailor <jd>" in Codex, or "/tailor <jd>" in Claude Code.
+description: Generate a tailored resume for a specific job description from the user's local profile — reads the JD (URL, file, or pasted text), selects and reorders the most relevant experience/projects/skills, and emits the resume as LaTeX/PDF or Word (.docx), optionally following a user-provided template or reference resume. Use for "给这个 JD 出一份简历", "tailor my resume for X", or "/tailor <jd>".
 ---
 
 # Tailor — JD → resume
@@ -13,10 +13,10 @@ Profile source: `~/.coforce/profile.json` (fall back to asking the user to run t
 `profile` skill if missing).
 
 When invoked by the `campaign` skill for a campaign job ID, the campaign
-contract wins: read that job's saved JD/match/feedback, use the configured
-`latexTemplate`, write `resume.tex` and `resume.pdf` into that job's existing
-campaign folder, and leave approval to the Review tab. Do not also write a
-duplicate resume under `~/.coforce/out/`.
+contract wins: read that job's saved JD/match/feedback, use the
+`latexTemplate` from `~/.coforce/config.json`, write `resume.tex` and
+`resume.pdf` into that job's existing campaign folder, and leave approval to
+the Review tab. Do not also write a duplicate resume under `~/.coforce/out/`.
 
 ## Template / reference resolution (first match wins)
 

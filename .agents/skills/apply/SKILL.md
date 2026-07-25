@@ -1,22 +1,22 @@
 ---
 name: apply
-description: Tier-2 fallback for job applications — given a job posting URL, complete and submit the application form via browser automation using the user's ~/.coforce/profile.json and resume PDF. Invoke as "$apply <url>" in Codex or "/apply <url>" in Claude Code, typically copied from the extension's agent-fallback button when scripted auto-fill failed or stalled.
+description: Complete and submit a job application — given a job posting URL, fill the form via browser automation using the user's ~/.coforce/profile.json and resume PDF, stopping before the final submit for explicit confirmation. Invoke as "/apply <url>", or from the console's Apply button.
 ---
 
-# Apply — Chrome-backed job application (Tier 2 fallback)
+# Apply — Chrome-backed job application
 
-Input: a job posting / application URL (from args). This skill exists because
-Tier 1 (the extension's scripted form-fill) failed on this page — expect a
-non-trivial form: multi-step wizard, custom widgets, an ATS (Workday,
-Greenhouse, Lever, Ashby…), or login walls.
+Input: a job posting / application URL (from args). Expect a non-trivial form:
+multi-step wizard, custom widgets, an ATS (Workday, Greenhouse, Lever,
+Ashby…), or login walls.
 
-## Setup (first run, answers persist in ~/.coforce/apply-config.json)
+## Setup (first run, answers persist in ~/.coforce/config.json)
 
-Before the first application, ask ONCE and save to `~/.coforce/apply-config.json`:
+Before the first application, ask ONCE and merge these keys into the flat
+`~/.coforce/config.json` (setup owns the rest of that file — never overwrite
+it with just these):
 
 ```json
 {
-  "agent": "codex | claude",        // local agent used by the console
   "email": "user@gmail.com",          // account email for ATS registrations
   "autoRegister": true,               // may I create ATS accounts for you?
   "mailboxAccess": "browser | paste", // how to fetch verification codes
@@ -25,15 +25,9 @@ Before the first application, ask ONCE and save to `~/.coforce/apply-config.json
 }
 ```
 
-Work authorization / sponsorship answers live in the canonical
-`~/.coforce/preferences.json` (`workAuthorization`, `needsSponsorship`,
-schema in the setup skill) — read them from there; fall back to the same
-keys in apply-config.json only for installs set up before preferences.json
-existed.
-
 Subsequent runs read this file and only ask about gaps.
 
-This skill is the **T2 operator** in the operator contract
+This skill is the **operator** in the operator contract
 (`docs/OPERATOR.md` in the CoForce repo): inputs are job + profile + resume +
 intent, progress is reported as `COFORCE_STATUS` sentinels, and the iron laws
 (never cross the confirmation gate, never fabricate screening answers,
@@ -46,21 +40,19 @@ instructions.md overrides everything) bind every run.
    company means stop and tell the user, not apply anyway.
 1. Read `~/.coforce/profile.json`. Missing → run the `profile` skill's init
    first; don't guess values.
-2. Read `~/.coforce/preferences.json` — canonical user intent (sponsorship,
-   work mode, locations). Screening answers about visa/sponsorship come from
-   here, never invented.
-3. Read `~/.coforce/apply-config.json`; missing → run Setup above. Batch any
+2. Read `~/.coforce/config.json` — canonical user intent plus runtime config
+   (`workAuthorization`, `needsSponsorship`, work mode, locations, and the
+   Setup answers above). Screening answers about visa/sponsorship come from
+   here, never invented. Missing (and no legacy `apply-config.json` /
+   `preferences.json` for the loader to fold in) → run Setup above. Batch any
    remaining per-job questions up front; don't drip.
 
 ## Flow
 
-1. Initialize the agent's Chrome integration from inside this skill and open
-   the URL in visible Chrome. In Codex, `$apply <url>` is the complete user
-   invocation — load the available `chrome:control-chrome` capability here;
-   do not require the caller to add `@Chrome`. Claude Code uses Claude in
-   Chrome (`--chrome` or `/chrome`). Do not substitute the in-app Browser,
-   Computer Use, or a second Playwright runtime for this workflow. If Chrome
-   is unavailable, stop and report the setup/connection blocker.
+1. Initialize Claude in Chrome from inside this skill (`--chrome` or
+   `/chrome`) and open the URL in visible Chrome. Do not substitute the in-app
+   Browser, Computer Use, or a second Playwright runtime for this workflow. If
+   Chrome is unavailable, stop and report the setup/connection blocker.
 2. Navigate to the actual application form (click "Apply" through interstitials).
    **If the ATS demands an account (Workday, iCIMS, SuccessFactors…)** and
    `autoRegister` is true, register one — see Account registration below.
@@ -84,7 +76,7 @@ When the ATS requires an account and `autoRegister` is consented:
 1. **Reuse first**: check `~/.coforce/accounts.json` for an existing account on
    this ATS domain (Workday tenants are per-company — match the full host,
    e.g. `acme.wd5.myworkdayjobs.com`).
-2. **Register**: username/email = `email` from apply-config. Password:
+2. **Register**: username/email = `email` from config.json. Password:
    generate locally, never reuse across sites:
    ```sh
    PW="$(openssl rand -base64 15 | tr '+/' '-_')Aa1!"
@@ -107,15 +99,14 @@ When the ATS requires an account and `autoRegister` is consented:
 
 ## Background protocol (spawned by the console, no interactive terminal user)
 
-The console's Apply button starts this skill through the configured agent
-(`codex exec` with `$apply`, which initializes Chrome inside the skill, or
-`claude --chrome -p`) when the user granted the standing `headlessApply` consent in
-apply-config.json. The property name is retained for compatibility: the agent
-runs non-interactively, but Chrome remains visible. The console preserves the
+The console's Apply button starts this skill through `claude --chrome -p` when
+the user granted the standing `headlessApply` consent in config.json. The
+property name is retained for compatibility: the agent runs
+non-interactively, but Chrome remains visible. The console preserves the
 session id so the confirmed submit can resume the same work. In that mode:
 
 1. Run the normal flow (profile, instructions, registration, filling,
-   uploads) without asking questions — use apply-config answers; anything
+   uploads) without asking questions — use the config.json answers; anything
    unanswerable is a blocker.
 2. **Never submit in the first run.** When everything is filled, print exactly
    `COFORCE_STATUS: READY_TO_SUBMIT` plus a short summary of what was entered
@@ -124,8 +115,8 @@ session id so the confirmed submit can resume the same work. In that mode:
 3. On an unrecoverable blocker (captcha, login wall needing the user, missing
    required data), print `COFORCE_STATUS: FAILED` plus the reason, and record
    `needsFallback` + a history event in the tracker.
-4. The user's confirmation resumes THIS Chrome-backed session (`codex exec
-   resume`, or `claude --chrome -p --resume`) with a
+4. The user's confirmation resumes THIS Chrome-backed session
+   (`claude --chrome -p --resume`) with a
    submit instruction: submit, verify (confirmation page/email), print
    `COFORCE_STATUS: SUBMITTED`, and update `~/.coforce/applications.json`
    (status `applied` + history event). If submission fails, print

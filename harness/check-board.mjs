@@ -136,7 +136,7 @@ copyFileSync(
   join(outDir, 'instructions.md')
 );
 writeFileSync(
-  join(outDir, 'apply-config.json'),
+  join(outDir, 'config.json'),
   JSON.stringify({ headlessApply: false })
 );
 const server = spawn(process.execPath, ['.agents/skills/tracker/scripts/board.mjs', live, '--serve', '0'], {
@@ -230,7 +230,15 @@ try {
   // (sponsorship, work mode) must survive a wizard save that omits them
   assert.equal(mergedPrefs.needsSponsorship, true, 'prefs merge keeps sponsorship');
   assert.equal(mergedPrefs.workMode, 'remote', 'prefs merge keeps work mode');
-  assert.equal(mergedPrefs.version, 1, 'prefs stamped with schema version');
+  // intent and runtime config are two views on the one config.json
+  const cfgAfterPrefs = await (await fetch(`${base}/api/config`)).json();
+  assert.equal(cfgAfterPrefs.version, 2, 'config stamped with schema version');
+  assert.equal(cfgAfterPrefs.level, 'any', 'intent keys live in config.json');
+  assert.equal(
+    cfgAfterPrefs.headlessApply,
+    false,
+    'runtime config survives an intent-only save'
+  );
 
   // AI import: stubbed configured agent parses pasted text into a profile object
   const imp = await fetch(`${base}/api/import`, {
@@ -329,7 +337,23 @@ try {
     body: JSON.stringify(job),
   });
   assert.equal(q2.status, 409, 'duplicate queue rejected');
-  console.log('board: discover + apply queue ✓');
+  // instructions.md overrides everything on EVERY queueing path — the console's
+  // Build-resume button used to walk straight past the never-apply list
+  const blockedQueue = await fetch(`${base}/api/queue`, {
+    method: 'POST',
+    headers: { 'content-type': 'application/json' },
+    body: JSON.stringify({
+      url: 'https://jobs.example.com/megaevil-1',
+      role: 'Engineer',
+      company: 'MegaEvil Inc',
+    }),
+  });
+  assert.equal(blockedQueue.status, 403, 'never-apply company rejected at queue');
+  assert.ok(
+    !JSON.parse(readFileSync(live, 'utf8')).some(a => a.company === 'MegaEvil Inc'),
+    'never-apply company never reaches the tracker'
+  );
+  console.log('board: discover + apply queue + never-apply gate ✓');
 
   // resume campaign API: queue → feedback → approve → export/download
   const campaign = await (await fetch(`${base}/api/campaign`)).json();
@@ -376,7 +400,7 @@ try {
   console.log('board: resume review toggle ✓');
 
   // background Chrome apply lifecycle: consent gate → fill → confirm → submitted
-  writeFileSync(join(outDir, 'apply-config.json'), JSON.stringify({ headlessApply: false }));
+  writeFileSync(join(outDir, 'config.json'), JSON.stringify({ headlessApply: false }));
   const denied = await fetch(`${base}/api/apply`, {
     method: 'POST',
     headers: { 'content-type': 'application/json' },
@@ -384,7 +408,7 @@ try {
   });
   assert.equal(denied.status, 403, 'background apply gated on consent');
 
-  writeFileSync(join(outDir, 'apply-config.json'), JSON.stringify({ headlessApply: true }));
+  writeFileSync(join(outDir, 'config.json'), JSON.stringify({ headlessApply: true }));
   const started = await fetch(`${base}/api/apply`, {
     method: 'POST',
     headers: { 'content-type': 'application/json' },

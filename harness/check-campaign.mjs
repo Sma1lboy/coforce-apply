@@ -220,7 +220,7 @@ const autoFirst = syncJobs(autoDir, [{
 stageArtifacts(autoDir, autoFirst.id, { jd: autoJd, match: autoMatch, tex, pdf });
 assert.equal(campaignView(autoDir).jobs[0].status, 'rendered');
 assert.equal(campaignView(autoDir).lastExport, null);
-writeFileSync(join(autoDir, 'apply-config.json'), JSON.stringify({ requireResumeReview: false }));
+writeFileSync(join(autoDir, 'config.json'), JSON.stringify({ requireResumeReview: false }));
 const autoView = campaignView(autoDir).jobs[0];
 // auto-approval demands a recorded PASSING llm verdict — absent blocks first
 const preVerdict = applyResumeReviewPolicy(autoDir);
@@ -242,7 +242,7 @@ const gateJobDir = join(gateDir, 'campaigns', 'current', 'jobs', gateView.folder
 writeFileSync(join(gateJobDir, 'match.json'), JSON.stringify({ bullets: [{ text: 'Real bullet' }] }));
 writeFileSync(join(gateJobDir, 'resume.tex'),
   '\\documentclass{article}\\begin{document}\\newcommand{\\resumeItem}[1]{#1}\n\\resumeItem{Fabricated line}\n\\end{document}\n');
-writeFileSync(join(gateDir, 'apply-config.json'), JSON.stringify({ requireResumeReview: false }));
+writeFileSync(join(gateDir, 'config.json'), JSON.stringify({ requireResumeReview: false }));
 writeFileSync(join(gateJobDir, 'llm-judge.json'),
   JSON.stringify({ judgedAt: 'fixture', runs: 1, medianTotal: 95, pass: true, fixes: [] }));
 const gated = applyResumeReviewPolicy(gateDir);

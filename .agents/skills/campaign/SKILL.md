@@ -1,6 +1,6 @@
 ---
 name: campaign
-description: Build and review a batch of job-specific resumes — sync discovered jobs, fetch full JDs, strictly select verbatim bullets from the verified pool in profile.json, render the user's LaTeX template to PDF, collect feedback/approval in the CoForce Review console, and export approved job folders as one ZIP. Use for "$campaign", "批量岗位匹配", "生成岗位简历", "review resumes", or when start finds queued/revision-requested campaign jobs.
+description: Build and review a batch of job-specific resumes — sync discovered jobs, fetch full JDs, strictly select verbatim bullets from the verified pool in profile.json, render the user's LaTeX template to PDF, collect feedback/approval in the CoForce Review console, and export approved job folders as one ZIP. Use for "/campaign", "批量岗位匹配", "生成岗位简历", "review resumes", or when start finds queued/revision-requested campaign jobs.
 ---
 
 # Campaign — jobs → grounded resumes → review → ZIP
@@ -49,7 +49,7 @@ breaking field change and keep a migration shim for one version back.
 
 ## One-time inputs
 
-Require these values in `~/.coforce/apply-config.json`:
+Require these values in `~/.coforce/config.json`:
 
 - `latexTemplate`: absolute path to the user's `.tex` template. Never modify the
   template in place.
@@ -122,7 +122,7 @@ input anymore.
    **Best-fit selection prompt** — run the choice with this rubric, not vibes:
 
    > You are selecting resume bullets for ONE job. Inputs: the full JD, the
-   > full verified pool (id + text + origin), and preferences.json. Rules:
+   > full verified pool (id + text + origin), and config.json. Rules:
    > (1) cover the JD's top 3–5 required capabilities first — every one of
    > them should have at least one bullet if the pool has it; (2) prefer
    > bullets with concrete, verifiable outcomes over activity descriptions;
@@ -136,7 +136,7 @@ input anymore.
    > ONLY pool ids in display order — you cannot edit text, and ids outside
    > the pool will be rejected.
 
-   Alongside the selection, check the JD against `~/.coforce/preferences.json`
+   Alongside the selection, check the JD against `~/.coforce/config.json`
    (canonical user intent — `needsSponsorship`, `workMode`, `locations`,
    `salaryFloor`; schema in the setup skill): a posting that violates a hard
    preference (e.g. "no sponsorship" while `needsSponsorship` is true, or
@@ -169,8 +169,8 @@ input anymore.
    in code; fix and re-render, don't argue.
 
    Then the LLM judge — **one spec, run context-free**: spawn a fresh
-   subagent (Claude Code: Task tool; Codex: new `codex exec`) whose entire
-   context is the resume text, the JD, and `references/resume-judge.md`.
+   subagent (Task tool) whose entire context is the resume text, the JD,
+   and `references/resume-judge.md`.
    The agent that assembled the resume never judges it; do not pass it the
    pool or your selection rationale. Run 3× and take the median when the
    score drives a decision. Record the verdict as `llm-judge.json` in the job
@@ -213,8 +213,8 @@ input anymore.
 7. **Review when required**. With the default `requireResumeReview: true`, serve
    the tracker and open the **Review** tab. It shows the job link, match evidence,
    zoomable PDF, prior feedback, revision request, and approval controls.
-   Feedback changes the job to `revision_requested`; the next `$start` or
-   `$campaign` cycle consumes it. With the setting off, Review remains available
+   Feedback changes the job to `revision_requested`; the next `/start` or
+   `/campaign` cycle consumes it. With the setting off, Review remains available
    for optional inspection but does not block approval or export.
 
 8. **Export after approval**. The Review tab enables **Export approved ZIP**

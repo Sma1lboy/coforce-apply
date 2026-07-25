@@ -28,9 +28,9 @@ Every operator receives the same four inputs, all from the data layer:
 1. **Job** — the posting URL (and any captured JD text).
 2. **Profile** — `~/.coforce/profile.json` (identity, experience; schema in
    the profile skill).
-3. **Resume** — the PDF to upload (`resumePdf` in apply-config, or the
-   campaign's per-job `resume.pdf`).
-4. **Intent** — `~/.coforce/preferences.json` (sponsorship/work authorization,
+3. **Resume** — the campaign's per-job `resume.pdf` when the job came through a
+   campaign; otherwise `resumePdf` from config.json.
+4. **Intent** — `~/.coforce/config.json` (sponsorship/work authorization,
    work mode, locations; schema in the setup skill) plus a summary of
    `~/.coforce/instructions.md`, which overrides everything.
 

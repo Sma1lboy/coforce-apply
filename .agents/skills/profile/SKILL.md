@@ -1,6 +1,6 @@
 ---
 name: profile
-description: Maintain the user's local career background (resume metadata) in ~/.coforce/profile.json — init from interview or an existing resume (PDF/JSON), add or update experience/projects/education/skills, supplement from raw material (a story, an award link, a certificate — no pre-structuring), review, and export for the extension. Use whenever the user mentions their profile, background, resume data, work history, awards or honors, wants to add something they built or won to their record, invokes "$profile" in Codex, or invokes "/profile" in Claude Code.
+description: Maintain the user's local career background (resume metadata) in ~/.coforce/profile.json — init from interview or an existing resume (PDF/JSON), add or update experience/projects/education/skills, supplement from raw material (a story, an award link, a certificate — no pre-structuring), and review. Use whenever the user mentions their profile, background, resume data, work history, awards or honors, wants to add something they built or won to their record, or invokes "/profile".
 ---
 
 # Profile — local background maintenance
@@ -28,8 +28,8 @@ to a JD — set it when the user signals importance, otherwise omit.
 - Point the user at the console's Profile tab (tracker skill, port 4517) as
   the friendly editing surface: structured form (basics, skill chips,
   experience/project/education cards with per-bullet editing) plus an
-  "Import resume (AI)" button that parses pasted text via the configured local
-  agent (`codex exec` or `claude -p`) for review-then-save.
+  "Import resume (AI)" button that parses pasted text via the local agent
+  runtime for review-then-save.
 - Otherwise interview briefly: contact basics → education → experience → projects
   → skills. Don't interrogate; accept partial data, everything is optional.
 
@@ -64,10 +64,6 @@ through the normal generate→review flow.
 
 **Review**: summarize the profile compactly (one line per experience/project) and
 point out gaps: missing dates, bullets with no results/metrics, stale `title`.
-
-**Export**: the JSON is already in the exact format the extension's
-"Import from JSON" (Options → Profile) accepts. To hand it to the extension, just
-tell the user the file path or print the JSON.
 
 ## Rules
 

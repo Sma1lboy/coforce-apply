@@ -11,8 +11,7 @@ by default, or `<checkout>/.coforce/` in private-fork mode, or wherever
 `$COFORCE_HOME` points:
 
 - `profile.json` — your background, the verified bullet pool
-- `preferences.json`, `instructions.md`, `apply-config.json` — your intent,
-  standing rules, and consents
+- `config.json`, `instructions.md` — your intent, standing rules, and consents
 - `applications.json` + `applications/<id>/` — the tracker and per-application
   archives
 - `out/` — generated resumes, ZIPs, and apply-run logs

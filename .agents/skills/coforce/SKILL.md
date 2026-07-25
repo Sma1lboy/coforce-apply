@@ -34,7 +34,8 @@ hoc or improvise the workflow inline.
 as `$COFORCE_HOME` → `<checkout>/.coforce/` if present → `~/.coforce`) and
 pick the FIRST stage that is incomplete:
 
-1. No `profile.json` or no `apply-config.json` → `setup` (full onboarding).
+1. No `profile.json`, or no `config.json` and no legacy
+   `apply-config.json`/`preferences.json` → `setup` (full onboarding).
 2. Profile has no reviewed bullets (empty pool) or no experience index →
    `experience` + `repo-bullets`, review results into the profile.
 3. No/empty `applications.json` → `start` (first discovery cycle).

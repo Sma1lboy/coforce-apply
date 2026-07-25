@@ -1,6 +1,6 @@
 ---
 name: tracker
-description: Maintain the local job-application tracker (~/.coforce/applications.json) and its kanban board — add applications, update pipeline statuses (pending/applied/interviewing/offer/rejected), record delivery events and the needsFallback flag (= retry one operator tier up, per the operator contract), attach notes, serve the board, and sync with the extension's Apply tab via JSON export/import. Use for "记录一下投了 X", "更新申请状态", "看板/board", "application tracker", "$tracker" in Codex, or "/tracker" in Claude Code.
+description: Maintain the local job-application tracker (~/.coforce/applications.json) and its kanban board — add applications, update pipeline statuses (pending/applied/interviewing/offer/rejected), record delivery events and the needsFallback flag (= the operator gave up; a human has to take this one), attach notes, and serve the board. Use for "记录一下投了 X", "更新申请状态", "看板/board", "application tracker", or "/tracker".
 ---
 
 # Tracker — local application board
@@ -18,13 +18,13 @@ start with `[]`.
 **Add / update**: read the JSON, apply the change, write back. `id` = epoch ms
 string; always bump `updatedAt` (ISO). `status` is the pipeline stage ONLY:
 `pending → applied → interviewing → offer | rejected`. How delivery went is
-never a status — tier-1 failures and agent handoffs are `history` events plus
-`needsFallback: true` (cleared when the application eventually goes out). Put
-recruiter emails, interview dates, and contacts in `notes`. When adding an
-application, save the JD text into `description` if you have it. Every status
-change appends to `history`: `{date, event}` (e.g.
-`"status: applied → interviewing — recruiter email"`); record submissions and
-interviews there too.
+never a status — an operator giving up is a `history` event plus
+`needsFallback: true` (= a human has to take this one; cleared when the
+application eventually goes out). Put recruiter emails, interview dates, and
+contacts in `notes`. When adding an application, save the JD text into
+`description` if you have it. Every status change appends to `history`:
+`{date, event}` (e.g. `"status: applied → interviewing — recruiter email"`);
+record submissions and interviews there too.
 
 **Console (看板 + 面板)** — a React + Tailwind web app that ships with this
 skill (`web/`, prebuilt `web/dist` included). **The only launch entry point
@@ -47,18 +47,19 @@ One kobe-Hallmark-themed local site with these primary tabs:
 - **Discover** (home tab) — local job discovery: fetches the configured
   sources through the start skill's `hunt.mjs` (sibling install), lists
   postings not yet tracked (dedup + never-apply applied) with company logos.
-  `~/.coforce/preferences.json` is the canonical user-intent file, normally
+  `~/.coforce/config.json` is the canonical settings file, normally
   pre-filled by the setup skill (level, directions, sponsorship, work mode,
-  locations…); if it is missing a first-visit wizard collects level +
+  locations…); if it carries no `level` a first-visit wizard collects level +
   directions, and console edits merge into it (POST /api/prefs) without
-  touching keys the console does not show. Row icons resolve company-homepage logos via logo.dev when
-  `logoDevToken` (publishable key) is set in apply-config.json, falling back
-  to the Google favicon service, then to an initials tile when the source
-  list carried no homepage link. A left filter panel (search, level,
-  direction with keyword classification, source) narrows the list. Each row's
-  **Build resume** button queues the posting into both the tracker and current
-  resume campaign. The next start/campaign cycle hydrates the JD and renders
-  its matched resume; application submission remains a separate action.
+  touching keys the console does not show. Row icons resolve company-homepage
+  logos via logo.dev when `logoDevToken` (publishable key) is set in
+  config.json, falling back to the Google favicon service, then to an initials
+  tile when the source list carried no homepage link. A left filter panel
+  (search, level, direction with keyword classification, source) narrows the
+  list. Each row's **Build resume** button queues the posting into both the
+  tracker and current resume campaign. The next start/campaign cycle hydrates
+  the JD and renders its matched resume; application submission remains a
+  separate action.
 - **Review** — campaign dossier workspace: job queue, status and match score,
   source-linked evidence shortlist, zoomable PDF proof, feedback/revision,
   optional manual approval, and all-approved ZIP export. Settings can disable
@@ -69,11 +70,11 @@ One kobe-Hallmark-themed local site with these primary tabs:
 - **Profile** — resume-style live preview of `~/.coforce/profile.json` beside
   a structured form editor (basics, skill chips, add/remove
   experience/project/education cards and bullets — no raw JSON), plus
-  "Import resume (AI)": pasted text is parsed by the configured local agent
-  (`codex exec` or `claude -p`; binary overrides are `COFORCE_CODEX_BIN` and
-  `COFORCE_CLAUDE_BIN`) and fills the form for review before Save.
+  "Import resume (AI)": pasted text is parsed by the local agent runtime
+  (`claude -p`; binary override `COFORCE_CLAUDE_BIN`) and fills the form for
+  review before Save.
 - **Instructions** — edit `~/.coforce/instructions.md` in place.
-- **Settings** — agent/runtime consents, required-vs-automatic resume review,
+- **Settings** — runtime consents, required-vs-automatic resume review,
   LaTeX template, Tier 0 source scope, discovery preferences, and sources.
 
 **Launch it at the start of every working session** (any tracker/apply/start
@@ -81,18 +82,11 @@ activity): if port 4517 isn't already serving, run start_web.sh and `open` the U
 the console is how the user watches everything. Without `--serve` it renders a
 static read-only `~/.coforce/out/board.html` (drags show a "Copy JSON" bar).
 
-**Always end a mutation by showing the board.** After any add / status change /
-import — even when the user didn't ask for the board — regenerate it and `open`
+**Always end a mutation by showing the board.** After any add or status
+change — even when the user didn't ask for the board — regenerate it and `open`
 it (or say the path if a browser can't be opened), plus a one-line diff summary
 ("Initech → interviewing"). The board is the product surface, not a debug
 artifact; the user should never have to ask to see it.
-
-**Sync with the extension**: the extension keeps its own copy in
-`browser.storage.local` (`jobApplications`). The Apply tab has Export (copies
-JSON to clipboard) and Import (reads a JSON file). To pull extension state
-into the local tracker: Export in the popup → paste/save over
-`~/.coforce/applications.json` (merge by `url`, newest `updatedAt` wins). To push:
-tell the user to Import `~/.coforce/applications.json` in the Apply tab.
 
 **Per-application archive (filesystem)**: each application owns a folder,
 siblings are global:
@@ -126,5 +120,5 @@ same `~/.coforce/applications.json`.
 ## Rules
 
 - `~/.coforce/applications.json` is personal data — never commit or share it.
-- Merge conflicts between local and extension copies: keep the entry with the
-  newer `updatedAt`; never silently drop entries.
+- Merging entries for the same `url`: keep the newer `updatedAt`; never
+  silently drop entries.

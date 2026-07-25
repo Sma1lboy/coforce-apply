@@ -16,6 +16,7 @@ import { createHash } from 'node:crypto';
 import { execFileSync } from 'node:child_process';
 import { basename, dirname, extname, join, resolve, sep } from 'node:path';
 import { writeJsonAtomic } from '../../../lib/fs-atomic.mjs';
+import { loadConfig } from '../../../lib/config.mjs';
 
 export const CAMPAIGN_SCHEMA = '1.0';
 export const REQUIRED_EXPORT_FILES = [
@@ -45,15 +46,9 @@ const ensureDir = path => {
 
 const readJson = path => JSON.parse(readFileSync(path, 'utf8'));
 
-export const resumeReviewRequired = dataDir => {
-  const configPath = join(dataDir, 'apply-config.json');
-  if (!existsSync(configPath)) return true;
-  try {
-    return readJson(configPath).requireResumeReview !== false;
-  } catch {
-    return true;
-  }
-};
+// Fails safe to human review: an unreadable or absent config means review.
+export const resumeReviewRequired = dataDir =>
+  loadConfig(dataDir).requireResumeReview !== false;
 
 const slugify = value =>
   String(value || 'job')

@@ -64,17 +64,17 @@ say('agent', 'Stage 1 · Profile — imported from your resume (21 verified bull
 assert.equal(JSON.parse(readFileSync(join(home, 'profile.json'), 'utf8')).name, 'John Doe');
 say('agent', `profile.json ✓  (name: John Doe, experience ×2, projects ×1)`);
 gap();
-say('agent', 'Stage 2 · Preferences — level? sponsorship? work mode? locations?');
+say('agent', 'Stage 2 · Settings — level? sponsorship? work mode? locations? consents?');
 say('user', 'internship · need sponsorship (F-1 OPT) · any mode · US Remote / Bay Area');
-const prefs = JSON.parse(readFileSync(join(home, 'preferences.json'), 'utf8'));
-assert.equal(prefs.needsSponsorship, true);
-assert.equal(prefs.version, 1);
-say('agent', 'preferences.json ✓  (canonical intent — every skill reads this)');
+const config = JSON.parse(readFileSync(join(home, 'config.json'), 'utf8'));
+assert.equal(config.needsSponsorship, true);
+assert.equal(config.version, 2);
+assert.equal(config.headlessApply, false);
+say('agent', 'config.json ✓  (intent + consents in one file — every skill reads this)');
 gap();
-say('agent', 'Stage 3 · Apply config + standing instructions written.');
-assert.equal(JSON.parse(readFileSync(join(home, 'apply-config.json'), 'utf8')).headlessApply, false);
+say('agent', 'Stage 3 · Standing instructions written.');
 assert.ok(readFileSync(join(home, 'instructions.md'), 'utf8').includes('never-apply'));
-say('agent', 'apply-config.json ✓ · instructions.md ✓ (never-apply list respected everywhere)');
+say('agent', 'instructions.md ✓ (never-apply list respected everywhere)');
 gap();
 
 // ---- Act 2: discover → tracker (real hunt run) ------------------------------
@@ -84,7 +84,7 @@ sh(huntCli, [
   '--source-file', join(here, 'fixtures/source-jobs.md'),
   '--apps', join(home, 'applications.json'),
   '--instructions', join(home, 'instructions.md'),
-  '--config', join(home, 'apply-config.json'),
+  '--config', join(home, 'config.json'),
 ]);
 const apps = JSON.parse(readFileSync(join(home, 'applications.json'), 'utf8'));
 assert.ok(apps.filter(a => a.status === 'pending').length >= 2, 'hunt tracked pending jobs');
