@@ -152,15 +152,8 @@ export const resumeReviewRequired = dataDir =>
   loadConfig(dataDir).requireResumeReview !== false;
 
 const latexTemplatePath = dataDir => {
-  for (const name of ['config.json', 'apply-config.json']) {
-    const configPath = join(dataDir, name);
-    if (!existsSync(configPath)) continue;
-    try {
-      const templatePath = readJson(configPath).latexTemplate;
-      if (templatePath && existsSync(templatePath)) return templatePath;
-    } catch {}
-  }
-  return null;
+  const templatePath = loadConfig(dataDir).latexTemplate;
+  return templatePath && existsSync(templatePath) ? templatePath : null;
 };
 
 const slugify = value =>
@@ -368,7 +361,10 @@ export function applyResumeReviewPolicy(dataDir) {
       judge.sectionTransitionsCompact === false ||
       judge.templatePreambleExact === false ||
       judge.templateContactHeaderExact === false ||
+      judge.skillsSectionSpacingExact === false ||
+      judge.projectEntryScaffoldingExact === false ||
       judge.projectTransitionSpacingExact === false ||
+      judge.projectTailSpacingExact === false ||
       judge.resumeItemsUseBodyArgument === false ||
       judge.verbatim === false ||
       judge.skillsDense === false ||
@@ -1002,6 +998,8 @@ export function syncTemplateContractToResume(dataDir, id) {
     /^(\s*)\\resumeItem\{(.*)\}\{\}\s*$/gm,
     '$1\\resumeItem{}{$2}'
   );
+  body = syncSectionLeadingSpacerFromTemplate(template, body, 'Skills');
+  body = syncProjectScaffoldingFromTemplate(template, body);
   const expectedSpacers = [...new Set(texProjectTransitionSpacers(template))];
   if (expectedSpacers.length === 1) {
     body = body.replace(
@@ -1034,7 +1032,10 @@ export function syncTemplateContractToResume(dataDir, id) {
   if (
     metrics.templatePreambleExact === false ||
     metrics.templateContactHeaderExact === false ||
+    metrics.skillsSectionSpacingExact === false ||
+    metrics.projectEntryScaffoldingExact === false ||
     metrics.projectTransitionSpacingExact === false ||
+    metrics.projectTailSpacingExact === false ||
     resumeItemsUseBodyArgument === false
   ) {
     throw new Error('resume.tex could not be normalized to the LaTeX template contract');
@@ -1220,6 +1221,91 @@ const texProjectTransitionSpacers = tex => {
   )].map(match => match[1].trim());
 };
 
+const sectionMatch = (tex, name) => String(tex).match(new RegExp(
+  `\\\\section\\s*\\{\\s*(?:\\\\textbf\\s*\\{\\s*)?${name}\\s*\\}?\\s*\\}`,
+  'i'
+));
+
+const sectionLeadingSpacer = (tex, name) => {
+  const source = String(tex);
+  const section = sectionMatch(source, name);
+  if (!section || section.index === undefined) return null;
+  const before = source.slice(0, section.index);
+  const spacer = before.match(/\\vspace\{([^}]+)\}(\s*)$/);
+  if (!spacer || spacer.index === undefined) return null;
+  return {
+    value: spacer[1].trim(),
+    start: spacer.index,
+    end: before.length,
+  };
+};
+
+const syncSectionLeadingSpacerFromTemplate = (template, resume, name) => {
+  const expected = sectionLeadingSpacer(template, name);
+  const rendered = sectionLeadingSpacer(resume, name);
+  if (!expected || !rendered) return resume;
+  return resume.slice(0, rendered.start) +
+    `\\vspace{${expected.value}}` +
+    resume.slice(rendered.end);
+};
+
+const projectSectionRange = tex => {
+  const source = String(tex);
+  const section = source.match(
+    /\\section\s*\{\s*(?:\\textbf\s*\{\s*)?Projects\s*\}?\s*\}/i
+  );
+  if (!section || section.index === undefined) return null;
+  const start = section.index + section[0].length;
+  const nextSection = source.indexOf('\\section', start);
+  const endDocument = source.indexOf('\\end{document}', start);
+  const candidates = [nextSection, endDocument].filter(index => index !== -1);
+  const end = candidates.length ? Math.min(...candidates) : source.length;
+  return { start, end, block: source.slice(start, end) };
+};
+
+const texProjectEntryLeadings = tex => {
+  const range = projectSectionRange(tex);
+  if (!range) return [];
+  return [...range.block.matchAll(
+    /\\resumeSubHeadingListStart([\s\S]*?)\\resumeSubheading/g
+  )].map(match => match[1]);
+};
+
+const texProjectTail = tex => {
+  const range = projectSectionRange(tex);
+  if (!range) return null;
+  const command = '\\resumeSubHeadingListEnd';
+  const last = range.block.lastIndexOf(command);
+  return last === -1 ? null : range.block.slice(last + command.length);
+};
+
+const syncProjectScaffoldingFromTemplate = (template, resume) => {
+  const expectedLeadings = texProjectEntryLeadings(template);
+  const expectedTail = texProjectTail(template);
+  const range = projectSectionRange(resume);
+  if (!range) return resume;
+  let entryIndex = 0;
+  let block = range.block.replace(
+    /(\\resumeSubHeadingListStart)([\s\S]*?)(\\resumeSubheading)/g,
+    (match, start, gap, heading) => {
+      if (!expectedLeadings.length) return match;
+      const expected = expectedLeadings[
+        Math.min(entryIndex, expectedLeadings.length - 1)
+      ];
+      entryIndex += 1;
+      return `${start}${expected}${heading}`;
+    }
+  );
+  if (expectedTail !== null) {
+    const command = '\\resumeSubHeadingListEnd';
+    const last = block.lastIndexOf(command);
+    if (last !== -1) {
+      block = block.slice(0, last + command.length) + expectedTail;
+    }
+  }
+  return resume.slice(0, range.start) + block + resume.slice(range.end);
+};
+
 const templateContactLine = tex =>
   String(tex).split(/\r?\n/).map(line => line.trim()).find(line => line.includes('mailto:')) || null;
 
@@ -1250,20 +1336,41 @@ export const compareTemplateContract = (templateSource, resumeSource) => {
     : expectedContactLine === null
       ? null
       : renderedContactLine === expectedContactLine;
+  const expectedSkillsSpacer = sectionLeadingSpacer(templateSource, 'Skills');
+  const renderedSkillsSpacer = sectionLeadingSpacer(resumeSource, 'Skills');
+  const skillsSectionSpacingExact = expectedSkillsSpacer === null
+    ? null
+    : renderedSkillsSpacer?.value === expectedSkillsSpacer.value;
   const expectedProjectTransitionSpacers = [
     ...new Set(texProjectTransitionSpacers(templateSource)),
   ];
   const renderedProjectTransitionSpacers = texProjectTransitionSpacers(resumeSource);
+  const expectedProjectEntryLeadings = texProjectEntryLeadings(templateSource);
+  const renderedProjectEntryLeadings = texProjectEntryLeadings(resumeSource);
+  const projectEntryScaffoldingExact = expectedProjectEntryLeadings.length
+    ? renderedProjectEntryLeadings.every((leading, index) =>
+      leading === expectedProjectEntryLeadings[
+        Math.min(index, expectedProjectEntryLeadings.length - 1)
+      ])
+    : null;
   const projectTransitionSpacingExact = expectedProjectTransitionSpacers.length
     ? renderedProjectTransitionSpacers.every(spacer =>
       expectedProjectTransitionSpacers.includes(spacer))
     : null;
+  const expectedProjectTail = texProjectTail(templateSource);
+  const renderedProjectTail = texProjectTail(resumeSource);
+  const projectTailSpacingExact = expectedProjectTail === null
+    ? null
+    : renderedProjectTail === expectedProjectTail;
   return {
     templatePreambleExact,
     templateContactHeaderExact,
+    skillsSectionSpacingExact,
+    projectEntryScaffoldingExact,
     expectedProjectTransitionSpacers,
     renderedProjectTransitionSpacers,
     projectTransitionSpacingExact,
+    projectTailSpacingExact,
   };
 };
 
@@ -1349,7 +1456,10 @@ export function judgeResume(dataDir, id) {
     : null;
   let templatePreambleExact = null;
   let templateContactHeaderExact = null;
+  let skillsSectionSpacingExact = null;
+  let projectEntryScaffoldingExact = null;
   let projectTransitionSpacingExact = null;
+  let projectTailSpacingExact = null;
   let expectedProjectTransitionSpacers = [];
   let renderedProjectTransitionSpacers = texProjectTransitionSpacers(texBody);
   const configuredTemplatePath = latexTemplatePath(dataDir);
@@ -1359,9 +1469,12 @@ export function judgeResume(dataDir, id) {
       ({
         templatePreambleExact,
         templateContactHeaderExact,
+        skillsSectionSpacingExact,
+        projectEntryScaffoldingExact,
         expectedProjectTransitionSpacers,
         renderedProjectTransitionSpacers,
         projectTransitionSpacingExact,
+        projectTailSpacingExact,
       } = compareTemplateContract(templateSource, texSource));
     } catch {}
   }
@@ -1440,9 +1553,12 @@ export function judgeResume(dataDir, id) {
     sectionTransitionsCompact,
     templatePreambleExact,
     templateContactHeaderExact,
+    skillsSectionSpacingExact,
+    projectEntryScaffoldingExact,
     expectedProjectTransitionSpacers,
     renderedProjectTransitionSpacers,
     projectTransitionSpacingExact,
+    projectTailSpacingExact,
     resumeItemsUseBodyArgument,
     itemCount: items.length,
     verbatim,

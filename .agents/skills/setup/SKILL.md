@@ -89,15 +89,22 @@ Omit what the user declines to answer; never invent values. If
 
 The runtime keys below sit at the SAME top level of the same file.
 
-LaTeX template — ask the user which they want:
+LaTeX template — always establish exactly one managed runtime source:
 
-1. **Their own template** → record the absolute path in `latexTemplate`.
-2. **The bundled base template** (default when they have none) → copy
+1. Create `<dataHome>/templates/`.
+2. **Their own template** → treat the provided path as import-only, copy it to
+   `<dataHome>/templates/resume_template.tex`, and record only that managed
+   absolute path in `latexTemplate`.
+3. **The bundled base template** (default when they have none) → copy
    `assets/resume_template.tex` from the `tailor` skill directory
-   (Jake's-resume style: letterpaper 11pt, `\resumeSubheading` macros) to
-   `~/.coforce/templates/resume_template.tex` and point `latexTemplate` at
-   that copy. The copy belongs to the user — they may edit or replace it
-   later; never modify the skill's bundled original.
+   (Jake's-resume style: letterpaper 11pt, `\resumeSubheading` macros) to the
+   same managed path and point `latexTemplate` at it.
+
+The managed copy belongs to the user and is the only template campaign/tailor
+may read. External imports and the skill's bundled original are never runtime
+fallbacks and are never modified in place. Replacing the template is another
+explicit import into the same managed path, followed by re-rendering affected
+resumes.
 
 Then ask once: whether
 each generated resume must wait for manual review (`requireResumeReview`,

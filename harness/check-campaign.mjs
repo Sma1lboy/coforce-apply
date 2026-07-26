@@ -50,29 +50,46 @@ const templateContractSource = `\\documentclass{article}
 \\begin{document}
 contact|\\href{mailto:test@example.com}{test@example.com}
 \\vspace{-8mm}
+\\section{\\textbf{Education}}
+education
+\\vspace{-9mm}
+\\section{\\textbf{Skills}}
+skills
+\\vspace{-8mm}
 \\section{\\textbf{Projects}}
+\\resumeSubHeadingListStart
+\\resumeSubheading{First}{}{}{}
 \\resumeSubHeadingListEnd
 \\vspace{-9mm}
 \\resumeSubHeadingListStart
+\\vspace{-1mm}
+\\resumeSubheading{Second}{}{}{}
+\\resumeSubHeadingListEnd
+\\vspace{-9mm}
 \\end{document}`;
 assert.deepEqual(compareTemplateContract(templateContractSource, templateContractSource), {
   templatePreambleExact: true,
   templateContactHeaderExact: true,
+  skillsSectionSpacingExact: true,
+  projectEntryScaffoldingExact: true,
   expectedProjectTransitionSpacers: ['-9mm'],
   renderedProjectTransitionSpacers: ['-9mm'],
   projectTransitionSpacingExact: true,
+  projectTailSpacingExact: true,
 });
 const driftedTemplateContract = compareTemplateContract(
   templateContractSource,
   templateContractSource
     .replace('\\textbf{#1}#2', '#1#2')
     .replace('test@example.com', 'visa status')
-    .replace('-8mm', '-6mm')
+    .replace('\\vspace{-9mm}\n\\section{\\textbf{Skills}}', '\\vspace{-6mm}\n\\section{\\textbf{Skills}}')
     .replace('-9mm', '-6mm')
 );
 assert.equal(driftedTemplateContract.templatePreambleExact, false);
 assert.equal(driftedTemplateContract.templateContactHeaderExact, false);
+assert.equal(driftedTemplateContract.skillsSectionSpacingExact, false);
 assert.equal(driftedTemplateContract.projectTransitionSpacingExact, false);
+assert.equal(driftedTemplateContract.projectTailSpacingExact, true);
 
 function onePagePdf(label, full = true) {
   const safe = label.replace(/[()\\]/g, '');
@@ -389,9 +406,21 @@ assert.equal(statSync(libraryPath).mtimeMs, libraryBefore.mtimeMs, 'campaign mus
     `contact|\\href{mailto:test@example.com}{test@example.com}\n` +
     `\\vspace{-8mm}\n` +
     `\\section{\\textbf{Skills}}\\resumeSubItem{Languages, Frameworks, Backend \\& Data:}{TypeScript, Node.js, Python}\n` +
-    `\\section{\\textbf{Projects}}\n\\resumeSubHeadingListEnd\n\\vspace{-9mm}\n\\resumeSubHeadingListStart\n` +
-    `\\resumeItem{}{template placeholder}\n\\end{document}\n`;
+    `\\section{\\textbf{Projects}}\n` +
+    `\\resumeSubHeadingListStart\n\\resumeSubheading{First}{}{}{}\n` +
+    `\\resumeItem{}{template placeholder}\n\\resumeSubHeadingListEnd\n` +
+    `\\vspace{-9mm}\n\\resumeSubHeadingListStart\n\\vspace{-1mm}\n` +
+    `\\resumeSubheading{Second}{}{}{}\n\\resumeSubHeadingListEnd\n` +
+    `\\vspace{-9mm}\n\\end{document}\n`;
   writeFileSync(fixtureTemplatePath, fixtureTemplate);
+  const conflictingLegacyTemplatePath = join(dataDir, 'legacy-template.tex');
+  writeFileSync(
+    conflictingLegacyTemplatePath,
+    fixtureTemplate.replace('test@example.com', 'legacy@example.com')
+  );
+  writeFileSync(join(dataDir, 'apply-config.json'), JSON.stringify({
+    latexTemplate: conflictingLegacyTemplatePath,
+  }));
   writeFileSync(join(dataDir, 'config.json'), JSON.stringify({
     latexTemplate: fixtureTemplatePath,
     requireResumeReview: true,
@@ -401,19 +430,24 @@ assert.equal(statSync(libraryPath).mtimeMs, libraryBefore.mtimeMs, 'campaign mus
       .replace('\\textbf{#1}#2', '#1#2')
       .replace('test@example.com', 'visa status')
       .replace('-8mm', '-6mm')
-      .replace('-9mm', '-6mm')
+      .replaceAll('-9mm', '-6mm')
+      .replace('\\resumeSubHeadingListStart\n\\resumeSubheading{First}',
+        '\\resumeSubHeadingListStart\n\\vspace{-4mm}\n\\resumeSubheading{First}')
       .replace('\\resumeItem{}{template placeholder}', `\\resumeItem{${pool[0].text}}{}`);
   writeFileSync(join(jobTexDir, 'resume.tex'), driftedResume);
   const normalizedTemplate = syncTemplateContractToResume(dataDir, synced.added[0].id);
   assert.equal(normalizedTemplate.updated, true);
   assert.equal(normalizedTemplate.templatePreambleExact, true);
   assert.equal(normalizedTemplate.templateContactHeaderExact, true);
+  assert.equal(normalizedTemplate.skillsSectionSpacingExact, true);
+  assert.equal(normalizedTemplate.projectEntryScaffoldingExact, true);
   assert.equal(normalizedTemplate.projectTransitionSpacingExact, true);
+  assert.equal(normalizedTemplate.projectTailSpacingExact, true);
   assert.equal(normalizedTemplate.resumeItemsUseBodyArgument, true);
   assert.match(
     readFileSync(join(jobTexDir, 'resume.tex'), 'utf8'),
     /test@example\.com\}\n\\vspace\{-8mm\}\n\\section\{\\textbf\{Skills\}\}/,
-    'normalization restores the complete template header including section-adjacent spacing'
+    'config.json is the only template source even when a conflicting legacy config remains'
   );
   const good = judgeResume(dataDir, synced.added[0].id);
   assert.equal(good.verbatim, true, 'pool bullet verbatim passes the judge');

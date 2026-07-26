@@ -64,8 +64,10 @@ breaking field change and keep a migration shim for one version back.
 
 Require these values in `~/.coforce/config.json`:
 
-- `latexTemplate`: absolute path to the user's `.tex` template. Never modify the
-  template in place.
+- `latexTemplate`: absolute path to the one canonical managed template under
+  `<dataHome>/templates/`. A user-provided file is an import source only: copy
+  it once into this managed location, point `config.json` at the copy, and
+  never read or modify the external import path during campaign work.
 - `requireResumeReview`: optional boolean, defaulting to `true`. When `false`,
   a complete successfully rendered resume is automatically approved and the
   ZIP is refreshed after the full batch completes.
@@ -283,9 +285,12 @@ non-empty role pack, and no stale referenced skill names. Otherwise stop at
 
    The template-contract metrics must also pass:
    `templatePreambleExact`, `templateContactHeaderExact`,
-   `projectTransitionSpacingExact`, and `resumeItemsUseBodyArgument`. These
-   prevent per-resume macro forks, job-specific contact-line additions,
-   normalized project spacers, and accidental whole-bullet bolding.
+   `skillsSectionSpacingExact`, `projectEntryScaffoldingExact`,
+   `projectTransitionSpacingExact`,
+   `projectTailSpacingExact`, and `resumeItemsUseBodyArgument`. These prevent
+   per-resume macro forks, job-specific contact-line additions, drifting
+   Education-to-Skills spacing, invented entry lead-ins or tail spacers,
+   normalized project transitions, and accidental whole-bullet bolding.
    `campaign.mjs render` normalizes these locked surfaces from the configured
    template before compiling; the judge independently verifies the result.
 
