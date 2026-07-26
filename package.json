@@ -12,8 +12,7 @@
     "node": ">=22.0.0"
   },
   "scripts": {
-    "board": "node .agents/skills/tracker/scripts/board.mjs",
-    "board:serve": "node .agents/skills/tracker/scripts/board.mjs --serve",
+    "board": "node .agents/skills/tracker/scripts/board.mjs --serve",
     "harness": "sh harness/check-formats.sh && python3 harness/check-github-evidence.py && node harness/check-config.mjs && node harness/check-experience.mjs && node harness/check-campaign.mjs && node harness/check-board.mjs && node harness/check-hunt.mjs",
     "hunt": "node .agents/skills/start/scripts/hunt.mjs",
     "sandbox": "node harness/sandbox.mjs",

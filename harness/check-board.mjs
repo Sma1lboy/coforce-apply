@@ -1,10 +1,13 @@
-// Tracker harness check: fixture applications → board HTML → assertions,
-// plus escaping probe and serve-mode persistence smoke test.
+// Tracker harness check: the console API over fixture data.
+// board.mjs serves the prebuilt React console and is its API — there is no
+// second, hand-rolled renderer to assert HTML against any more, so the
+// board's contract is the /api/* payloads plus the shell it serves.
 // Run: node harness/check-board.mjs
 
 import { execFileSync, spawn } from 'node:child_process';
 import {
   copyFileSync,
+  existsSync,
   cpSync,
   mkdirSync,
   readFileSync,
@@ -38,91 +41,7 @@ mkdirSync(outDir, { recursive: true });
   console.log('data home: env → in-repo → ~ resolution ✓');
 }
 
-// --- 1. static render from fixtures ---
-const out = join(outDir, 'board.html');
-execFileSync(
-  process.execPath,
-  ['.agents/skills/tracker/scripts/board.mjs', 'harness/fixtures/applications.json', out],
-  { cwd: root, stdio: 'inherit' }
-);
-const html = readFileSync(out, 'utf8');
-
-for (const status of [
-  'pending',
-  'applied',
-  'interviewing',
-  'offer',
-  'rejected',
-]) {
-  assert.ok(
-    html.includes(`data-status="${status}"`),
-    `missing column ${status}`
-  );
-}
-assert.ok(!html.includes('data-status="fallback"'), 'fallback is not a column');
-assert.ok(!html.includes('data-status="failed"'), 'failed is not a column');
-assert.ok(html.includes('needs you'), 'needsFallback flag rendered');
-assert.ok(html.includes('5 tracked'), 'header count');
-assert.ok(html.includes('Senior Full-Stack Engineer — Nimbus Analytics'));
-assert.ok(html.includes('Referred by Sam; recruiter: r.lee@acme.example'));
-assert.ok(html.includes('Onsite scheduled 2026-07-24'));
-// detail-view data reaches the page (embedded payload for the dialog)
-assert.ok(html.includes('real-time observability platform'), 'description in payload');
-assert.ok(html.includes('recruiter email'), 'history in payload');
-assert.ok(html.includes('draggable="true"'), 'cards draggable');
-// template-literal escaping guard: client regex word boundaries must survive
-assert.ok(html.includes('\\bintern'), 'client regex \\b not eaten by template literal');
-// per-application + global archive files listed in the payload
-assert.ok(html.includes('interview-prep.md'), 'per-app file listed');
-assert.ok(html.includes('interview-cheatsheet.md'), 'global file listed');
-console.log('board: static render + detail payload ✓');
-
-// --- 2. escaping probe: hostile data must not become markup ---
-const probe = join(outDir, 'probe.json');
-writeFileSync(
-  probe,
-  JSON.stringify([
-    {
-      id: 'x1',
-      url: 'https://example.com/"><img src=x>',
-      title: '<script>alert(1)</script>',
-      status: 'fallback', // legacy status — must normalize to pending
-      createdAt: '2026-07-20T00:00:00.000Z',
-      updatedAt: '2026-07-20T00:00:00.000Z',
-      notes: '<img src=x onerror=alert(2)>',
-    },
-  ])
-);
-const probeOut = join(outDir, 'probe.html');
-execFileSync(process.execPath, ['.agents/skills/tracker/scripts/board.mjs', probe, probeOut], {
-  cwd: root,
-  stdio: 'inherit',
-});
-const probeHtml = readFileSync(probeOut, 'utf8');
-assert.ok(!probeHtml.includes('<script>alert(1)'), 'title script escaped');
-assert.ok(!probeHtml.includes('<img src=x'), 'notes/url markup escaped');
-assert.ok(probeHtml.includes('&lt;script&gt;alert(1)'), 'escaped title rendered');
-// legacy status normalized: card renders with the fallback flag in To Apply
-assert.ok(
-  probeHtml.includes('needs you'),
-  'legacy fallback status normalized to pending + flag'
-);
-console.log('board: escaping probe + legacy migration ✓');
-
-// --- 2.5 fresh workspace: missing applications.json renders an empty board ---
-const freshOut = join(outDir, 'fresh.html');
-execFileSync(
-  process.execPath,
-  ['.agents/skills/tracker/scripts/board.mjs', join(outDir, 'does-not-exist.json'), freshOut],
-  { cwd: root, stdio: 'inherit' }
-);
-assert.ok(
-  readFileSync(freshOut, 'utf8').includes('0 tracked'),
-  'missing file renders empty board instead of crashing'
-);
-console.log('board: fresh workspace ✓');
-
-// --- 3. serve mode: drag persistence writes back to the JSON file ---
+// --- 1. serve mode: the console API is the only board renderer now ---
 const live = join(outDir, 'apps-live.json');
 copyFileSync(join(here, 'fixtures/applications.json'), live);
 // mirror the archive folder + profile + instructions next to the live JSON so
@@ -180,16 +99,58 @@ try {
   assert.equal(bootstrap.experience.tier, 0, 'state exposes Tier 0 experience status');
   assert.ok(Array.isArray(bootstrap.globalFiles), 'state bootstrap files');
 
-  const page = await (await fetch(`${base}/legacy`)).text();
-  assert.ok(page.includes('id="view-board"'), 'legacy console renders board view');
-  // profile pane: resume preview + editor payload from fixture profile
-  assert.ok(page.includes('John Doe'), 'profile preview rendered');
-  assert.ok(page.includes('id="view-instructions"'), 'instructions view present');
-  assert.ok(page.includes('never-apply'), 'instructions content loaded');
+  assert.equal((await fetch(`${base}/legacy`)).status, 404, 'the second renderer is gone');
 
-  // custom sections render in the preview and survive the round-trip
-  assert.ok(page.includes('ACM Regional Finalist'), 'custom section in preview');
-  assert.ok(page.includes('Custom sections'), 'custom-section editor present');
+  // every field the console's Board tab reads must reach it through /api/state
+  const nimbus = bootstrap.apps.find(a => a.title?.includes('Nimbus Analytics'));
+  assert.ok(nimbus, 'fixture application in the payload');
+  assert.ok(nimbus.description?.includes('real-time observability'), 'JD text in payload');
+  assert.ok(nimbus.history?.length, 'delivery history in payload');
+  assert.ok(Array.isArray(nimbus._files), 'per-application archive listed');
+  assert.ok(
+    bootstrap.globalFiles.includes('interview-cheatsheet.md'),
+    'global archive listed'
+  );
+  assert.ok(bootstrap.instructions.includes('never-apply'), 'instructions in payload');
+  assert.equal(
+    bootstrap.profile.customSections[0].entries[0].heading,
+    'ACM Regional Finalist',
+    'custom sections reach the profile editor'
+  );
+
+  // statuses the board can show — and the two legacy ones it must migrate away
+  const statuses = new Set(bootstrap.apps.map(a => a.status));
+  for (const s of statuses) {
+    assert.ok(
+      ['pending', 'applied', 'interviewing', 'offer', 'rejected'].includes(s),
+      `unexpected status in payload: ${s}`
+    );
+  }
+
+  // hostile data stays DATA: it round-trips through JSON and never reaches the
+  // served HTML shell (React escapes on render; the shell is static)
+  const hostile = JSON.parse(readFileSync(live, 'utf8'));
+  hostile.unshift({
+    id: 'x1',
+    url: 'https://example.com/"><img src=x>',
+    title: '<script>alert(1)</script>',
+    status: 'fallback', // legacy status — must normalize to pending + flag
+    createdAt: '2026-07-20T00:00:00.000Z',
+    updatedAt: '2026-07-20T00:00:00.000Z',
+    notes: '<img src=x onerror=alert(2)>',
+  });
+  writeFileSync(live, JSON.stringify(hostile, null, 2));
+  const withHostile = await (await fetch(`${base}/api/state`)).json();
+  const evilApp = withHostile.apps.find(a => a.id === 'x1');
+  assert.equal(evilApp.title, '<script>alert(1)</script>', 'hostile title survives as data');
+  assert.equal(evilApp.status, 'pending', 'legacy fallback status normalized');
+  assert.equal(evilApp.needsFallback, true, 'and flagged for the human');
+  assert.ok(
+    !(await (await fetch(base)).text()).includes('<script>alert(1)'),
+    'hostile data never reaches the served shell'
+  );
+  writeFileSync(live, JSON.stringify(hostile.slice(1), null, 2));
+  console.log('board: state payload + hostile data stays data ✓');
 
   // profile API round-trip
   const prof = await (await fetch(`${base}/api/profile`)).json();
@@ -314,6 +275,41 @@ try {
   const evil = await fetch(`${base}/files/..%2Fapps-live.json`);
   assert.equal(evil.status, 404, 'path traversal blocked');
   console.log('board: serve-mode persistence + archive files ✓');
+
+  // fresh workspace: a data home with no applications.json is an empty board,
+  // not a crash (board.mjs must never invent or overwrite data it cannot read)
+  {
+    const freshHome = join(outDir, 'fresh-home');
+    mkdirSync(freshHome, { recursive: true });
+    const fresh = spawn(
+      process.execPath,
+      ['.agents/skills/tracker/scripts/board.mjs', join(freshHome, 'applications.json'), '--serve', '0'],
+      { cwd: root, env: { ...process.env, COFORCE_SOURCE_FILE: join(here, 'fixtures/source-jobs.md') } }
+    );
+    try {
+      const freshPort = await new Promise((res, rej) => {
+        let buf = '';
+        fresh.stdout.on('data', d => {
+          buf += d;
+          const m = buf.match(/localhost:(\d+)/);
+          if (m) res(Number(m[1]));
+        });
+        fresh.on('exit', () => rej(new Error(`fresh server exited: ${buf}`)));
+        setTimeout(() => rej(new Error('fresh server start timeout')), 5000);
+      });
+      const freshState = await (await fetch(`http://localhost:${freshPort}/api/state`)).json();
+      assert.deepEqual(freshState.apps, [], 'missing applications.json → empty board');
+      assert.equal(freshState.prefs, null, 'no settings → the welcome wizard opens');
+      assert.equal(
+        existsSync(join(freshHome, 'applications.json')),
+        false,
+        'reading an empty workspace must not create files'
+      );
+      console.log('board: fresh workspace ✓');
+    } finally {
+      fresh.kill();
+    }
+  }
 
   // discover + one-click apply queue
   const disc = await (await fetch(`${base}/api/discover`)).json();

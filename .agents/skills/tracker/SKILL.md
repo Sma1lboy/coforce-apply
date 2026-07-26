@@ -39,7 +39,8 @@ with HMR on :5173 for working on the UI (`web/src`, needs bun or npm). The
 script rebuilds dist automatically when sources changed and a package manager
 exists; otherwise it serves the committed dist (end users never build).
 `board.mjs` is the API server behind it — never invoke it directly from
-skills; a plain inline fallback lives at `/legacy`.
+skills. It only serves; a second hand-rolled HTML renderer used to exist for
+a static single-file export and was deleted (git history has it).
 One kobe-Hallmark-themed local site with these primary tabs:
 - **Board** — kanban: full-height status columns, drag & drop moves an
   application (appends a history event, saves to the JSON), cards open a
@@ -78,13 +79,12 @@ One kobe-Hallmark-themed local site with these primary tabs:
   LaTeX template, Tier 0 source scope, discovery preferences, and sources.
 
 **Launch it at the start of every working session** (any tracker/apply/start
-activity): if port 4517 isn't already serving, run start_web.sh and `open` the URL —
-the console is how the user watches everything. Without `--serve` it renders a
-static read-only `~/.coforce/out/board.html` (drags show a "Copy JSON" bar).
+activity): if port 4517 isn't already serving, run start_web.sh and `open` the
+URL — the console is how the user watches everything.
 
 **Always end a mutation by showing the board.** After any add or status
-change — even when the user didn't ask for the board — regenerate it and `open`
-it (or say the path if a browser can't be opened), plus a one-line diff summary
+change — even when the user didn't ask for the board — make sure it is serving
+and `open` it (or say the URL if a browser can't be opened), plus a one-line diff summary
 ("Initech → interviewing"). The board is the product surface, not a debug
 artifact; the user should never have to ask to see it.
 

@@ -179,7 +179,7 @@ standalone meta-skill for recording and re-rendering skill conversations.
 
 - `npm run harness` — deterministic checks: evidence, campaign ZIP, apply
   lifecycle, board, hunt. No network, no LLM calls, stubbed agent CLI.
-- `npm run board` / `npm run board:serve` — static / live kanban
+- `npm run board` — the console (API + prebuilt React app) on :4517
 - `npm run hunt` — one discovery pass (`--track` to record)
 
 The repo has no npm dependencies: every script runs on Node builtins, and the

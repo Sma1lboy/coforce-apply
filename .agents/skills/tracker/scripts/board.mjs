@@ -1,13 +1,14 @@
 // Local application-tracker board: applications JSON → interactive kanban HTML.
 // Ships inside the tracker skill; user data lives in ~/.coforce/.
 //
-//   node board.mjs [input.json] [output.html]   # render static file
-//   node board.mjs [input.json] --serve [port]  # live board, drag persists
+//   node board.mjs [input.json] [--serve] [port]
 //
-// Defaults: ~/.coforce/applications.json → ~/.coforce/out/board.html, port 4517.
-// Serve mode regenerates on every GET and writes drags back to the input JSON
-// (POST /api/apps). Static mode falls back to a "copy JSON" bar after a drag.
-// Theme: kobe "Hallmark" tokens (terracotta on warm dark) — the CoForce brand look.
+// Defaults: ~/.coforce/applications.json, port 4517. Always serves: the board
+// IS the React console in tracker/web/dist (committed with the skill), and
+// this process is its API. Drags persist back to the input JSON via
+// POST /api/apps. There used to be a second, hand-rolled HTML renderer for a
+// static export; it duplicated the console a thousand lines at a time and is
+// gone — read git history if you ever want a single-file export back.
 
 import {
   createReadStream,
@@ -45,15 +46,13 @@ import {
   runAgentImport,
   spawnAgent,
 } from './agent-runner.mjs';
-import { renderBoard } from './legacy-render.mjs';
 
 // hunt.mjs lives in the sibling start skill (all skills install together)
 const huntScript = join(
   dirname(fileURLToPath(import.meta.url)),
   '../../start/scripts/hunt.mjs'
 );
-// prebuilt React console (tracker/web) — served at / when present;
-// the inline-rendered page stays available at /legacy as fallback
+// prebuilt React console (tracker/web) — the board itself, served at /
 const webDist = join(dirname(fileURLToPath(import.meta.url)), '../web/dist');
 const MIME = {
   '.html': 'text/html; charset=utf-8',
@@ -69,19 +68,17 @@ const MIME = {
 
 const HOME = dataHome();
 const args = process.argv.slice(2);
+// --serve is accepted and ignored: serving is all this does now, but the flag
+// is in every existing script, doc and muscle memory.
 const serveIdx = args.indexOf('--serve');
-const serve = serveIdx !== -1;
 // port 0 is valid (ephemeral) — don't let || swallow it
-const portArg = serve ? args[serveIdx + 1] : undefined;
+const portArg = serveIdx === -1 ? undefined : args[serveIdx + 1];
 const hasPortArg = portArg !== undefined && /^\d+$/.test(portArg);
-const port = serve ? (hasPortArg ? Number(portArg) : 4517) : null;
+const port = hasPortArg ? Number(portArg) : 4517;
 const positional = args.filter(
   (a, i) => a !== '--serve' && !(hasPortArg && i === serveIdx + 1)
 );
-const [
-  input = join(HOME, 'applications.json'),
-  output = join(HOME, 'out', 'board.html'),
-] = positional;
+const [input = join(HOME, 'applications.json')] = positional;
 
 // --- background Chrome apply job runner ---------------------------------
 // POST /api/apply starts Claude Code in the background. The skill's background protocol stops BEFORE the final submit and
@@ -110,21 +107,6 @@ const dataDir = dirname(input);
 const filesRoot = join(dataDir, 'applications');
 const profilePath = join(dataDir, 'profile.json');
 const instructionsPath = join(dataDir, 'instructions.md');
-
-// everything the legacy page needs, gathered here so legacy-render stays pure
-const renderCtx = () => {
-  return {
-    profile: loadProfile(),
-    instructions: readText(instructionsPath),
-    prefs: intentOf(loadConfig(dataDir)),
-    runtime: 'claude',
-    runtimeLabel: AGENT_LABEL,
-    filesRoot,
-    instructionsPath,
-    serve,
-    listFiles,
-  };
-};
 
 const BODY_LIMIT = 2 * 1024 * 1024; // ponytail: 2MB covers resume pastes; raise if a legit payload ever hits it
 function readBody(req, res, onBody) {
@@ -191,7 +173,7 @@ function loadApps() {
   return apps.map(normalize);
 }
 
-if (serve) {
+{
   const server = createServer((req, res) => {
     try {
       handle(req, res);
@@ -202,13 +184,11 @@ if (serve) {
   });
   const handle = (req, res) => {
     const hasDist = existsSync(join(webDist, 'index.html'));
-    if (
-      req.method === 'GET' &&
-      (req.url === '/legacy' ||
-        ((req.url === '/' || req.url === '/board') && !hasDist))
-    ) {
-      res.writeHead(200, { 'content-type': 'text/html; charset=utf-8' });
-      res.end(renderBoard(loadApps(), renderCtx()));
+    if (req.method === 'GET' && (req.url === '/' || req.url === '/board') && !hasDist) {
+      // the console bundle ships committed with the skill, so this only fires
+      // on a partial checkout — say exactly how to fix it instead of 404ing
+      res.writeHead(503, { 'content-type': 'text/plain; charset=utf-8' });
+      res.end(`console bundle missing at ${webDist}\nbuild it: cd ${webDist}/.. && bun install && bun run build\n(the API on this port keeps working meanwhile)`);
       return;
     }
     if (
@@ -649,15 +629,4 @@ if (serve) {
     const actual = server.address().port;
     console.log(`console: http://localhost:${actual} (writes ${input})`);
   });
-} else {
-  let apps;
-  try {
-    apps = loadApps();
-  } catch (err) {
-    console.error(err.message);
-    process.exit(1);
-  }
-  mkdirSync(dirname(output), { recursive: true });
-  writeFileSync(output, renderBoard(apps, renderCtx()));
-  console.log(`board: ${apps.length} applications → ${output}`);
 }
