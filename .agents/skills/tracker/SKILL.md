@@ -79,7 +79,8 @@ One kobe-Hallmark-themed local site with these primary tabs:
   (`claude -p`; binary override `COFORCE_CLAUDE_BIN`) and fills the form for
   review before Save.
 - **Instructions** — edit `~/.coforce/instructions.md` in place.
-- **Settings** — runtime consents, required-vs-automatic resume review,
+- **Settings** — runtime consents, editable minimum resume page coverage,
+  required-vs-automatic resume review,
   LaTeX template, Tier 0 source scope, discovery preferences, and sources.
 
 **Launch it at the start of every working session** (any tracker/apply/start

@@ -38,7 +38,19 @@ other's code:
     "selectedSkillPack": "agentDev | backend | generalSWE | null",
     "experienceIndexGeneratedAt": "ISO | null", "experienceIndexFingerprint": "sha | null",
     "approvedAt": "ISO | null", "approvalMode": "manual | automatic | null",
-    "feedback": [], "error": null, "createdAt": "ISO", "updatedAt": "ISO"
+    "reviewDeliveryProof": {
+      "pageCoverage": {
+        "status": "passed", "actualPercent": 97.2, "minimumPercent": 96,
+        "judgedAt": "ISO", "artifact": "judge.json"
+      }
+    },
+    "feedback": [{
+      "reasonCode": "page_coverage_insufficient | null",
+      "visibility": "internal | human",
+      "text": "…", "status": "open | resolved",
+      "resolutionEvidence": "pageCoverage proof | null"
+    }],
+    "error": null, "createdAt": "ISO", "updatedAt": "ISO"
   }],
   "lastExport": { "path": "…", "exportedAt": "ISO", "jobCount": 0 }
 }
@@ -57,6 +69,10 @@ Require these values in `~/.coforce/config.json`:
 - `requireResumeReview`: optional boolean, defaulting to `true`. When `false`,
   a complete successfully rendered resume is automatically approved and the
   ZIP is refreshed after the full batch completes.
+- `resumePageCoverageMinimumPercent`: optional number from 0–100, defaulting to
+  `93`. This is the minimum vertical page coverage for every generated resume.
+  A resume below the configured threshold must select more reviewed pool
+  bullets; never change template typography or spacing to satisfy it.
 
 Require a non-empty **verified bullet pool** and skill inventory. Bullets are
 reviewed into `~/.coforce/profile.json` (Module 1: the `experience` /
@@ -228,6 +244,17 @@ non-empty role pack, and no stale referenced skill names. Otherwise stop at
    exact wrapper and spacing tokens; do not rebuild wrappers from generic
    defaults or normalize values such as `-9mm` to `-8mm`.
 
+   The contact header is locked template content. Never append job-specific
+   location, work-mode, relocation, visa, CPT, or sponsorship labels to it.
+   Those values belong in preferences, tracker notes, and application-form
+   answers; they do not belong in the resume contact line.
+
+   Preserve the template preamble exactly. For this template,
+   `\resumeItem{label}{body}` bolds the label argument; resume bullets therefore
+   go in the body argument as `\resumeItem{}{<verbatim bullet>}` so only the
+   bullet's reviewed, explicit `\textbf{...}` spans are bold. Never rewrite the
+   macro to compensate for incorrect argument placement.
+
    For a revision-requested job, read every open feedback item first and
    regenerate the existing `resume.tex`; do not create parallel drafts.
 
@@ -238,16 +265,47 @@ non-empty role pack, and no stale referenced skill names. Otherwise stop at
    ```
 
    `judge.json` must show `onePage: true` (exactly one page), `fullPage: true`
-   (content reaches ≥88% down the page — a half-empty page is as much a failed
-   product as a second page; fix by selecting MORE pool bullets, never by
-   inflating text), and `verbatim: true` (every `\resumeItem` is one of the
+   (content reaches the configured `resumePageCoverageMinimumPercent`; the
+   record includes both `fullness` and `minimumPageCoveragePercent` — a sparse
+   page is as much a failed product as a second page; fix by selecting MORE
+   pool bullets, never by inflating text), and `verbatim: true` (every
+   `\resumeItem` is one of the
    selected bullets, word for word), `skillsDense: true` (at least
    `min(18, skillPoolSize)` rendered skills), `skillGroupsDense: true` (every
    displayed group has at least `min(5, selectedSkillCount)` entries), and
    `skillsVerbatim: true` whenever a
    Skills section or skill selection exists (every rendered skill is selected
-   and every selected skill is rendered). A failed metric blocks automatic
+   and every selected skill is rendered). It must also show
+   `sectionTransitionsCompact: true`: the rendered `Working Experience` →
+   `Projects` boundary may not contain a visible blank row (the machine limit
+   is a 13-point baseline-to-baseline gap). A failed metric blocks automatic
    approval in code; fix and re-render, don't argue.
+
+   The template-contract metrics must also pass:
+   `templatePreambleExact`, `templateContactHeaderExact`,
+   `projectTransitionSpacingExact`, and `resumeItemsUseBodyArgument`. These
+   prevent per-resume macro forks, job-specific contact-line additions,
+   normalized project spacers, and accidental whole-bullet bolding.
+   `campaign.mjs render` normalizes these locked surfaces from the configured
+   template before compiling; the judge independently verifies the result.
+
+   `page_coverage_insufficient` is the canonical machine-readable revision
+   reason. A failed coverage judge writes that open feedback reason and keeps
+   the job in `revision_requested`; it is not a successful render. The job may
+   return to `rendered` (Ready to Review) only after a newer judge passes and
+   the job records `reviewDeliveryProof.pageCoverage` with actual percentage,
+   configured minimum, timestamp, and `judge.json` artifact. The earlier
+   feedback remains in history as `resolved` with the same proof attached.
+   This reason, its actual/minimum values, and `reviewDeliveryProof` are
+   **internal Agent QA only**. Mark them `visibility: "internal"` and never
+   expose them through the Human Review console/API. Human reviewers see only
+   a generic revision-in-progress state until the resume is ready.
+
+   Render the latest PDF to PNG and visually inspect every section boundary at
+   readable resolution before review. The machine gap metric prevents the known
+   blank-row regression, but it does not replace checking for collisions,
+   clipping, awkward wraps, or inconsistent spacing. A contact sheet may be
+   used for batch triage; inspect any anomaly at full resolution.
 
    Then the LLM judge — **one spec, run context-free**: spawn a fresh
    subagent (Task tool) whose entire context is the resume text, the JD,
@@ -284,7 +342,8 @@ non-empty role pack, and no stale referenced skill names. Otherwise stop at
    ```
 
    Rendering requires `latexmk`, `pdflatex`, or `tectonic` and enforces the
-   one-page gate when `pdfinfo` is available. If `pdftoppm` is available, render
+   one-page and configured page-coverage gates when the corresponding PDF tools
+   are available. If `pdftoppm` is available, render
    the PDF to PNG at 150 DPI and visually inspect it for clipping, overlap,
    missing glyphs, broken links, and accidental blank space before marking it
    ready. Iterate until the output is clean. With `requireResumeReview: false`,
@@ -299,9 +358,11 @@ non-empty role pack, and no stale referenced skill names. Otherwise stop at
    for optional inspection but does not block approval or export.
 
 8. **Export after approval**. The Review tab enables **Export approved ZIP**
-   only when every campaign job is approved. In auto mode the state machine
-   performs the same export automatically when the final job completes. The
-   equivalent CLI is:
+   only when every campaign job is approved. Export revalidates the current
+   page-coverage setting, so changing the threshold cannot leave old approvals
+   eligible under a stale judge. In auto mode the state machine performs the
+   same export automatically when the final job completes. The equivalent CLI
+   is:
 
    ```sh
    node "<campaign-skill>/scripts/campaign.mjs" export

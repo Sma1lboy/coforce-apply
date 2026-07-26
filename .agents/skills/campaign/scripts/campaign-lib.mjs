@@ -52,9 +52,116 @@ const removeIfExists = path => {
   if (existsSync(path)) unlinkSync(path);
 };
 
+export const DEFAULT_RESUME_PAGE_COVERAGE_MINIMUM_PERCENT = 93;
+export const PAGE_COVERAGE_INSUFFICIENT_REASON = 'page_coverage_insufficient';
+
+export const REVIEW_FEEDBACK_REASONS = {
+  [PAGE_COVERAGE_INSUFFICIENT_REASON]:
+    'Page coverage is below the configured minimum; add relevant reviewed content without changing template spacing.',
+};
+
+export const resumePageCoverageMinimumPercent = dataDir => {
+  try {
+    const raw = loadConfig(dataDir).resumePageCoverageMinimumPercent;
+    if (raw === '' || raw === null || raw === undefined) {
+      return DEFAULT_RESUME_PAGE_COVERAGE_MINIMUM_PERCENT;
+    }
+    const value = Number(raw);
+    return Number.isFinite(value) && value >= 0 && value <= 100
+      ? value
+      : DEFAULT_RESUME_PAGE_COVERAGE_MINIMUM_PERCENT;
+  } catch {
+    return DEFAULT_RESUME_PAGE_COVERAGE_MINIMUM_PERCENT;
+  }
+};
+
+const currentResumeJudge = (dataDir, job) => {
+  const dir = jobDir(dataDir, job);
+  const path = join(dir, 'judge.json');
+  const minimumPageCoveragePercent = resumePageCoverageMinimumPercent(dataDir);
+  if (existsSync(path)) {
+    try {
+      const saved = readJson(path);
+      const judgeModifiedAt = statSync(path).mtimeMs;
+      const newestInputModifiedAt = ['resume.pdf', 'resume.tex', 'match.json']
+        .map(name => join(dir, name))
+        .filter(existsSync)
+        .reduce((latest, input) => Math.max(latest, statSync(input).mtimeMs), 0);
+      if (
+        saved.minimumPageCoveragePercent === minimumPageCoveragePercent &&
+        judgeModifiedAt >= newestInputModifiedAt
+      ) return saved;
+    } catch {}
+  }
+  return judgeResume(dataDir, job.id);
+};
+
+const pageCoverageActualPercent = fullness =>
+  Number.isFinite(fullness) ? Math.round(fullness * 1000) / 10 : null;
+
+export const pageCoverageDeliveryProof = judge => {
+  if (judge?.fullPage !== true || !Number.isFinite(judge?.fullness)) return null;
+  return {
+    status: 'passed',
+    actualPercent: pageCoverageActualPercent(judge.fullness),
+    minimumPercent: judge.minimumPageCoveragePercent,
+    judgedAt: judge.judgedAt,
+    artifact: 'judge.json',
+  };
+};
+
+const coverageFeedbackText = ({ fullness, minimumPageCoveragePercent }) => {
+  const actual = pageCoverageActualPercent(fullness);
+  return actual === null
+    ? `Page coverage could not be verified against the configured ${minimumPageCoveragePercent}% minimum.`
+    : `Page coverage is ${actual}%, below the configured ${minimumPageCoveragePercent}% minimum.`;
+};
+
+const addCoverageFeedbackIfMissing = (job, details) => {
+  const feedback = job.feedback || [];
+  const existing = feedback.find(item =>
+    item.reasonCode === PAGE_COVERAGE_INSUFFICIENT_REASON && item.status === 'open');
+  if (existing) {
+    existing.visibility = 'internal';
+    return false;
+  }
+  job.feedback = [...feedback, {
+    id: `feedback-${Date.now()}-${job.id}`,
+    reasonCode: PAGE_COVERAGE_INSUFFICIENT_REASON,
+    visibility: 'internal',
+    text: coverageFeedbackText(details),
+    createdAt: now(),
+    status: 'open',
+  }];
+  return true;
+};
+
+const resolveCoverageFeedback = (feedback, proof) =>
+  (feedback || []).map(item =>
+    item.reasonCode === PAGE_COVERAGE_INSUFFICIENT_REASON && item.status === 'open'
+      ? {
+          ...item,
+          status: 'resolved',
+          resolvedAt: proof.judgedAt || now(),
+          resolutionEvidence: proof,
+        }
+      : item);
+
 // Fails safe to human review: an unreadable or absent config means review.
 export const resumeReviewRequired = dataDir =>
   loadConfig(dataDir).requireResumeReview !== false;
+
+const latexTemplatePath = dataDir => {
+  for (const name of ['config.json', 'apply-config.json']) {
+    const configPath = join(dataDir, name);
+    if (!existsSync(configPath)) continue;
+    try {
+      const templatePath = readJson(configPath).latexTemplate;
+      if (templatePath && existsSync(templatePath)) return templatePath;
+    } catch {}
+  }
+  return null;
+};
 
 const slugify = value =>
   String(value || 'job')
@@ -247,7 +354,9 @@ export function applyResumeReviewPolicy(dataDir) {
     if (missing.length) continue;
     let judge = null;
     try {
-      judge = existsSync(join(dir, 'judge.json')) ? readJson(join(dir, 'judge.json')) : judgeResume(dataDir, job.id);
+      // Recompute when the configurable coverage threshold changed. A saved
+      // judge must never keep passing under an older, lower setting.
+      judge = currentResumeJudge(dataDir, job);
     } catch {
       continue;
     }
@@ -256,11 +365,18 @@ export function applyResumeReviewPolicy(dataDir) {
     if (
       judge.onePage === false ||
       judge.fullPage === false ||
+      judge.sectionTransitionsCompact === false ||
+      judge.templatePreambleExact === false ||
+      judge.templateContactHeaderExact === false ||
+      judge.projectTransitionSpacingExact === false ||
+      judge.resumeItemsUseBodyArgument === false ||
       judge.verbatim === false ||
       judge.skillsDense === false ||
       judge.skillGroupsDense === false ||
       judge.skillsVerbatim === false
     ) continue;
+    const coverageProof = pageCoverageDeliveryProof(judge);
+    if (!coverageProof) continue;
     // the LLM review is mandatory: no recorded passing verdict, no automatic
     // approval — the playbook records llm-judge.json after the context-free
     // judge run (see references/resume-judge.md)
@@ -272,7 +388,12 @@ export function applyResumeReviewPolicy(dataDir) {
     job.status = 'approved';
     job.approvedAt = now();
     job.approvalMode = 'automatic';
-    job.feedback = (job.feedback || []).map(item => ({ ...item, status: 'resolved' }));
+    job.reviewDeliveryProof = {
+      ...(job.reviewDeliveryProof || {}),
+      pageCoverage: coverageProof,
+    };
+    job.feedback = resolveCoverageFeedback(job.feedback, coverageProof)
+      .map(item => ({ ...item, status: 'resolved' }));
     job.error = null;
     job.updatedAt = now();
     persistJobSnapshot(dataDir, job);
@@ -694,14 +815,51 @@ export function stageArtifacts(dataDir, id, artifacts) {
     match: 'match-report.md',
   };
   for (const [key, name] of Object.entries(mapping)) safeCopy(artifacts[key], join(dir, name));
-  const staged = updateJob(dataDir, id, current => {
+  let staged = updateJob(dataDir, id, current => {
     const hasPdf = existsSync(join(dir, 'resume.pdf'));
     const hasTex = existsSync(join(dir, 'resume.tex'));
-    current.status = hasPdf && hasTex ? 'rendered' : current.status;
+    current.status = hasPdf && hasTex ? 'matched' : current.status;
     current.approvedAt = null;
     current.approvalMode = null;
+    current.reviewDeliveryProof = null;
     current.error = null;
   });
+  if (existsSync(join(dir, 'resume.pdf')) && existsSync(join(dir, 'resume.tex'))) {
+    try {
+      const judge = judgeResume(dataDir, id);
+      const proof = pageCoverageDeliveryProof(judge);
+      staged = updateJob(dataDir, id, current => {
+        if (proof) {
+          current.status = 'rendered';
+          current.reviewDeliveryProof = {
+            ...(current.reviewDeliveryProof || {}),
+            pageCoverage: proof,
+          };
+          current.feedback = resolveCoverageFeedback(current.feedback, proof);
+          current.error = null;
+        } else {
+          current.status = 'revision_requested';
+          current.reviewDeliveryProof = null;
+          current.error = judge.fullPage === false
+            ? coverageFeedbackText({
+                fullness: judge.fullness,
+                minimumPageCoveragePercent: judge.minimumPageCoveragePercent,
+              })
+            : 'Page coverage could not be measured; Review delivery proof is required';
+          addCoverageFeedbackIfMissing(current, {
+            fullness: judge.fullness,
+            minimumPageCoveragePercent: judge.minimumPageCoveragePercent,
+          });
+        }
+      });
+    } catch (error) {
+      staged = updateJob(dataDir, id, current => {
+        current.status = 'render_failed';
+        current.reviewDeliveryProof = null;
+        current.error = String(error.message || error);
+      });
+    }
+  }
   if (staged.status === 'rendered' && !resumeReviewRequired(dataDir)) {
     applyResumeReviewPolicy(dataDir);
     return findJob(dataDir, id).job;
@@ -824,6 +982,67 @@ export function syncSelectedSkillsToResume(dataDir, id) {
   };
 }
 
+export function syncTemplateContractToResume(dataDir, id) {
+  const templatePath = latexTemplatePath(dataDir);
+  if (!templatePath) return { updated: false, reason: 'no latex template configured' };
+  const { job } = findJob(dataDir, id);
+  const texPath = join(jobDir(dataDir, job), 'resume.tex');
+  if (!existsSync(texPath)) throw new Error('resume.tex is missing');
+  const template = readFileSync(templatePath, 'utf8');
+  const source = readFileSync(texPath, 'utf8');
+  const marker = '\\begin{document}';
+  const templateBodyStart = template.indexOf(marker);
+  const sourceBodyStart = source.indexOf(marker);
+  if (templateBodyStart === -1 || sourceBodyStart === -1) {
+    throw new Error('template and resume.tex must contain \\begin{document}');
+  }
+
+  let body = source.slice(sourceBodyStart);
+  body = body.replace(
+    /^(\s*)\\resumeItem\{(.*)\}\{\}\s*$/gm,
+    '$1\\resumeItem{}{$2}'
+  );
+  const expectedSpacers = [...new Set(texProjectTransitionSpacers(template))];
+  if (expectedSpacers.length === 1) {
+    body = body.replace(
+      /(\\resumeSubHeadingListEnd\s*\n\s*)\\vspace\{[^}]+\}(\s*\n\s*\\resumeSubHeadingListStart)/g,
+      `$1\\vspace{${expectedSpacers[0]}}$2`
+    );
+  }
+  const templateHeader = templateDocumentHeader(template);
+  const resumeHeader = templateDocumentHeader(body);
+  if (templateHeader !== null && resumeHeader !== null) {
+    body = templateHeader + body.slice(resumeHeader.length);
+  } else {
+    const templateContact = template.split(/\r?\n/).find(line => line.includes('mailto:'));
+    if (templateContact) {
+      const bodyLines = body.split(/\r?\n/);
+      const contactIndex = bodyLines.findIndex(line => line.includes('mailto:'));
+      if (contactIndex === -1) throw new Error('resume.tex is missing the template contact line');
+      bodyLines[contactIndex] = templateContact;
+      body = bodyLines.join('\n');
+    }
+  }
+
+  const next = template.slice(0, templateBodyStart) + body;
+  const metrics = compareTemplateContract(template, next);
+  const nextBody = next.slice(next.indexOf(marker));
+  const resumeItemArguments = texCommandArguments(nextBody, '\\resumeItem', 2);
+  const resumeItemsUseBodyArgument = resumeItemArguments.length
+    ? resumeItemArguments.every(([label, value]) => !label.trim() && value.trim())
+    : null;
+  if (
+    metrics.templatePreambleExact === false ||
+    metrics.templateContactHeaderExact === false ||
+    metrics.projectTransitionSpacingExact === false ||
+    resumeItemsUseBodyArgument === false
+  ) {
+    throw new Error('resume.tex could not be normalized to the LaTeX template contract');
+  }
+  if (next !== source) writeFileSync(texPath, next);
+  return { updated: next !== source, ...metrics, resumeItemsUseBodyArgument };
+}
+
 export function renderResume(dataDir, id, texSource = null) {
   const { job } = findJob(dataDir, id);
   const dir = ensureDir(jobDir(dataDir, job));
@@ -832,6 +1051,7 @@ export function renderResume(dataDir, id, texSource = null) {
   removeIfExists(join(dir, 'llm-judge.json'));
   safeCopy(texSource, tex);
   if (!existsSync(tex)) throw new Error('resume.tex is missing');
+  syncTemplateContractToResume(dataDir, id);
   syncSelectedSkillsToResume(dataDir, id);
   const latexmk = findBinary(['latexmk']);
   const pdflatex = findBinary(['pdflatex']);
@@ -856,15 +1076,36 @@ export function renderResume(dataDir, id, texSource = null) {
       pages = Number(info.match(/^Pages:\s+(\d+)/m)?.[1] || 0) || null;
       if (pages !== 1) throw new Error(`Resume must be exactly one page; rendered ${pages}`);
     }
+    writeFileSync(join(dir, 'render.log'), output);
+    const judge = judgeResume(dataDir, id);
+    if (judge.fullPage === false) {
+      const error = new Error(
+        `Resume page coverage ${Math.round(judge.fullness * 1000) / 10}% is below the configured ` +
+        `${judge.minimumPageCoveragePercent}% minimum`
+      );
+      error.code = 'PAGE_COVERAGE_INSUFFICIENT';
+      error.judge = judge;
+      throw error;
+    }
+    const proof = pageCoverageDeliveryProof(judge);
+    if (!proof) {
+      const error = new Error('Resume page coverage must be measured before delivery to Review');
+      error.code = 'PAGE_COVERAGE_UNVERIFIABLE';
+      error.judge = judge;
+      throw error;
+    }
     const updated = updateJob(dataDir, id, current => {
       current.status = 'rendered';
       current.pageCount = pages;
       current.approvedAt = null;
       current.approvalMode = null;
       current.error = null;
+      current.reviewDeliveryProof = {
+        ...(current.reviewDeliveryProof || {}),
+        pageCoverage: proof,
+      };
+      current.feedback = resolveCoverageFeedback(current.feedback, proof);
     });
-    writeFileSync(join(dir, 'render.log'), output);
-    judgeResume(dataDir, id);
     if (!resumeReviewRequired(dataDir)) {
       applyResumeReviewPolicy(dataDir);
       return findJob(dataDir, id).job;
@@ -872,8 +1113,18 @@ export function renderResume(dataDir, id, texSource = null) {
     return updated;
   } catch (error) {
     updateJob(dataDir, id, current => {
-      current.status = 'render_failed';
+      const coverageFailure = String(error.code || '').startsWith('PAGE_COVERAGE_');
+      current.status = coverageFailure ? 'revision_requested' : 'render_failed';
       current.error = String(error.message || error);
+      if (coverageFailure) {
+        current.reviewDeliveryProof = null;
+        addCoverageFeedbackIfMissing(current, {
+          fullness: error.judge?.fullness ?? null,
+          minimumPageCoveragePercent:
+            error.judge?.minimumPageCoveragePercent ??
+            resumePageCoverageMinimumPercent(dataDir),
+        });
+      }
     });
     throw error;
   }
@@ -891,21 +1142,27 @@ const unescapeTex = value => String(value)
 
 const texResumeItems = tex => {
   const items = [];
-  const needle = '\\resumeItem{';
+  const needle = '\\resumeItem';
   let idx = 0;
   for (;;) {
     const at = tex.indexOf(needle, idx);
     if (at === -1) break;
-    let depth = 1;
     let i = at + needle.length;
-    const start = i;
-    while (i < tex.length && depth > 0) {
-      if (tex[i] === '{') depth += 1;
-      else if (tex[i] === '}') depth -= 1;
-      i += 1;
+    const args = [];
+    while (args.length < 2) {
+      while (/\s/.test(tex[i] || '')) i += 1;
+      if (tex[i] !== '{') break;
+      let depth = 1;
+      const start = ++i;
+      while (i < tex.length && depth > 0) {
+        if (tex[i] === '{') depth += 1;
+        else if (tex[i] === '}') depth -= 1;
+        i += 1;
+      }
+      args.push(tex.slice(start, i - 1));
     }
-    items.push(tex.slice(start, i - 1));
-    idx = i;
+    if (args.length) items.push(args.filter(value => value.trim()).join(' '));
+    idx = Math.max(i, at + needle.length);
   }
   return items;
 };
@@ -954,6 +1211,97 @@ const texSkillGroups = tex => {
     }));
 };
 
+const texProjectTransitionSpacers = tex => {
+  const section = tex.match(/\\section\s*\{\s*(?:\\textbf\s*\{\s*)?Projects\s*\}?\s*\}/i);
+  if (!section || section.index === undefined) return [];
+  const block = tex.slice(section.index + section[0].length);
+  return [...block.matchAll(
+    /\\resumeSubHeadingListEnd\s*\\vspace\{([^}]+)\}\s*\\resumeSubHeadingListStart/g
+  )].map(match => match[1].trim());
+};
+
+const templateContactLine = tex =>
+  String(tex).split(/\r?\n/).map(line => line.trim()).find(line => line.includes('mailto:')) || null;
+
+const templateDocumentHeader = tex => {
+  const source = String(tex);
+  const marker = '\\begin{document}';
+  const bodyStart = source.indexOf(marker);
+  if (bodyStart === -1) return null;
+  const body = source.slice(bodyStart);
+  const firstSection = body.search(/\\section\s*\{/);
+  return firstSection === -1 ? null : body.slice(0, firstSection);
+};
+
+export const compareTemplateContract = (templateSource, resumeSource) => {
+  const marker = '\\begin{document}';
+  const templateBodyStart = String(templateSource).indexOf(marker);
+  const resumeBodyStart = String(resumeSource).indexOf(marker);
+  const templatePreambleExact = templateBodyStart === -1 || resumeBodyStart === -1
+    ? null
+    : String(templateSource).slice(0, templateBodyStart) ===
+      String(resumeSource).slice(0, resumeBodyStart);
+  const expectedContactHeader = templateDocumentHeader(templateSource);
+  const renderedContactHeader = templateDocumentHeader(resumeSource);
+  const expectedContactLine = templateContactLine(templateSource);
+  const renderedContactLine = templateContactLine(resumeSource);
+  const templateContactHeaderExact = expectedContactHeader !== null
+    ? renderedContactHeader === expectedContactHeader
+    : expectedContactLine === null
+      ? null
+      : renderedContactLine === expectedContactLine;
+  const expectedProjectTransitionSpacers = [
+    ...new Set(texProjectTransitionSpacers(templateSource)),
+  ];
+  const renderedProjectTransitionSpacers = texProjectTransitionSpacers(resumeSource);
+  const projectTransitionSpacingExact = expectedProjectTransitionSpacers.length
+    ? renderedProjectTransitionSpacers.every(spacer =>
+      expectedProjectTransitionSpacers.includes(spacer))
+    : null;
+  return {
+    templatePreambleExact,
+    templateContactHeaderExact,
+    expectedProjectTransitionSpacers,
+    renderedProjectTransitionSpacers,
+    projectTransitionSpacingExact,
+  };
+};
+
+export const measureWorkProjectsGap = bbox => {
+  const words = [...String(bbox || '').matchAll(
+    /<word xMin="([\d.]+)" yMin="([\d.]+)" xMax="([\d.]+)" yMax="([\d.]+)">([^<]*)<\/word>/g
+  )].map(match => ({
+    yMin: Number(match[2]),
+    text: match[5].replace(/&amp;/g, '&').trim().toUpperCase(),
+  }));
+  let headingY = null;
+  for (let index = 0; index < words.length; index += 1) {
+    const word = words[index];
+    if (word.text === 'PROJECTS') {
+      headingY = word.yMin;
+      break;
+    }
+    const next = words[index + 1];
+    if (
+      word.text === 'P' &&
+      next?.text === 'ROJECTS' &&
+      Math.abs(word.yMin - next.yMin) <= 3
+    ) {
+      headingY = Math.min(word.yMin, next.yMin);
+      break;
+    }
+  }
+  if (headingY === null) return null;
+  // Compare line baselines (represented by each word's yMin), not glyph
+  // bottoms. Glyph bottoms vary with letters such as g/p/y and caused clean
+  // adjacent lines to be misclassified as a large gap.
+  const previousBaseline = Math.max(
+    ...words.filter(word => word.yMin < headingY - 0.1).map(word => word.yMin)
+  );
+  if (!Number.isFinite(previousBaseline)) return null;
+  return Math.round(Math.max(0, headingY - previousBaseline) * 100) / 100;
+};
+
 export function judgeResume(dataDir, id) {
   const { job } = findJob(dataDir, id);
   const dir = jobDir(dataDir, job);
@@ -973,20 +1321,50 @@ export function judgeResume(dataDir, id) {
   // page is a failed product too. Measure how far content reaches down the
   // page from the pdftotext bounding boxes.
   let fullness = null;
+  let workProjectsGapPoints = null;
   const pdftotext = findBinary(['pdftotext']);
   if (pdftotext) {
     const bbox = execFileSync(pdftotext, ['-bbox', pdfPath, '-'], { encoding: 'utf8' });
     const page = bbox.match(/<page width="([\d.]+)" height="([\d.]+)"/);
     const ys = [...bbox.matchAll(/yMax="([\d.]+)"/g)].map(m => Number(m[1]));
     if (page && ys.length) fullness = Math.round((Math.max(...ys) / Number(page[2])) * 1000) / 1000;
+    workProjectsGapPoints = measureWorkProjectsGap(bbox);
   }
-  const FULL_PAGE_MIN = 0.93; // 撑满: content must press into the bottom margin zone (~0.77in of slack on letter); a page in the 0.8s reads half-hearted
-  const fullPage = fullness === null ? null : fullness >= FULL_PAGE_MIN;
+  const minimumPageCoveragePercent = resumePageCoverageMinimumPercent(dataDir);
+  const minimumPageCoverage = minimumPageCoveragePercent / 100;
+  const fullPage = fullness === null ? null : fullness >= minimumPageCoverage;
+  const MAX_WORK_PROJECTS_GAP_POINTS = 13;
+  const sectionTransitionsCompact = workProjectsGapPoints === null
+    ? null
+    : workProjectsGapPoints <= MAX_WORK_PROJECTS_GAP_POINTS;
   // judge only the document body — the preamble's macro definitions contain
   // \resumeItem{#1} and are not resume content
   const texSource = readFileSync(texPath, 'utf8');
   const bodyStart = texSource.indexOf('\\begin{document}');
-  const items = texResumeItems(bodyStart === -1 ? texSource : texSource.slice(bodyStart)).map(unescapeTex);
+  const texBody = bodyStart === -1 ? texSource : texSource.slice(bodyStart);
+  const items = texResumeItems(texBody).map(unescapeTex);
+  const resumeItemArguments = texCommandArguments(texBody, '\\resumeItem', 2);
+  const resumeItemsUseBodyArgument = resumeItemArguments.length
+    ? resumeItemArguments.every(([label, body]) => !label.trim() && body.trim())
+    : null;
+  let templatePreambleExact = null;
+  let templateContactHeaderExact = null;
+  let projectTransitionSpacingExact = null;
+  let expectedProjectTransitionSpacers = [];
+  let renderedProjectTransitionSpacers = texProjectTransitionSpacers(texBody);
+  const configuredTemplatePath = latexTemplatePath(dataDir);
+  if (configuredTemplatePath) {
+    try {
+      const templateSource = readFileSync(configuredTemplatePath, 'utf8');
+      ({
+        templatePreambleExact,
+        templateContactHeaderExact,
+        expectedProjectTransitionSpacers,
+        renderedProjectTransitionSpacers,
+        projectTransitionSpacingExact,
+      } = compareTemplateContract(templateSource, texSource));
+    } catch {}
+  }
   const matchPath = join(dir, 'match.json');
   let verbatim = null;
   const unknownLines = [];
@@ -1039,13 +1417,33 @@ export function judgeResume(dataDir, id) {
       }
     }
   }
+  const issues = [];
+  if (fullPage === false) {
+    issues.push({
+      code: PAGE_COVERAGE_INSUFFICIENT_REASON,
+      actualPercent: pageCoverageActualPercent(fullness),
+      minimumPercent: minimumPageCoveragePercent,
+    });
+  }
   const judge = {
     schemaVersion: CAMPAIGN_SCHEMA,
     judgedAt: now(),
     pageCount,
     onePage,
     fullness,
+    minimumPageCoverage,
+    minimumPageCoveragePercent,
     fullPage,
+    issues,
+    workProjectsGapPoints,
+    maximumWorkProjectsGapPoints: MAX_WORK_PROJECTS_GAP_POINTS,
+    sectionTransitionsCompact,
+    templatePreambleExact,
+    templateContactHeaderExact,
+    expectedProjectTransitionSpacers,
+    renderedProjectTransitionSpacers,
+    projectTransitionSpacingExact,
+    resumeItemsUseBodyArgument,
     itemCount: items.length,
     verbatim,
     unknownLines,
@@ -1067,12 +1465,23 @@ export function judgeResume(dataDir, id) {
   return judge;
 }
 
-export function addFeedback(dataDir, id, text) {
-  const body = String(text || '').trim();
+export function addFeedback(dataDir, id, text, reasonCode = null) {
+  const normalizedReason = reasonCode ? String(reasonCode).trim() : null;
+  if (normalizedReason && !Object.hasOwn(REVIEW_FEEDBACK_REASONS, normalizedReason)) {
+    throw new Error(`Unknown feedback reason: ${normalizedReason}`);
+  }
+  const body = String(text || REVIEW_FEEDBACK_REASONS[normalizedReason] || '').trim();
   if (!body) throw new Error('Feedback cannot be empty');
   return updateJob(dataDir, id, job => {
-    job.feedback = [...(job.feedback || []), {
+    const feedback = job.feedback || [];
+    const duplicateReason = normalizedReason && feedback.some(item =>
+      item.reasonCode === normalizedReason && item.status === 'open');
+    job.feedback = duplicateReason ? feedback : [...feedback, {
       id: `feedback-${Date.now()}`,
+      ...(normalizedReason ? { reasonCode: normalizedReason } : {}),
+      ...(normalizedReason === PAGE_COVERAGE_INSUFFICIENT_REASON
+        ? { visibility: 'internal' }
+        : {}),
       text: body,
       createdAt: now(),
       status: 'open',
@@ -1080,6 +1489,7 @@ export function addFeedback(dataDir, id, text) {
     job.status = 'revision_requested';
     job.approvedAt = null;
     job.approvalMode = null;
+    job.reviewDeliveryProof = null;
     job.error = null;
   });
 }
@@ -1089,13 +1499,106 @@ export function approveJob(dataDir, id) {
   const dir = jobDir(dataDir, job);
   const missing = REQUIRED_EXPORT_FILES.filter(name => !existsSync(join(dir, name)));
   if (missing.length) throw new Error(`Cannot approve; missing ${missing.join(', ')}`);
+  const judge = currentResumeJudge(dataDir, job);
+  if (judge.fullPage === false) {
+    throw new Error(
+      `Cannot approve; page coverage ${Math.round(judge.fullness * 1000) / 10}% is below the ` +
+      `${judge.minimumPageCoveragePercent}% minimum`
+    );
+  }
+  const proof = pageCoverageDeliveryProof(judge);
+  if (!proof) throw new Error('Cannot approve; page coverage delivery proof is missing');
   return updateJob(dataDir, id, current => {
     current.status = 'approved';
     current.approvedAt = now();
     current.approvalMode = 'manual';
     current.error = null;
+    current.reviewDeliveryProof = {
+      ...(current.reviewDeliveryProof || {}),
+      pageCoverage: proof,
+    };
+    current.feedback = resolveCoverageFeedback(current.feedback, proof);
     current.feedback = (current.feedback || []).map(item => ({ ...item, status: 'resolved' }));
   });
+}
+
+export function reconcileResumePageCoverage(dataDir) {
+  const manifest = loadCampaign(dataDir);
+  const minimumPageCoveragePercent = resumePageCoverageMinimumPercent(dataDir);
+  const failed = [];
+  const passed = [];
+  let judged = 0;
+  for (const job of manifest.jobs) {
+    const dir = jobDir(dataDir, job);
+    if (!existsSync(join(dir, 'resume.pdf')) || !existsSync(join(dir, 'resume.tex'))) continue;
+    try {
+      const judge = currentResumeJudge(dataDir, job);
+      judged += 1;
+      if (judge.fullPage === false) {
+        failed.push({
+          id: job.id,
+          fullness: judge.fullness,
+          minimumPageCoveragePercent,
+        });
+      } else {
+        const proof = pageCoverageDeliveryProof(judge);
+        if (proof) passed.push({ id: job.id, proof });
+      }
+    } catch (error) {
+      judged += 1;
+      failed.push({
+        id: job.id,
+        fullness: null,
+        minimumPageCoveragePercent,
+        error: String(error.message || error),
+      });
+    }
+  }
+  const failedIds = new Set(failed.map(item => item.id));
+  const passedById = new Map(passed.map(item => [item.id, item.proof]));
+  let reopened = 0;
+  let proofRecorded = 0;
+  withCampaignLock(dataDir, () => {
+    const current = loadCampaign(dataDir);
+    for (const job of current.jobs) {
+      const proof = passedById.get(job.id);
+      if (proof) {
+        const previous = job.reviewDeliveryProof?.pageCoverage;
+        const hadOpenCoverageFeedback = (job.feedback || []).some(item =>
+          item.reasonCode === PAGE_COVERAGE_INSUFFICIENT_REASON && item.status === 'open');
+        if (JSON.stringify(previous) !== JSON.stringify(proof) || hadOpenCoverageFeedback) {
+          job.reviewDeliveryProof = {
+            ...(job.reviewDeliveryProof || {}),
+            pageCoverage: proof,
+          };
+          job.feedback = resolveCoverageFeedback(job.feedback, proof);
+          job.updatedAt = now();
+          persistJobSnapshot(dataDir, job);
+          proofRecorded += 1;
+        }
+      }
+      if (!failedIds.has(job.id)) continue;
+      const details = failed.find(item => item.id === job.id);
+      const wasDelivered = ['approved', 'rendered'].includes(job.status);
+      if (wasDelivered) {
+        job.status = 'revision_requested';
+        job.approvedAt = null;
+        job.approvalMode = null;
+        reopened += 1;
+      }
+      job.reviewDeliveryProof = null;
+      job.error = details?.error ||
+        `Page coverage is below the configured ${minimumPageCoveragePercent}% minimum`;
+      addCoverageFeedbackIfMissing(job, details);
+      job.updatedAt = now();
+      persistJobSnapshot(dataDir, job);
+    }
+    if (failed.length) current.lastExport = null;
+    if (failed.length || proofRecorded) {
+      saveCampaign(dataDir, current);
+    }
+  });
+  return { minimumPageCoveragePercent, judged, reopened, proofRecorded, failed };
 }
 
 const crcTable = Array.from({ length: 256 }, (_, n) => {
@@ -1182,6 +1685,12 @@ export function createZip(entries, output) {
 }
 
 export function exportCampaign(dataDir, output = null) {
+  const coverage = reconcileResumePageCoverage(dataDir);
+  if (coverage.failed.length) {
+    throw new Error(
+      `All resumes must meet the ${coverage.minimumPageCoveragePercent}% page coverage minimum before export`
+    );
+  }
   return withCampaignLock(dataDir, () => {
   const manifest = loadCampaign(dataDir);
   if (!manifest.jobs.length) throw new Error('Campaign has no jobs');
@@ -1299,6 +1808,7 @@ export function campaignView(dataDir) {
     ...manifest,
     root: paths.root,
     reviewRequired: resumeReviewRequired(dataDir),
+    minimumPageCoveragePercent: resumePageCoverageMinimumPercent(dataDir),
     allApproved: manifest.jobs.length > 0 && manifest.jobs.every(job => job.status === 'approved'),
     jobs: manifest.jobs.map(job => {
       const dir = jobDir(dataDir, job);

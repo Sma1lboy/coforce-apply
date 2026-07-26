@@ -90,7 +90,12 @@ async function main() {
     return;
   }
   if (command === 'feedback') {
-    console.log(JSON.stringify(addFeedback(dataDir, need('--id'), need('--text')), null, 2));
+    console.log(JSON.stringify(addFeedback(
+      dataDir,
+      need('--id'),
+      option('--text', ''),
+      option('--reason'),
+    ), null, 2));
     return;
   }
   if (command === 'approve') {

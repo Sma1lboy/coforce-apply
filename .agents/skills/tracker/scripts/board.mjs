@@ -35,6 +35,7 @@ import {
   campaignView,
   contentTypeFor,
   exportCampaign,
+  reconcileResumePageCoverage,
   resolveCampaignFile,
   skillPool,
   skillReview,
@@ -109,6 +110,53 @@ const dataDir = dirname(input);
 const filesRoot = join(dataDir, 'applications');
 const profilePath = join(dataDir, 'profile.json');
 const instructionsPath = join(dataDir, 'instructions.md');
+
+const humanCampaignJob = job => {
+  const {
+    reviewDeliveryProof: _internalDeliveryProof,
+    machineJudge,
+    ...publicJob
+  } = job;
+  let publicMachineJudge = machineJudge;
+  if (machineJudge) {
+    const {
+      fullness: _fullness,
+      fullPage: _fullPage,
+      minimumPageCoverage: _minimumPageCoverage,
+      minimumPageCoveragePercent: _minimumPageCoveragePercent,
+      issues: _issues,
+      ...rest
+    } = machineJudge;
+    publicMachineJudge = rest;
+  }
+  return {
+    ...publicJob,
+    feedback: (job.feedback || []).filter(item =>
+      item.visibility !== 'internal' &&
+      item.reasonCode !== 'page_coverage_insufficient'
+    ),
+    machineJudge: publicMachineJudge,
+    error: /page coverage|coverage.*minimum/i.test(String(job.error || ''))
+      ? null
+      : job.error,
+    reviewReady: ['rendered', 'approved'].includes(job.status),
+  };
+};
+
+const humanCampaignView = dataDir => {
+  const view = campaignView(dataDir);
+  return {
+    ...view,
+    jobs: view.jobs.map(humanCampaignJob),
+  };
+};
+
+const humanCampaignError = (error, fallback) => {
+  const message = String(error?.message || error || '');
+  return /page coverage|coverage.*minimum|delivery proof/i.test(message)
+    ? fallback
+    : message;
+};
 
 const BODY_LIMIT = 2 * 1024 * 1024; // ponytail: 2MB covers resume pastes; raise if a legit payload ever hits it
 function readBody(req, res, onBody) {
@@ -260,8 +308,8 @@ function loadApps() {
           prefs: intentOf(config),
           globalFiles: listFiles(filesRoot),
           experience: experienceView(dataDir),
-          campaign: campaignView(dataDir),
-          agent: 'claude',
+          campaign: humanCampaignView(dataDir),
+          agent: AGENT_LABEL,
           applyMode: config.headlessApply ? 'headless' : 'manual',
           config: { logoDevToken: config.logoDevToken || null },
         })
@@ -374,7 +422,7 @@ function loadApps() {
     }
     if (req.url === '/api/campaign' && req.method === 'GET') {
       res.writeHead(200, { 'content-type': 'application/json' });
-      res.end(JSON.stringify(campaignView(dataDir)));
+      res.end(JSON.stringify(humanCampaignView(dataDir)));
       return;
     }
     if (req.url === '/api/campaign/sync' && req.method === 'POST') {
@@ -383,7 +431,7 @@ function loadApps() {
         .map(app => ({ ...app, role: app.position || app.role }));
       const result = syncJobs(dataDir, pending);
       res.writeHead(200, { 'content-type': 'application/json' });
-      res.end(JSON.stringify({ added: result.added.length, campaign: campaignView(dataDir) }));
+      res.end(JSON.stringify({ added: result.added.length, campaign: humanCampaignView(dataDir) }));
       return;
     }
     if (req.method === 'GET' && req.url.startsWith('/campaign/files/')) {
@@ -407,9 +455,13 @@ function loadApps() {
       readBody(req, res, body => {
         try {
           const payload = JSON.parse(body);
-          const job = addFeedback(dataDir, decodeURIComponent(feedbackMatch[1]), payload.text);
+          const job = addFeedback(
+            dataDir,
+            decodeURIComponent(feedbackMatch[1]),
+            payload.text,
+          );
           res.writeHead(200, { 'content-type': 'application/json' });
-          res.end(JSON.stringify(job));
+          res.end(JSON.stringify(humanCampaignJob(job)));
         } catch (err) {
           res.writeHead(400, { 'content-type': 'text/plain' });
           res.end(String(err.message));
@@ -422,10 +474,10 @@ function loadApps() {
       try {
         const job = approveJob(dataDir, decodeURIComponent(approveMatch[1]));
         res.writeHead(200, { 'content-type': 'application/json' });
-        res.end(JSON.stringify(job));
+        res.end(JSON.stringify(humanCampaignJob(job)));
       } catch (err) {
         res.writeHead(400, { 'content-type': 'text/plain' });
-        res.end(String(err.message));
+        res.end(humanCampaignError(err, 'Resume is still being prepared and is not ready for review.'));
       }
       return;
     }
@@ -436,7 +488,7 @@ function loadApps() {
         res.end(JSON.stringify({ ...result, url: '/campaign/files/exports/resume-applications.zip' }));
       } catch (err) {
         res.writeHead(409, { 'content-type': 'text/plain' });
-        res.end(String(err.message));
+        res.end(humanCampaignError(err, 'Some resumes are still being prepared.'));
       }
       return;
     }
@@ -523,7 +575,23 @@ function loadApps() {
           const patch = JSON.parse(body);
           if (!patch || typeof patch !== 'object' || Array.isArray(patch))
             throw new Error('expected a JSON object');
+          if (Object.hasOwn(patch, 'resumePageCoverageMinimumPercent')) {
+            if (
+              patch.resumePageCoverageMinimumPercent === '' ||
+              patch.resumePageCoverageMinimumPercent === null
+            ) {
+              throw new Error('resumePageCoverageMinimumPercent is required');
+            }
+            const value = Number(patch.resumePageCoverageMinimumPercent);
+            if (!Number.isFinite(value) || value < 0 || value > 100) {
+              throw new Error('resumePageCoverageMinimumPercent must be a number from 0 to 100');
+            }
+            patch.resumePageCoverageMinimumPercent = value;
+          }
           saveConfig(dataDir, patch);
+          if (Object.hasOwn(patch, 'resumePageCoverageMinimumPercent')) {
+            reconcileResumePageCoverage(dataDir);
+          }
           if (patch.requireResumeReview === false) applyResumeReviewPolicy(dataDir);
           res.writeHead(204).end();
         } catch (err) {

@@ -23,6 +23,32 @@ const root = join(here, '..');
 const outDir = join(here, 'out');
 mkdirSync(outDir, { recursive: true });
 
+function onePagePdf(label, full = true) {
+  const safe = label.replace(/[()\\]/g, '');
+  const bottom = full ? ' BT /F1 12 Tf 72 40 Td (page filled to the bottom margin) Tj ET' : '';
+  const stream = `BT /F1 20 Tf 72 720 Td (${safe}) Tj ET${bottom}`;
+  const objects = [
+    '<< /Type /Catalog /Pages 2 0 R >>',
+    '<< /Type /Pages /Kids [3 0 R] /Count 1 >>',
+    '<< /Type /Page /Parent 2 0 R /MediaBox [0 0 612 792] /Resources << /Font << /F1 5 0 R >> >> /Contents 4 0 R >>',
+    `<< /Length ${Buffer.byteLength(stream)} >>\nstream\n${stream}\nendstream`,
+    '<< /Type /Font /Subtype /Type1 /BaseFont /Helvetica >>',
+  ];
+  let pdf = '%PDF-1.4\n';
+  const offsets = [0];
+  objects.forEach((object, index) => {
+    offsets[index + 1] = Buffer.byteLength(pdf);
+    pdf += `${index + 1} 0 obj\n${object}\nendobj\n`;
+  });
+  const xref = Buffer.byteLength(pdf);
+  pdf += `xref\n0 ${objects.length + 1}\n0000000000 65535 f \n`;
+  for (let index = 1; index <= objects.length; index += 1) {
+    pdf += `${String(offsets[index]).padStart(10, '0')} 00000 n \n`;
+  }
+  pdf += `trailer\n<< /Size ${objects.length + 1} /Root 1 0 R >>\nstartxref\n${xref}\n%%EOF\n`;
+  return Buffer.from(pdf);
+}
+
 // --- 0. data-home resolution: env override → in-repo (private fork) → ~ ---
 {
   const { dataHome } = await import(
@@ -407,7 +433,7 @@ try {
   const campaignDir = join(outDir, 'campaigns', 'current', 'jobs', campaignJob.folder);
   mkdirSync(campaignDir, { recursive: true });
   for (const [name, content] of Object.entries({
-    'resume.pdf': '%PDF-1.4\n%%EOF\n',
+    'resume.pdf': onePagePdf('CoForce board fixture'),
     'resume.tex': '\\documentclass{article}\\begin{document}Fixture\\end{document}\n',
     'job-description.md': '# Fixture JD\n',
     'job.json': JSON.stringify({ id: campaignJob.id }),
@@ -415,6 +441,8 @@ try {
     'judge.json': JSON.stringify({
       pageCount: 1,
       fullness: 0.94,
+      minimumPageCoverage: 0.93,
+      minimumPageCoveragePercent: 93,
       onePage: true,
       fullPage: true,
       verbatim: true,
@@ -436,6 +464,9 @@ try {
   const judgedCampaign = await (await fetch(`${base}/api/campaign`)).json();
   const judgedJob = judgedCampaign.jobs.find(item => item.id === campaignJob.id);
   assert.equal(judgedJob.machineJudge.pageCount, 1, 'campaign API exposes the machine gate summary');
+  assert.equal(judgedJob.machineJudge.fullness, undefined, 'Human API hides internal page coverage');
+  assert.equal(judgedJob.machineJudge.fullPage, undefined, 'Human API hides the coverage verdict');
+  assert.equal(judgedJob.reviewDeliveryProof, undefined, 'Human API hides internal delivery proof');
   assert.equal(judgedJob.llmJudge.medianTotal, 87, 'campaign API exposes the LLM judge median');
   assert.deepEqual(judgedJob.llmJudge.runTotals, [84, 87, 90], 'campaign API exposes all run totals');
   assert.equal(
@@ -446,7 +477,22 @@ try {
   assert.deepEqual(judgedJob.llmJudge.fixes, ['Add one stronger result metric.']);
   const approved = await fetch(`${base}/api/campaign/jobs/${campaignJob.id}/approve`, { method: 'POST' });
   assert.equal(approved.status, 200, 'campaign approval accepted with complete artifacts');
-  assert.equal((await approved.json()).status, 'approved');
+  const approvedJob = await approved.json();
+  assert.equal(approvedJob.status, 'approved');
+  assert.equal(approvedJob.reviewDeliveryProof, undefined, 'approval response remains Human-safe');
+  const internalManifestPath = join(outDir, 'campaigns', 'current', 'manifest.json');
+  assert.equal(
+    JSON.parse(readFileSync(internalManifestPath, 'utf8')).jobs
+      .find(item => item.id === campaignJob.id)
+      .reviewDeliveryProof.pageCoverage.status,
+    'passed',
+    'internal manifest retains the coverage delivery proof'
+  );
+  assert.equal(
+    JSON.parse(readFileSync(join(campaignDir, 'job.json'), 'utf8')).reviewDeliveryProof,
+    undefined,
+    'exportable job snapshot omits internal delivery proof'
+  );
   const packed = await fetch(`${base}/api/campaign/export`, { method: 'POST' });
   assert.equal(packed.status, 200, 'approved campaign exported');
   const download = await fetch(`${base}${(await packed.json()).url}`);
@@ -455,6 +501,57 @@ try {
   const campaignEvil = await fetch(`${base}/campaign/files/..%2Fapps-live.json`);
   assert.equal(campaignEvil.status, 404, 'campaign traversal blocked');
   console.log('board: campaign feedback + approval + ZIP API ✓');
+
+  const coverageSetting = await fetch(`${base}/api/config`, {
+    method: 'POST',
+    headers: { 'content-type': 'application/json' },
+    body: JSON.stringify({ resumePageCoverageMinimumPercent: 96 }),
+  });
+  assert.equal(coverageSetting.status, 204, 'resume page coverage setting saved');
+  const coverageState = await (await fetch(`${base}/api/state`)).json();
+  const coverageJob = coverageState.campaign.jobs.find(item => item.id === campaignJob.id);
+  assert.equal(coverageState.campaign.minimumPageCoveragePercent, 96);
+  assert.equal(coverageJob.status, 'revision_requested', 'raising coverage reopens an underfilled approved resume');
+  assert.equal(coverageJob.reviewReady, false);
+  assert.equal(coverageJob.reviewDeliveryProof, undefined);
+  assert.equal(coverageJob.machineJudge.minimumPageCoveragePercent, undefined);
+  assert.equal(coverageJob.machineJudge.fullPage, undefined);
+  assert.equal(coverageJob.error, null, 'Human API hides the internal coverage error');
+  assert.ok(
+    !JSON.stringify(coverageState.campaign).includes('page_coverage_insufficient'),
+    'Human campaign API never exposes the internal reason code'
+  );
+  const internalCoverageJob = JSON.parse(readFileSync(internalManifestPath, 'utf8')).jobs
+    .find(item => item.id === campaignJob.id);
+  assert.ok(
+    internalCoverageJob.feedback.some(item =>
+      item.reasonCode === 'page_coverage_insufficient' &&
+      item.visibility === 'internal' &&
+      item.status === 'open'),
+    'internal state retains the structured unresolved reason'
+  );
+  const internalJudge = JSON.parse(readFileSync(join(campaignDir, 'judge.json'), 'utf8'));
+  assert.equal(internalJudge.minimumPageCoveragePercent, 96);
+  assert.equal(internalJudge.fullPage, false);
+  const blockedApproval = await fetch(`${base}/api/campaign/jobs/${campaignJob.id}/approve`, {
+    method: 'POST',
+  });
+  assert.equal(blockedApproval.status, 400);
+  const blockedApprovalMessage = await blockedApproval.text();
+  assert.equal(blockedApprovalMessage, 'Resume is still being prepared and is not ready for review.');
+  assert.ok(!/coverage|proof|96/i.test(blockedApprovalMessage), 'approval error remains Human-safe');
+  const blockedExport = await fetch(`${base}/api/campaign/export`, { method: 'POST' });
+  assert.equal(blockedExport.status, 409);
+  const blockedExportMessage = await blockedExport.text();
+  assert.equal(blockedExportMessage, 'Some resumes are still being prepared.');
+  assert.ok(!/coverage|proof|96/i.test(blockedExportMessage), 'export error remains Human-safe');
+  const invalidCoverageSetting = await fetch(`${base}/api/config`, {
+    method: 'POST',
+    headers: { 'content-type': 'application/json' },
+    body: JSON.stringify({ resumePageCoverageMinimumPercent: 101 }),
+  });
+  assert.equal(invalidCoverageSetting.status, 400, 'coverage setting validates the 0–100 range');
+  console.log('board: configurable resume coverage gate ✓');
 
   const reviewToggle = await fetch(`${base}/api/config`, {
     method: 'POST',

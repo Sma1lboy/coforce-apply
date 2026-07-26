@@ -7,7 +7,9 @@ import { tmpdir } from 'node:os';
 import { dirname, join, resolve } from 'node:path';
 import {
   addFeedback,
+  compareTemplateContract,
   judgeResume,
+  measureWorkProjectsGap,
   selectBullets,
   applyResumeReviewPolicy,
   approveJob,
@@ -17,11 +19,13 @@ import {
   htmlToText,
   hydrateJob,
   resolveCampaignFile,
+  resumePageCoverageMinimumPercent,
   resumeReviewRequired,
   skillPool,
   skillReview,
   stageArtifacts,
   syncSelectedSkillsToResume,
+  syncTemplateContractToResume,
   syncJobs,
 } from '../.agents/skills/campaign/scripts/campaign-lib.mjs';
 import {
@@ -29,6 +33,46 @@ import {
   experiencePaths,
   upsertSource,
 } from '../.agents/skills/experience/scripts/experience-lib.mjs';
+
+const compactSectionBbox = `
+<word xMin="20" yMin="100" xMax="60" yMax="110">evidence.</word>
+<word xMin="20" yMin="112" xMax="28" yMax="124">P</word>
+<word xMin="29" yMin="113" xMax="75" yMax="123">ROJECTS</word>`;
+const looseSectionBbox = compactSectionBbox.replace('yMin="112"', 'yMin="120"')
+  .replace('yMax="124"', 'yMax="132"')
+  .replace('yMin="113"', 'yMin="121"')
+  .replace('yMax="123"', 'yMax="131"');
+assert.equal(measureWorkProjectsGap(compactSectionBbox), 12);
+assert.equal(measureWorkProjectsGap(looseSectionBbox), 20);
+
+const templateContractSource = `\\documentclass{article}
+\\newcommand{\\resumeItem}[2]{\\textbf{#1}#2}
+\\begin{document}
+contact|\\href{mailto:test@example.com}{test@example.com}
+\\vspace{-8mm}
+\\section{\\textbf{Projects}}
+\\resumeSubHeadingListEnd
+\\vspace{-9mm}
+\\resumeSubHeadingListStart
+\\end{document}`;
+assert.deepEqual(compareTemplateContract(templateContractSource, templateContractSource), {
+  templatePreambleExact: true,
+  templateContactHeaderExact: true,
+  expectedProjectTransitionSpacers: ['-9mm'],
+  renderedProjectTransitionSpacers: ['-9mm'],
+  projectTransitionSpacingExact: true,
+});
+const driftedTemplateContract = compareTemplateContract(
+  templateContractSource,
+  templateContractSource
+    .replace('\\textbf{#1}#2', '#1#2')
+    .replace('test@example.com', 'visa status')
+    .replace('-8mm', '-6mm')
+    .replace('-9mm', '-6mm')
+);
+assert.equal(driftedTemplateContract.templatePreambleExact, false);
+assert.equal(driftedTemplateContract.templateContactHeaderExact, false);
+assert.equal(driftedTemplateContract.projectTransitionSpacingExact, false);
 
 function onePagePdf(label, full = true) {
   const safe = label.replace(/[()\\]/g, '');
@@ -339,12 +383,41 @@ assert.equal(statSync(libraryPath).mtimeMs, libraryBefore.mtimeMs, 'campaign mus
 {
   const jobView = campaignView(dataDir).jobs.find(item => item.id === synced.added[0].id);
   const jobTexDir = join(dataDir, 'campaigns', 'current', 'jobs', jobView.folder);
-  writeFileSync(join(jobTexDir, 'resume.tex'),
-    `\\documentclass{article}\\begin{document}\\newcommand{\\resumeItem}[1]{#1}\n` +
+  const fixtureTemplatePath = join(dataDir, 'fixture-template.tex');
+  const fixtureTemplate =
+    `\\documentclass{article}\n\\newcommand{\\resumeItem}[2]{\\textbf{#1}#2}\n\\begin{document}\n` +
+    `contact|\\href{mailto:test@example.com}{test@example.com}\n` +
+    `\\vspace{-8mm}\n` +
     `\\section{\\textbf{Skills}}\\resumeSubItem{Languages, Frameworks, Backend \\& Data:}{TypeScript, Node.js, Python}\n` +
-    `\\resumeItem{${pool[0].text}}\n\\end{document}\n`);
+    `\\section{\\textbf{Projects}}\n\\resumeSubHeadingListEnd\n\\vspace{-9mm}\n\\resumeSubHeadingListStart\n` +
+    `\\resumeItem{}{template placeholder}\n\\end{document}\n`;
+  writeFileSync(fixtureTemplatePath, fixtureTemplate);
+  writeFileSync(join(dataDir, 'config.json'), JSON.stringify({
+    latexTemplate: fixtureTemplatePath,
+    requireResumeReview: true,
+  }));
+  const driftedResume =
+    fixtureTemplate
+      .replace('\\textbf{#1}#2', '#1#2')
+      .replace('test@example.com', 'visa status')
+      .replace('-8mm', '-6mm')
+      .replace('-9mm', '-6mm')
+      .replace('\\resumeItem{}{template placeholder}', `\\resumeItem{${pool[0].text}}{}`);
+  writeFileSync(join(jobTexDir, 'resume.tex'), driftedResume);
+  const normalizedTemplate = syncTemplateContractToResume(dataDir, synced.added[0].id);
+  assert.equal(normalizedTemplate.updated, true);
+  assert.equal(normalizedTemplate.templatePreambleExact, true);
+  assert.equal(normalizedTemplate.templateContactHeaderExact, true);
+  assert.equal(normalizedTemplate.projectTransitionSpacingExact, true);
+  assert.equal(normalizedTemplate.resumeItemsUseBodyArgument, true);
+  assert.match(
+    readFileSync(join(jobTexDir, 'resume.tex'), 'utf8'),
+    /test@example\.com\}\n\\vspace\{-8mm\}\n\\section\{\\textbf\{Skills\}\}/,
+    'normalization restores the complete template header including section-adjacent spacing'
+  );
   const good = judgeResume(dataDir, synced.added[0].id);
   assert.equal(good.verbatim, true, 'pool bullet verbatim passes the judge');
+  assert.equal(good.resumeItemsUseBodyArgument, true, 'resume bullets use the non-bold body argument');
   assert.equal(good.skillsVerbatim, true, 'selected skills rendered verbatim pass the judge');
   assert.equal(good.skillsDense, true, 'selected skills preserve the verified-pool density floor');
   assert.equal(good.skillGroupsDense, true, 'consolidated display groups satisfy the per-group density floor');
@@ -353,6 +426,47 @@ assert.equal(statSync(libraryPath).mtimeMs, libraryBefore.mtimeMs, 'campaign mus
   assert.equal(good.itemCount, 1);
   if (good.pageCount !== null) assert.equal(good.onePage, true, 'fixture pdf is one page');
   if (good.fullness !== null) assert.equal(good.fullPage, true, 'fixture pdf fills the page');
+  assert.equal(good.minimumPageCoveragePercent, 93, 'page coverage defaults to 93%');
+  const configured = JSON.parse(readFileSync(join(dataDir, 'config.json'), 'utf8'));
+  writeFileSync(join(dataDir, 'config.json'), JSON.stringify({
+    ...configured,
+    resumePageCoverageMinimumPercent: 96,
+  }));
+  assert.equal(resumePageCoverageMinimumPercent(dataDir), 96);
+  const strictCoverage = judgeResume(dataDir, synced.added[0].id);
+  assert.equal(strictCoverage.minimumPageCoverage, 0.96);
+  if (strictCoverage.fullness !== null && strictCoverage.fullness < 0.96) {
+    assert.equal(strictCoverage.fullPage, false, 'the configured 96% threshold is enforced');
+    assert.deepEqual(strictCoverage.issues, [{
+      code: 'page_coverage_insufficient',
+      actualPercent: Math.round(strictCoverage.fullness * 1000) / 10,
+      minimumPercent: 96,
+    }], 'coverage failure exposes a machine-readable revision option');
+    assert.throws(
+      () => approveJob(dataDir, synced.added[0].id),
+      /page coverage .* below the 96% minimum/,
+      'manual approval cannot bypass the configured coverage minimum'
+    );
+  }
+  writeFileSync(join(dataDir, 'config.json'), JSON.stringify({
+    ...configured,
+    resumePageCoverageMinimumPercent: 93,
+  }));
+  judgeResume(dataDir, synced.added[0].id);
+  writeFileSync(join(jobTexDir, 'resume.tex'),
+    `\\documentclass{article}\\begin{document}\\newcommand{\\resumeItem}[2]{\\textbf{#1}#2}\n` +
+    `\\section{\\textbf{Skills}}\\resumeSubItem{Languages, Frameworks, Backend \\& Data:}{TypeScript, Node.js, Python}\n` +
+    `\\resumeItem{${pool[0].text}}{}\n\\end{document}\n`);
+  const wholeBulletBold = judgeResume(dataDir, synced.added[0].id);
+  assert.equal(
+    wholeBulletBold.resumeItemsUseBodyArgument,
+    false,
+    'putting the whole bullet in the bold label argument fails the template contract'
+  );
+  writeFileSync(join(jobTexDir, 'resume.tex'),
+    `\\documentclass{article}\\begin{document}\\newcommand{\\resumeItem}[2]{#2}\n` +
+    `\\section{\\textbf{Skills}}\\resumeSubItem{Languages, Frameworks, Backend \\& Data:}{TypeScript, Node.js, Python}\n` +
+    `\\resumeItem{}{${pool[0].text}}\n\\end{document}\n`);
   // a one-page resume that leaves the bottom half empty must FAIL the judge
   writeFileSync(join(jobTexDir, 'resume.pdf'), onePagePdf('sparse fixture', false));
   const sparse = judgeResume(dataDir, synced.added[0].id);
@@ -361,9 +475,9 @@ assert.equal(statSync(libraryPath).mtimeMs, libraryBefore.mtimeMs, 'campaign mus
   }
   writeFileSync(join(jobTexDir, 'resume.pdf'), onePagePdf('CoForce campaign fixture'));
   writeFileSync(join(jobTexDir, 'resume.tex'),
-    '\\documentclass{article}\\begin{document}\\newcommand{\\resumeItem}[1]{#1}\n' +
+    '\\documentclass{article}\\begin{document}\\newcommand{\\resumeItem}[2]{#2}\n' +
     '\\section{\\textbf{Skills}}\\resumeSubItem{Programming Languages:}{TypeScript, InventedDB}\\resumeSubItem{Backend \\& APIs:}{Node.js}\n' +
-    '\\resumeItem{Invented a claim that is not in the pool}\n\\end{document}\n');
+    '\\resumeItem{}{Invented a claim that is not in the pool}\n\\end{document}\n');
   const bad = judgeResume(dataDir, synced.added[0].id);
   assert.equal(bad.verbatim, false, 'out-of-pool resume line fails the judge');
   assert.equal(bad.skillsVerbatim, false, 'out-of-pool resume skill fails the judge');
@@ -422,6 +536,44 @@ assert.equal(campaignView(dataDir).allApproved, true);
 assert.ok(readFileSync(exported.path).length > 1000);
 assert.equal(resolveCampaignFile(dataDir, '../applications.json'), null, 'traversal blocked');
 
+// Structured coverage feedback stays open until a newer passing judge creates
+// the durable proof used to deliver the resume back to Review.
+const coverageFeedbackDir = mkdtempSync(join(tmpdir(), 'coforce-coverage-feedback-'));
+const coverageFeedbackJob = syncJobs(coverageFeedbackDir, [{
+  id: 'coverage-feedback-1',
+  company: 'Coverage Labs',
+  role: 'Engineer',
+  url: 'https://jobs.example/coverage-feedback-1',
+}]).added[0];
+addFeedback(
+  coverageFeedbackDir,
+  coverageFeedbackJob.id,
+  '',
+  'page_coverage_insufficient',
+);
+addFeedback(
+  coverageFeedbackDir,
+  coverageFeedbackJob.id,
+  '',
+  'page_coverage_insufficient',
+);
+let coverageFeedbackView = campaignView(coverageFeedbackDir).jobs[0];
+assert.equal(coverageFeedbackView.status, 'revision_requested');
+assert.equal(coverageFeedbackView.feedback.length, 1, 'structured feedback reason is idempotent while open');
+assert.equal(coverageFeedbackView.feedback[0].reasonCode, 'page_coverage_insufficient');
+assert.equal(coverageFeedbackView.feedback[0].visibility, 'internal');
+stageArtifacts(coverageFeedbackDir, coverageFeedbackJob.id, { tex, pdf });
+coverageFeedbackView = campaignView(coverageFeedbackDir).jobs[0];
+assert.equal(coverageFeedbackView.status, 'rendered', 'passing coverage proof delivers the revision back to Review');
+assert.equal(coverageFeedbackView.reviewDeliveryProof.pageCoverage.status, 'passed');
+assert.equal(coverageFeedbackView.reviewDeliveryProof.pageCoverage.artifact, 'judge.json');
+assert.equal(coverageFeedbackView.feedback[0].status, 'resolved');
+assert.deepEqual(
+  coverageFeedbackView.feedback[0].resolutionEvidence,
+  coverageFeedbackView.reviewDeliveryProof.pageCoverage,
+  'resolved feedback carries the exact Review delivery proof'
+);
+
 const autoDir = mkdtempSync(join(tmpdir(), 'coforce-campaign-auto-'));
 const autoJd = join(autoDir, 'job-description.md');
 const autoMatch = join(autoDir, 'match-report.md');
@@ -454,7 +606,7 @@ const gateView = campaignView(gateDir).jobs[0];
 const gateJobDir = join(gateDir, 'campaigns', 'current', 'jobs', gateView.folder);
 writeFileSync(join(gateJobDir, 'match.json'), JSON.stringify({ bullets: [{ text: 'Real bullet' }] }));
 writeFileSync(join(gateJobDir, 'resume.tex'),
-  '\\documentclass{article}\\begin{document}\\newcommand{\\resumeItem}[1]{#1}\n\\resumeItem{Fabricated line}\n\\end{document}\n');
+  '\\documentclass{article}\\begin{document}\\newcommand{\\resumeItem}[2]{#2}\n\\resumeItem{}{Fabricated line}\n\\end{document}\n');
 writeFileSync(join(gateDir, 'config.json'), JSON.stringify({ requireResumeReview: false }));
 writeFileSync(join(gateJobDir, 'llm-judge.json'),
   JSON.stringify({ judgedAt: 'fixture', runs: 1, medianTotal: 95, pass: true, fixes: [] }));
