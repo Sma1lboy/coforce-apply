@@ -70,7 +70,11 @@ One kobe-Hallmark-themed local site with these primary tabs:
   under `~/.coforce/campaigns/current/`.
 - **Profile** — resume-style live preview of `~/.coforce/profile.json` beside
   a structured form editor (basics, skill chips, add/remove
-  experience/project/education cards and bullets — no raw JSON), plus
+  experience/project/education cards and bullets — no raw JSON). Its
+  **Resume skill policy** ledger merges resume/coursework and Tier 0 skills,
+  shows provenance, assigns the mandatory baseline and role packs, and keeps
+  **Save draft** (`review_requested`) separate from explicit
+  **Approve policy**. The same tab also provides
   "Import resume (AI)": pasted text is parsed by the local agent runtime
   (`claude -p`; binary override `COFORCE_CLAUDE_BIN`) and fills the form for
   review before Save.

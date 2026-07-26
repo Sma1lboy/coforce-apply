@@ -36,6 +36,8 @@ import {
   contentTypeFor,
   exportCampaign,
   resolveCampaignFile,
+  skillPool,
+  skillReview,
   syncJobs,
 } from '../../campaign/scripts/campaign-lib.mjs';
 import { experienceView } from '../../experience/scripts/experience-lib.mjs';
@@ -149,6 +151,36 @@ const loadProfile = () => {
   } catch {
     return null;
   }
+};
+
+const normalizedSkillKey = value => String(value || '').trim().toLowerCase();
+
+const normalizeSkillPolicyInput = value => {
+  if (!value || typeof value !== 'object' || Array.isArray(value)) {
+    throw new Error('expected a JSON object');
+  }
+  if (!Array.isArray(value.baseline)) {
+    throw new Error('baseline must be an array');
+  }
+  if (!value.rolePacks || typeof value.rolePacks !== 'object' || Array.isArray(value.rolePacks)) {
+    throw new Error('rolePacks must be an object of skill arrays');
+  }
+  const baseline = [...new Set(value.baseline
+    .map(item => String(item || '').trim())
+    .filter(Boolean))];
+  const rolePacks = Object.fromEntries(Object.entries(value.rolePacks)
+    .map(([name, skills]) => {
+      const packName = String(name || '').trim();
+      if (!Array.isArray(skills)) {
+        throw new Error(`role pack ${packName || '(unnamed)'} must be an array`);
+      }
+      return [
+        packName,
+        [...new Set(skills.map(item => String(item || '').trim()).filter(Boolean))],
+      ];
+    })
+    .filter(([name, skills]) => name && skills.length));
+  return { baseline, rolePacks, approve: value.approve === true };
 };
 
 function listFiles(dir) {
@@ -524,6 +556,64 @@ function loadApps() {
     if (req.url === '/api/profile' && req.method === 'GET') {
       res.writeHead(200, { 'content-type': 'application/json' });
       res.end(JSON.stringify(loadProfile()));
+      return;
+    }
+    if (req.url === '/api/skills/policy' && req.method === 'GET') {
+      res.writeHead(200, { 'content-type': 'application/json' });
+      res.end(JSON.stringify({
+        review: skillReview(dataDir),
+        skills: skillPool(dataDir),
+      }));
+      return;
+    }
+    if (req.url === '/api/skills/policy' && req.method === 'POST') {
+      readBody(req, res, body => {
+        try {
+          const inputPolicy = normalizeSkillPolicyInput(JSON.parse(body));
+          const availableSkills = skillPool(dataDir);
+          const canonicalNames = new Map(availableSkills
+            .map(skill => [normalizedSkillKey(skill.name), skill.name]));
+          const referenced = [
+            ...inputPolicy.baseline,
+            ...Object.values(inputPolicy.rolePacks).flat(),
+          ];
+          const unknown = [...new Set(referenced
+            .filter(name => !canonicalNames.has(normalizedSkillKey(name))))];
+          if (unknown.length) {
+            throw new Error(`policy references skills outside the merged pool: ${unknown.join(', ')}`);
+          }
+          const canonicalize = names => names.map(name => canonicalNames.get(normalizedSkillKey(name)));
+          const baseline = canonicalize(inputPolicy.baseline);
+          const rolePacks = Object.fromEntries(Object.entries(inputPolicy.rolePacks)
+            .map(([name, names]) => [name, canonicalize(names)]));
+          if (inputPolicy.approve && !baseline.length) {
+            throw new Error('approval requires at least one baseline skill');
+          }
+          if (inputPolicy.approve && !Object.keys(rolePacks).length) {
+            throw new Error('approval requires at least one non-empty role pack');
+          }
+          const profile = loadProfile();
+          if (!profile || typeof profile !== 'object' || Array.isArray(profile)) {
+            throw new Error('profile.json is missing or invalid');
+          }
+          profile.resumeSkillPolicy = {
+            status: inputPolicy.approve ? 'approved' : 'review_requested',
+            baseline,
+            rolePacks,
+            reviewedAt: inputPolicy.approve ? new Date().toISOString() : null,
+          };
+          writeFileSync(profilePath, `${JSON.stringify(profile, null, 2)}\n`);
+          res.writeHead(200, { 'content-type': 'application/json' });
+          res.end(JSON.stringify({
+            policy: profile.resumeSkillPolicy,
+            review: skillReview(dataDir),
+            skills: skillPool(dataDir),
+          }));
+        } catch (err) {
+          res.writeHead(400, { 'content-type': 'text/plain' });
+          res.end(String(err.message));
+        }
+      });
       return;
     }
     if (req.url === '/api/profile' && req.method === 'POST') {

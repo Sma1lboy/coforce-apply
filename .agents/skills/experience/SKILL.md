@@ -10,10 +10,13 @@ setup and again only when the user explicitly asks to refresh. `/start`,
 `/campaign`, and per-JD matching must never call GitHub or refresh this index.
 
 > **Position in the two-module design:** the evidence this skill collects is
-> **Module-1 raw material** — context for generating truthful bullets
-> (see "Repo → STAR bullets" below) that the user then reviews into profile.json. The
-> tagged index is no longer on the campaign matching path: Module 2 selects
-> from the profile's verified bullet pool directly (`campaign.mjs pool`).
+> **Module-1 raw material** — context for generating truthful bullets (see
+> "Repo → STAR bullets" below) plus experience-derived skill candidates.
+> Bullets still require user review into profile.json. Module 2 selects those
+> reviewed bullets directly (`campaign.mjs pool`) and merges the local
+> `experience-index.json.skills[]` with the user's resume/coursework skills and
+> optional profile evidence enrichments. This is a local data read only;
+> campaigns never refresh or call GitHub.
 
 All output stays under `~/.coforce/experience/`:
 
@@ -103,8 +106,25 @@ This is the only command that enumerates GitHub history. It:
    repository's declared `authors`, through authenticated `gh`.
 3. Merges those source-linked entries with curated
    `~/.coforce/profile.json` skills, experience, and projects.
-4. Atomically writes a compact `experience-index.json` with stable evidence
-   IDs, author, matching text/tags, one source URL, counts, and a fingerprint.
+4. From that same in-memory evidence set, aggregates candidate skills using
+   `tech:*`/`repo-tech:*` tags, project technologies, and profile skill seeds.
+   Each candidate carries a stable ID, category, evidence count, and up to
+   eight `{id, source}` evidence references. This is not another GitHub scan.
+5. Atomically writes a compact `experience-index.json` with stable evidence
+   IDs, author, matching text/tags, one source URL, `skills[]`, counts, and a
+   fingerprint.
+
+Inspect the candidate skill pool without rebuilding or calling GitHub:
+
+```sh
+node "<experience-skill>/scripts/experience.mjs" skills
+```
+
+These candidates automatically extend the campaign skill pool because they
+come from repositories/authors the user explicitly placed in Tier 0 scope.
+`profile.json.verifiedSkills[]` may still retain selected candidates as richer
+profile-facing evidence metadata, but campaign eligibility does not depend on
+copying them there. Do not add a skill merely from a JD keyword.
 
 Private evidence stays local; the underlying writer guard still requires
 explicit permission before private material can be sent to an external writer.
@@ -191,6 +211,10 @@ did, not what the project is.
 - Downstream skills may rank/rephrase evidence but cannot mutate or refresh
   Tier 0.
 - Every GitHub-derived claim must cite an evidence ID from the index.
+- Every Tier 0 skill candidate must cite at least one source-backed evidence
+  record; `profile:skills` is a seed only and never counts as experience
+  evidence. The same name may still enter a campaign independently as a
+  resume-attested skill.
 - `generatedAt` and `sourceFingerprint` must be copied into match artifacts so
   reviewers can tell exactly which Tier 0 snapshot produced a resume.
 - A stale index is acceptable until the user explicitly refreshes it; silently
