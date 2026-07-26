@@ -1,6 +1,6 @@
 ---
 name: setup
-description: One-time onboarding for CoForce Apply — choose the data home (local-only ~/.coforce or private-fork in-repo sync), build the user's profile, collect job-search preferences and runtime settings up front (level, directions, sponsorship/H1B, work mode, locations, salary floor → canonical config.json), build the verified bullet pool (evidence + JD-free bullets reviewed into the profile), set the LaTeX template, application consents, and job sources, write standing instructions, then show the console. Use for "帮我 set up", "初始化", "onboarding", "/setup", or when another skill finds ~/.coforce files missing AND the user is not mid-task — a user who just handed over a job posting gets a resume from /tailor first, and this offered afterwards.
+description: One-time onboarding for CoForce Apply — choose the data home (local-only ~/.coforce or private-fork in-repo sync), build the user's profile, collect job-search preferences and runtime settings up front (level, directions, sponsorship/H1B, work mode, locations, salary floor → canonical config.json), build the verified bullet pool and merged resume/experience skill inventory, set the LaTeX template, application consents, and job sources, write standing instructions, then show the console. Use for "帮我 set up", "初始化", "onboarding", "/setup", or when another skill finds ~/.coforce files missing AND the user is not mid-task — a user who just handed over a job posting gets a resume from /tailor first, and this offered afterwards.
 ---
 
 # Setup — one-time onboarding
@@ -89,15 +89,22 @@ Omit what the user declines to answer; never invent values. If
 
 The runtime keys below sit at the SAME top level of the same file.
 
-LaTeX template — ask the user which they want:
+LaTeX template — always establish exactly one managed runtime source:
 
-1. **Their own template** → record the absolute path in `latexTemplate`.
-2. **The bundled base template** (default when they have none) → copy
+1. Create `<dataHome>/templates/`.
+2. **Their own template** → treat the provided path as import-only, copy it to
+   `<dataHome>/templates/resume_template.tex`, and record only that managed
+   absolute path in `latexTemplate`.
+3. **The bundled base template** (default when they have none) → copy
    `assets/resume_template.tex` from the `tailor` skill directory
-   (Jake's-resume style: letterpaper 11pt, `\resumeSubheading` macros) to
-   `~/.coforce/templates/resume_template.tex` and point `latexTemplate` at
-   that copy. The copy belongs to the user — they may edit or replace it
-   later; never modify the skill's bundled original.
+   (Jake's-resume style: letterpaper 11pt, `\resumeSubheading` macros) to the
+   same managed path and point `latexTemplate` at it.
+
+The managed copy belongs to the user and is the only template campaign/tailor
+may read. External imports and the skill's bundled original are never runtime
+fallbacks and are never modified in place. Replacing the template is another
+explicit import into the same managed path, followed by re-rendering affected
+resumes.
 
 Then ask once: whether
 each generated resume must wait for manual review (`requireResumeReview`,
@@ -128,7 +135,7 @@ jobright-ai has one repo per track (2026-Software-Engineer-Internship,
 2026-Engineer-Internship, 2026-Product-Management-New-Grad, Daily-H1B-Jobs-In-
 Tech…) — swap/add the ones matching the user's target roles.
 
-## 3. Verified bullet pool (Module 1)
+## 3. Verified bullets and merged skills (Module 1)
 
 The campaign selects resume lines ONLY from bullets the user has reviewed into
 `profile.json` — so build that pool now. Ask the user to paste the GitHub
@@ -136,9 +143,17 @@ repository/PR/commit URLs that represent their experience. Feed each to
 `/experience` (evidence collection, then full-context JD-free
 bullet generation), then walk the user through approving the generated bullets
 into the profile — each approved bullet stamped with `source` and `verifiedAt`.
-A profile imported from an existing resume already counts as reviewed. If the
-user skips this stage, campaigns will stop at `campaign.mjs pool` and send
-them back here.
+Import every skill the user states in their resume/coursework into
+`profile.json.skills[]`; these are user-attested and campaign-eligible without
+public GitHub proof. The same `$experience refresh` produces experience-derived
+skills without a second scan. Campaigns merge those local candidates
+automatically. `profile.json.verifiedSkills[]` may retain richer `category`,
+`source`, `evidenceIds`, and `verifiedAt` metadata, but is not an eligibility
+gate. Never add skills merely from a JD keyword.
+Bullets imported from the user's existing resume count as reviewed. Imported
+flat skills remain candidate seeds until the source-backed skill review above;
+do not silently promote them. If the user skips this stage, campaigns will stop
+at `campaign.mjs pool` or `campaign.mjs skills` and send them back here.
 
 ## 4. Standing instructions → `~/.coforce/instructions.md`
 

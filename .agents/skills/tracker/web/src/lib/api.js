@@ -11,13 +11,16 @@ export const api = {
   queue: job => post('/api/queue', JSON.stringify(job)),
   saveApps: apps => post('/api/apps', JSON.stringify(apps)),
   saveProfile: p => post('/api/profile', JSON.stringify(p)),
+  skillPolicy: () => fetch('/api/skills/policy').then(j),
+  saveSkillPolicy: policy => post('/api/skills/policy', JSON.stringify(policy)),
   savePrefs: p => post('/api/prefs', JSON.stringify(p)),
   saveInstructions: text => post('/api/instructions', text, 'text/plain'),
   importResume: text => post('/api/import', JSON.stringify({ text })),
   addToProfile: text => post('/api/profile/add', JSON.stringify({ text })),
   campaign: () => fetch('/api/campaign').then(j),
   syncCampaign: () => post('/api/campaign/sync', '{}'),
-  campaignFeedback: (id, text) => post(`/api/campaign/jobs/${encodeURIComponent(id)}/feedback`, JSON.stringify({ text })),
+  campaignFeedback: (id, text) =>
+    post(`/api/campaign/jobs/${encodeURIComponent(id)}/feedback`, JSON.stringify({ text })),
   approveCampaignJob: id => post(`/api/campaign/jobs/${encodeURIComponent(id)}/approve`, '{}'),
   exportCampaign: () => post('/api/campaign/export', '{}'),
 };

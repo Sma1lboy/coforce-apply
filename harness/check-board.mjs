@@ -17,6 +17,7 @@ import {
 import { strict as assert } from 'node:assert';
 import { dirname, join } from 'node:path';
 import { fileURLToPath } from 'node:url';
+import { onePagePdf } from './pdf-fixture.mjs';
 
 const here = dirname(fileURLToPath(import.meta.url));
 const root = join(here, '..');
@@ -169,6 +170,35 @@ try {
   );
   const badProf = await fetch(`${base}/api/profile`, { method: 'POST', body: '[1,2]' });
   assert.equal(badProf.status, 400, 'non-object profile rejected');
+
+  // skill-policy review: merged inventory → explicit human approval
+  const skillPolicy = await (await fetch(`${base}/api/skills/policy`)).json();
+  assert.ok(skillPolicy.skills.some(skill => skill.name === 'JavaScript'), 'resume skill enters merged inventory');
+  assert.equal(skillPolicy.review.status, 'review_requested', 'missing policy starts behind review gate');
+  const badSkillPolicy = await fetch(`${base}/api/skills/policy`, {
+    method: 'POST',
+    headers: { 'content-type': 'application/json' },
+    body: JSON.stringify({
+      baseline: ['Invented Framework'],
+      rolePacks: { frontend: ['React'] },
+      approve: true,
+    }),
+  });
+  assert.equal(badSkillPolicy.status, 400, 'policy cannot reference skills outside merged pool');
+  const approvedSkillPolicy = await fetch(`${base}/api/skills/policy`, {
+    method: 'POST',
+    headers: { 'content-type': 'application/json' },
+    body: JSON.stringify({
+      baseline: ['JavaScript', 'TypeScript'],
+      rolePacks: { frontend: ['React'] },
+      approve: true,
+    }),
+  });
+  assert.equal(approvedSkillPolicy.status, 200, 'complete skill policy approved');
+  const approvedSkillPolicyJson = await approvedSkillPolicy.json();
+  assert.equal(approvedSkillPolicyJson.review.status, 'approved', 'approval unlocks skill selection');
+  assert.ok(approvedSkillPolicyJson.policy.reviewedAt, 'approval timestamp persisted');
+  console.log('board: skill-policy approval API ✓');
 
   // discovery preferences round-trip (first-run wizard persistence);
   // idempotent — asserts save/overwrite, not initial absence, since
@@ -367,15 +397,58 @@ try {
   const campaignDir = join(outDir, 'campaigns', 'current', 'jobs', campaignJob.folder);
   mkdirSync(campaignDir, { recursive: true });
   for (const [name, content] of Object.entries({
-    'resume.pdf': '%PDF-1.4\n%%EOF\n',
+    'resume.pdf': onePagePdf('CoForce board fixture'),
     'resume.tex': '\\documentclass{article}\\begin{document}Fixture\\end{document}\n',
     'job-description.md': '# Fixture JD\n',
     'job.json': JSON.stringify({ id: campaignJob.id }),
     'match-report.md': '# Grounded match\n',
+    'judge.json': JSON.stringify({
+      pageCount: 1,
+      fullness: 0.94,
+      minimumPageCoverage: 0.93,
+      minimumPageCoveragePercent: 93,
+      onePage: true,
+      fullPage: true,
+      verbatim: true,
+      skillsVerbatim: true,
+    }),
+    'llm-judge.json': JSON.stringify({
+      judgedAt: '2026-07-26T00:00:00.000Z',
+      runs: 3,
+      medianTotal: 87,
+      pass: true,
+      fixes: ['Add one stronger result metric.'],
+      verdicts: [
+        { total: 84, jd_fit_note: 'Good adjacent fit.' },
+        { total: 87, jd_fit_note: 'Strong direct fit; improve proof of impact.' },
+        { total: 90, jd_fit_note: 'Strong direct fit.' },
+      ],
+    }),
   })) writeFileSync(join(campaignDir, name), content);
+  const judgedCampaign = await (await fetch(`${base}/api/campaign`)).json();
+  const judgedJob = judgedCampaign.jobs.find(item => item.id === campaignJob.id);
+  assert.equal(judgedJob.machineJudge.pageCount, 1, 'campaign API exposes the machine gate summary');
+  assert.equal(judgedJob.machineJudge.fullPage, undefined, 'Human API hides the coverage verdict');
+  assert.equal(judgedJob.reviewDeliveryProof, undefined, 'Human API hides internal delivery proof');
+  assert.equal(judgedJob.llmJudge.medianTotal, 87, 'campaign API exposes the LLM judge median');
+  assert.equal(
+    judgedJob.llmJudge.jdFitNote,
+    'Strong direct fit; improve proof of impact.',
+    'campaign API keeps JD fit distinct from absolute resume QA'
+  );
   const approved = await fetch(`${base}/api/campaign/jobs/${campaignJob.id}/approve`, { method: 'POST' });
   assert.equal(approved.status, 200, 'campaign approval accepted with complete artifacts');
-  assert.equal((await approved.json()).status, 'approved');
+  const approvedJob = await approved.json();
+  assert.equal(approvedJob.status, 'approved');
+  assert.equal(approvedJob.reviewDeliveryProof, undefined, 'approval response remains Human-safe');
+  const internalManifestPath = join(outDir, 'campaigns', 'current', 'manifest.json');
+  assert.equal(
+    JSON.parse(readFileSync(internalManifestPath, 'utf8')).jobs
+      .find(item => item.id === campaignJob.id)
+      .reviewDeliveryProof.pageCoverage.status,
+    'passed',
+    'internal manifest retains the coverage delivery proof'
+  );
   const packed = await fetch(`${base}/api/campaign/export`, { method: 'POST' });
   assert.equal(packed.status, 200, 'approved campaign exported');
   const download = await fetch(`${base}${(await packed.json()).url}`);
@@ -384,6 +457,37 @@ try {
   const campaignEvil = await fetch(`${base}/campaign/files/..%2Fapps-live.json`);
   assert.equal(campaignEvil.status, 404, 'campaign traversal blocked');
   console.log('board: campaign feedback + approval + ZIP API ✓');
+
+  const coverageSetting = await fetch(`${base}/api/config`, {
+    method: 'POST',
+    headers: { 'content-type': 'application/json' },
+    body: JSON.stringify({ resumePageCoverageMinimumPercent: 96 }),
+  });
+  assert.equal(coverageSetting.status, 204, 'resume page coverage setting saved');
+  const coverageState = await (await fetch(`${base}/api/state`)).json();
+  const coverageJob = coverageState.campaign.jobs.find(item => item.id === campaignJob.id);
+  assert.equal(coverageState.campaign.minimumPageCoveragePercent, 96);
+  assert.equal(coverageJob.status, 'revision_requested', 'raising coverage reopens an underfilled approved resume');
+  assert.equal(coverageJob.reviewReady, false);
+  assert.ok(
+    !JSON.stringify(coverageState.campaign).includes('page_coverage_insufficient'),
+    'Human campaign API never exposes the internal reason code'
+  );
+  const internalCoverageJob = JSON.parse(readFileSync(internalManifestPath, 'utf8')).jobs
+    .find(item => item.id === campaignJob.id);
+  assert.ok(
+    internalCoverageJob.feedback.some(item =>
+      item.reasonCode === 'page_coverage_insufficient' &&
+      item.visibility === 'internal' &&
+      item.status === 'open'),
+    'internal state retains the structured unresolved reason'
+  );
+  const blockedApproval = await fetch(`${base}/api/campaign/jobs/${campaignJob.id}/approve`, {
+    method: 'POST',
+  });
+  assert.equal(blockedApproval.status, 400);
+  assert.ok(!/coverage|proof|96/i.test(await blockedApproval.text()), 'approval error remains Human-safe');
+  console.log('board: configurable resume coverage gate ✓');
 
   const reviewToggle = await fetch(`${base}/api/config`, {
     method: 'POST',

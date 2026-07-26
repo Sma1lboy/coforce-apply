@@ -17,8 +17,13 @@ import {
   htmlToText,
   hydrateJob,
   resolveCampaignFile,
+  resumePageCoverageMinimumPercent,
   resumeReviewRequired,
+  skillPool,
+  skillReview,
   stageArtifacts,
+  syncSelectedSkillsToResume,
+  syncTemplateContractToResume,
   syncJobs,
 } from '../.agents/skills/campaign/scripts/campaign-lib.mjs';
 import {
@@ -26,30 +31,7 @@ import {
   experiencePaths,
   upsertSource,
 } from '../.agents/skills/experience/scripts/experience-lib.mjs';
-
-function onePagePdf(label, full = true) {
-  const safe = label.replace(/[()\\]/g, '');
-  const bottom = full ? ' BT /F1 12 Tf 72 40 Td (page filled to the bottom margin) Tj ET' : '';
-  const stream = `BT /F1 20 Tf 72 720 Td (${safe}) Tj ET${bottom}`;
-  const objects = [
-    '<< /Type /Catalog /Pages 2 0 R >>',
-    '<< /Type /Pages /Kids [3 0 R] /Count 1 >>',
-    '<< /Type /Page /Parent 2 0 R /MediaBox [0 0 612 792] /Resources << /Font << /F1 5 0 R >> >> /Contents 4 0 R >>',
-    `<< /Length ${Buffer.byteLength(stream)} >>\nstream\n${stream}\nendstream`,
-    '<< /Type /Font /Subtype /Type1 /BaseFont /Helvetica >>',
-  ];
-  let body = '%PDF-1.4\n';
-  const offsets = [0];
-  objects.forEach((object, index) => {
-    offsets.push(Buffer.byteLength(body));
-    body += `${index + 1} 0 obj\n${object}\nendobj\n`;
-  });
-  const xref = Buffer.byteLength(body);
-  body += `xref\n0 ${objects.length + 1}\n0000000000 65535 f \n`;
-  body += offsets.slice(1).map(offset => `${String(offset).padStart(10, '0')} 00000 n \n`).join('');
-  body += `trailer\n<< /Size ${objects.length + 1} /Root 1 0 R >>\nstartxref\n${xref}\n%%EOF\n`;
-  return Buffer.from(body);
-}
+import { onePagePdf } from './pdf-fixture.mjs';
 
 const dataDir = process.env.COFORCE_CAMPAIGN_DIR || mkdtempSync(join(tmpdir(), 'coforce-campaign-'));
 const jobs = [
@@ -80,12 +62,36 @@ mkdirSync(dirname(libraryPath), { recursive: true });
 upsertSource(dataDir, { repo: 'example/product', authors: ['candidate'], project: 'Product' });
 writeFileSync(join(dataDir, 'profile.json'), JSON.stringify({
   name: 'Candidate',
-  skills: ['TypeScript', 'Node.js'],
+  skills: ['TypeScript', 'Node.js', 'Python'],
+  resumeSkillPolicy: {
+    status: 'approved',
+    baseline: ['TypeScript'],
+    rolePacks: {
+      backend: ['Node.js'],
+    },
+    reviewedAt: '2026-07-01T00:00:00.000Z',
+  },
+  verifiedSkills: [
+    {
+      name: 'TypeScript',
+      category: 'Programming Languages',
+      source: 'https://github.com/example/product/pull/42',
+      evidenceIds: ['product:pr:repo:42'],
+      verifiedAt: '2026-07-01',
+    },
+    {
+      name: 'Node.js',
+      category: 'Backend & APIs',
+      source: 'https://github.com/example/product/pull/42',
+      evidenceIds: ['product:pr:repo:42'],
+      verifiedAt: '2026-07-01',
+    },
+  ],
   experience: [{
     company: 'Product Inc', title: 'Backend Engineer',
     description: [
-      { text: 'Built reliable TypeScript agent API retries with observability and regression tests', source: 'https://github.com/example/product/pull/42', verifiedAt: '2026-07-01' },
-      { text: 'Migrated data storage schema with zero-downtime migration tooling', source: 'https://github.com/example/product/commit/abc', verifiedAt: '2026-07-01' },
+      { text: 'Built reliable TypeScript agent API retries with observability and regression tests', textZh: '构建具备可观测性和回归测试的可靠 TypeScript Agent API 重试机制', source: 'https://github.com/example/product/pull/42', verifiedAt: '2026-07-01' },
+      { text: 'Migrated data storage schema with zero-downtime migration tooling', textZh: null, source: 'https://github.com/example/product/commit/abc', verifiedAt: '2026-07-01' },
     ],
   }],
   projects: [{
@@ -121,7 +127,16 @@ assert.equal(index.tier, 0);
 
 const tex = join(dataDir, 'fixture.tex');
 const pdf = join(dataDir, 'fixture.pdf');
-writeFileSync(tex, '\\documentclass{article}\\begin{document}Grounded fixture\\end{document}\n');
+writeFileSync(tex, [
+  '\\documentclass{article}',
+  '\\newcommand{\\resumeSubItem}[2]{#1 #2}',
+  '\\begin{document}',
+  '\\section{\\textbf{Skills}}',
+  '\\resumeSubItem{Languages, Frameworks, Backend \\& Data:}{TypeScript, Node.js, Python}',
+  'Grounded fixture',
+  '\\end{document}',
+  '',
+].join('\n'));
 writeFileSync(pdf, onePagePdf('CoForce campaign fixture'));
 
 const stubBin = join(dataDir, 'stub-bin');
@@ -139,17 +154,73 @@ const pool = JSON.parse(poolOut);
 assert.equal(pool.length, 3, 'pool = every bullet already reviewed into profile.json');
 assert.ok(pool.every(bullet => bullet.id.length === 8 && bullet.text && bullet.origin));
 assert.equal(pool.filter(bullet => bullet.verifiedAt).length, 2, 'provenance fields survive into the pool');
+assert.equal(pool[0].textZh, '构建具备可观测性和回归测试的可靠 TypeScript Agent API 重试机制', 'Chinese translation survives into the pool');
+assert.equal(pool[1].textZh, null, 'nullable Chinese translation remains null');
+const skillsOut = execFileSync(process.execPath, [campaignCli, 'skills', '--data-dir', dataDir], {
+  env: { ...process.env, PATH: `${stubBin}:${process.env.PATH}`, COFORCE_GH_LOG: ghLog },
+  encoding: 'utf8',
+});
+const skills = JSON.parse(skillsOut);
+assert.equal(skills.length, 3, 'campaign merges all resume-attested skills with evidence enrichments');
+assert.ok(skills.slice(0, 2).every(skill =>
+  skill.id.length === 8 &&
+  skill.name &&
+  skill.category &&
+  skill.source &&
+  skill.evidenceIds.length
+), 'verified skills preserve category and Tier 0 provenance');
+assert.equal(skills.find(skill => skill.name === 'Python').attested, true);
+assert.equal(skills.find(skill => skill.name === 'Python').evidenceBacked, false);
+assert.deepEqual(skills.find(skill => skill.name === 'TypeScript').origins, ['resume', 'experience']);
+assert.equal(skills.find(skill => skill.name === 'TypeScript').baseline, true);
+assert.deepEqual(skills.find(skill => skill.name === 'Node.js').rolePacks, ['backend']);
+assert.equal(skillReview(dataDir).status, 'approved');
+{
+  const profilePath = join(dataDir, 'profile.json');
+  const approvedProfile = JSON.parse(readFileSync(profilePath, 'utf8'));
+  writeFileSync(profilePath, JSON.stringify({
+    ...approvedProfile,
+    resumeSkillPolicy: { ...approvedProfile.resumeSkillPolicy, status: 'review_requested' },
+  }, null, 2));
+  assert.equal(skillReview(dataDir).status, 'review_requested');
+  assert.throws(
+    () => selectBullets(
+      dataDir,
+      synced.added[0].id,
+      [pool[0].id],
+      skills.map(skill => skill.id),
+      'backend',
+    ),
+    /skill policy is review_requested/,
+    'campaign selection waits for explicit human approval of baseline and role packs'
+  );
+  writeFileSync(profilePath, JSON.stringify(approvedProfile, null, 2));
+}
 for (const job of synced.added) {
   execFileSync(process.execPath, [campaignCli, 'select', '--data-dir', dataDir, '--id', job.id,
-    '--bullets', `${pool[0].id},${pool[2].id}`], {
+    '--bullets', `${pool[0].id},${pool[2].id}`,
+    '--skills', skills.map(skill => skill.id).join(','),
+    '--skill-pack', 'backend'], {
     env: { ...process.env, PATH: `${stubBin}:${process.env.PATH}`, COFORCE_GH_LOG: ghLog },
     stdio: 'pipe',
   });
   const matched = campaignView(dataDir).jobs.find(item => item.id === job.id);
   assert.equal(matched.status, 'matched');
   assert.deepEqual(matched.evidenceIds, [pool[0].id, pool[2].id], 'selection recorded as bullet ids');
+  assert.deepEqual(matched.selectedSkillIds, skills.map(skill => skill.id), 'selection records eligible skill ids');
   assert.equal(matched.match.mode, 'selection');
   assert.equal(matched.match.bullets[0].text, pool[0].text, 'selected bullets are verbatim pool text');
+  assert.equal(matched.match.bullets[0].textZh, pool[0].textZh, 'selected bullets preserve Chinese translations');
+  assert.deepEqual(matched.match.skills.map(skill => skill.name), ['TypeScript', 'Node.js', 'Python']);
+  assert.equal(matched.match.skills[0].source, 'https://github.com/example/product/pull/42');
+  assert.equal(matched.selectedSkillPack, 'backend');
+  assert.equal(matched.match.selectedRolePack, 'backend');
+  assert.deepEqual(matched.match.skillComposition, {
+    total: 3,
+    baseline: 1,
+    rolePack: 1,
+    jdExtras: 1,
+  });
   const staged = stageArtifacts(dataDir, job.id, { tex, pdf });
   assert.equal(staged.status, 'rendered', 'default mode waits for manual review');
   assert.equal(staged.approvalMode, null);
@@ -159,6 +230,23 @@ assert.throws(
   /outside the verified pool/,
   'out-of-pool bullet ids must be rejected — fabrication is structurally impossible'
 );
+assert.throws(
+  () => selectBullets(dataDir, synced.added[0].id, [pool[0].id], [skills[0].id, 'deadbeef']),
+  /skills outside the eligible pool/,
+  'out-of-pool skill ids must be rejected — keyword fabrication is structurally impossible'
+);
+assert.throws(
+  () => selectBullets(
+    dataDir,
+    synced.added[0].id,
+    [pool[0].id],
+    [skills.find(skill => skill.name === 'TypeScript').id,
+      skills.find(skill => skill.name === 'Python').id],
+    'backend',
+  ),
+  /omits mandatory skills/,
+  'baseline and the selected role pack are mandatory before JD extras'
+);
 assert.equal(existsSync(ghLog), false, 'selection must never invoke gh');
 assert.equal(statSync(libraryPath).mtimeMs, libraryBefore.mtimeMs, 'campaign must not rewrite experience sources');
 
@@ -166,13 +254,95 @@ assert.equal(statSync(libraryPath).mtimeMs, libraryBefore.mtimeMs, 'campaign mus
 {
   const jobView = campaignView(dataDir).jobs.find(item => item.id === synced.added[0].id);
   const jobTexDir = join(dataDir, 'campaigns', 'current', 'jobs', jobView.folder);
-  writeFileSync(join(jobTexDir, 'resume.tex'),
-    `\\documentclass{article}\\begin{document}\\newcommand{\\resumeItem}[1]{#1}\n\\resumeItem{${pool[0].text}}\n\\end{document}\n`);
+  const fixtureTemplatePath = join(dataDir, 'fixture-template.tex');
+  const fixtureTemplate =
+    `\\documentclass{article}\n\\newcommand{\\resumeItem}[2]{\\textbf{#1}#2}\n\\begin{document}\n` +
+    `contact|\\href{mailto:test@example.com}{test@example.com}\n` +
+    `\\vspace{-8mm}\n` +
+    `\\section{\\textbf{Skills}}\\resumeSubItem{Languages, Frameworks, Backend \\& Data:}{TypeScript, Node.js, Python}\n` +
+    `\\section{\\textbf{Projects}}\n` +
+    `\\resumeSubHeadingListStart\n\\resumeSubheading{First}{}{}{}\n` +
+    `\\resumeItem{}{template placeholder}\n\\resumeSubHeadingListEnd\n` +
+    `\\vspace{-9mm}\n\\resumeSubHeadingListStart\n\\vspace{-1mm}\n` +
+    `\\resumeSubheading{Second}{}{}{}\n\\resumeSubHeadingListEnd\n` +
+    `\\vspace{-9mm}\n\\end{document}\n`;
+  writeFileSync(fixtureTemplatePath, fixtureTemplate);
+  const conflictingLegacyTemplatePath = join(dataDir, 'legacy-template.tex');
+  writeFileSync(
+    conflictingLegacyTemplatePath,
+    fixtureTemplate.replace('test@example.com', 'legacy@example.com')
+  );
+  writeFileSync(join(dataDir, 'apply-config.json'), JSON.stringify({
+    latexTemplate: conflictingLegacyTemplatePath,
+  }));
+  writeFileSync(join(dataDir, 'config.json'), JSON.stringify({
+    latexTemplate: fixtureTemplatePath,
+    requireResumeReview: true,
+  }));
+  const driftedResume =
+    fixtureTemplate
+      .replace('\\textbf{#1}#2', '#1#2')
+      .replace('test@example.com', 'visa status')
+      .replace('-8mm', '-6mm')
+      .replaceAll('-9mm', '-6mm')
+      .replace('\\resumeSubHeadingListStart\n\\resumeSubheading{First}',
+        '\\resumeSubHeadingListStart\n\\vspace{-4mm}\n\\resumeSubheading{First}')
+      .replace('\\resumeItem{}{template placeholder}', `\\resumeItem{${pool[0].text}}{}`);
+  writeFileSync(join(jobTexDir, 'resume.tex'), driftedResume);
+  const normalizedTemplate = syncTemplateContractToResume(dataDir, synced.added[0].id);
+  assert.equal(normalizedTemplate.updated, true);
+  assert.equal(normalizedTemplate.templatePreambleExact, true);
+  assert.equal(normalizedTemplate.templateContactHeaderExact, true);
+  assert.equal(normalizedTemplate.skillsSectionSpacingExact, true);
+  assert.equal(normalizedTemplate.projectEntryScaffoldingExact, true);
+  assert.equal(normalizedTemplate.projectTransitionSpacingExact, true);
+  assert.equal(normalizedTemplate.projectTailSpacingExact, true);
+  assert.equal(normalizedTemplate.resumeItemsUseBodyArgument, true);
+  assert.match(
+    readFileSync(join(jobTexDir, 'resume.tex'), 'utf8'),
+    /test@example\.com\}\n\\vspace\{-8mm\}\n\\section\{\\textbf\{Skills\}\}/,
+    'config.json is the only template source even when a conflicting legacy config remains'
+  );
   const good = judgeResume(dataDir, synced.added[0].id);
   assert.equal(good.verbatim, true, 'pool bullet verbatim passes the judge');
+  assert.equal(good.resumeItemsUseBodyArgument, true, 'resume bullets use the non-bold body argument');
+  assert.equal(good.skillsVerbatim, true, 'selected skills rendered verbatim pass the judge');
+  assert.equal(good.renderedSkillGroupCount, 1);
+  assert.equal(good.renderedSkillCount, 3);
   assert.equal(good.itemCount, 1);
   if (good.pageCount !== null) assert.equal(good.onePage, true, 'fixture pdf is one page');
   if (good.fullness !== null) assert.equal(good.fullPage, true, 'fixture pdf fills the page');
+  assert.equal(good.minimumPageCoveragePercent, 93, 'page coverage defaults to 93%');
+  const configured = JSON.parse(readFileSync(join(dataDir, 'config.json'), 'utf8'));
+  writeFileSync(join(dataDir, 'config.json'), JSON.stringify({
+    ...configured,
+    resumePageCoverageMinimumPercent: 96,
+  }));
+  assert.equal(resumePageCoverageMinimumPercent(dataDir), 96);
+  const strictCoverage = judgeResume(dataDir, synced.added[0].id);
+  assert.equal(strictCoverage.minimumPageCoverage, 0.96);
+  if (strictCoverage.fullness !== null && strictCoverage.fullness < 0.96) {
+    assert.equal(strictCoverage.fullPage, false, 'the configured 96% threshold is enforced');
+    assert.deepEqual(strictCoverage.issues, [{
+      code: 'page_coverage_insufficient',
+      actualPercent: Math.round(strictCoverage.fullness * 1000) / 10,
+      minimumPercent: 96,
+    }], 'coverage failure exposes a machine-readable revision option');
+    assert.throws(
+      () => approveJob(dataDir, synced.added[0].id),
+      /page coverage .* below the 96% minimum/,
+      'manual approval cannot bypass the configured coverage minimum'
+    );
+  }
+  writeFileSync(join(dataDir, 'config.json'), JSON.stringify({
+    ...configured,
+    resumePageCoverageMinimumPercent: 93,
+  }));
+  judgeResume(dataDir, synced.added[0].id);
+  writeFileSync(join(jobTexDir, 'resume.tex'),
+    `\\documentclass{article}\\begin{document}\\newcommand{\\resumeItem}[2]{#2}\n` +
+    `\\section{\\textbf{Skills}}\\resumeSubItem{Languages, Frameworks, Backend \\& Data:}{TypeScript, Node.js, Python}\n` +
+    `\\resumeItem{}{${pool[0].text}}\n\\end{document}\n`);
   // a one-page resume that leaves the bottom half empty must FAIL the judge
   writeFileSync(join(jobTexDir, 'resume.pdf'), onePagePdf('sparse fixture', false));
   const sparse = judgeResume(dataDir, synced.added[0].id);
@@ -181,12 +351,43 @@ assert.equal(statSync(libraryPath).mtimeMs, libraryBefore.mtimeMs, 'campaign mus
   }
   writeFileSync(join(jobTexDir, 'resume.pdf'), onePagePdf('CoForce campaign fixture'));
   writeFileSync(join(jobTexDir, 'resume.tex'),
-    '\\documentclass{article}\\begin{document}\\newcommand{\\resumeItem}[1]{#1}\n\\resumeItem{Invented a claim that is not in the pool}\n\\end{document}\n');
+    '\\documentclass{article}\\begin{document}\\newcommand{\\resumeItem}[2]{#2}\n' +
+    '\\section{\\textbf{Skills}}\\resumeSubItem{Programming Languages:}{TypeScript, InventedDB}\\resumeSubItem{Backend \\& APIs:}{Node.js}\n' +
+    '\\resumeItem{}{Invented a claim that is not in the pool}\n\\end{document}\n');
   const bad = judgeResume(dataDir, synced.added[0].id);
   assert.equal(bad.verbatim, false, 'out-of-pool resume line fails the judge');
+  assert.equal(bad.skillsVerbatim, false, 'out-of-pool resume skill fails the judge');
+  assert.deepEqual(bad.unknownSkills, ['InventedDB']);
   assert.equal(bad.unknownLines.length, 1);
   stageArtifacts(dataDir, synced.added[0].id, { tex, pdf });
   judgeResume(dataDir, synced.added[0].id); // restore a clean judge for the flow below
+}
+
+// Saved skill selections replace stale sparse template keywords while the
+// surrounding template body remains intact.
+{
+  const jobView = campaignView(dataDir).jobs.find(item => item.id === synced.added[0].id);
+  const jobTexDir = join(dataDir, 'campaigns', 'current', 'jobs', jobView.folder);
+  const resumeTex = join(jobTexDir, 'resume.tex');
+  writeFileSync(resumeTex, [
+    '\\documentclass{article}',
+    '\\begin{document}',
+    '\\section{\\textbf{Skills}}',
+    '\\resumeHeadingSkillStart',
+    '\\resumeSubItem{Old:}{SparseSkill}',
+    '\\resumeHeadingSkillEnd',
+    '\\section{Projects}',
+    'Keep this body',
+    '\\end{document}',
+    '',
+  ].join('\n'));
+  const syncedSkills = syncSelectedSkillsToResume(dataDir, jobView.id);
+  const syncedTex = readFileSync(resumeTex, 'utf8');
+  assert.equal(syncedSkills.skills, 3);
+  assert.equal(syncedSkills.groups, 1);
+  assert.match(syncedTex, /Relevant Skills:.*TypeScript, Node\.js, Python/s);
+  assert.doesNotMatch(syncedTex, /SparseSkill/);
+  assert.match(syncedTex, /\\section\{Projects\}\nKeep this body/);
 }
 
 const first = synced.added[0];
@@ -209,6 +410,44 @@ for (const job of campaignView(dataDir).jobs) {
 assert.equal(campaignView(dataDir).allApproved, true);
 assert.ok(readFileSync(exported.path).length > 1000);
 assert.equal(resolveCampaignFile(dataDir, '../applications.json'), null, 'traversal blocked');
+
+// Structured coverage feedback stays open until a newer passing judge creates
+// the durable proof used to deliver the resume back to Review.
+const coverageFeedbackDir = mkdtempSync(join(tmpdir(), 'coforce-coverage-feedback-'));
+const coverageFeedbackJob = syncJobs(coverageFeedbackDir, [{
+  id: 'coverage-feedback-1',
+  company: 'Coverage Labs',
+  role: 'Engineer',
+  url: 'https://jobs.example/coverage-feedback-1',
+}]).added[0];
+addFeedback(
+  coverageFeedbackDir,
+  coverageFeedbackJob.id,
+  '',
+  'page_coverage_insufficient',
+);
+addFeedback(
+  coverageFeedbackDir,
+  coverageFeedbackJob.id,
+  '',
+  'page_coverage_insufficient',
+);
+let coverageFeedbackView = campaignView(coverageFeedbackDir).jobs[0];
+assert.equal(coverageFeedbackView.status, 'revision_requested');
+assert.equal(coverageFeedbackView.feedback.length, 1, 'structured feedback reason is idempotent while open');
+assert.equal(coverageFeedbackView.feedback[0].reasonCode, 'page_coverage_insufficient');
+assert.equal(coverageFeedbackView.feedback[0].visibility, 'internal');
+stageArtifacts(coverageFeedbackDir, coverageFeedbackJob.id, { tex, pdf });
+coverageFeedbackView = campaignView(coverageFeedbackDir).jobs[0];
+assert.equal(coverageFeedbackView.status, 'rendered', 'passing coverage proof delivers the revision back to Review');
+assert.equal(coverageFeedbackView.reviewDeliveryProof.pageCoverage.status, 'passed');
+assert.equal(coverageFeedbackView.reviewDeliveryProof.pageCoverage.artifact, 'judge.json');
+assert.equal(coverageFeedbackView.feedback[0].status, 'resolved');
+assert.deepEqual(
+  coverageFeedbackView.feedback[0].resolutionEvidence,
+  coverageFeedbackView.reviewDeliveryProof.pageCoverage,
+  'resolved feedback carries the exact Review delivery proof'
+);
 
 const autoDir = mkdtempSync(join(tmpdir(), 'coforce-campaign-auto-'));
 const autoJd = join(autoDir, 'job-description.md');
@@ -242,7 +481,7 @@ const gateView = campaignView(gateDir).jobs[0];
 const gateJobDir = join(gateDir, 'campaigns', 'current', 'jobs', gateView.folder);
 writeFileSync(join(gateJobDir, 'match.json'), JSON.stringify({ bullets: [{ text: 'Real bullet' }] }));
 writeFileSync(join(gateJobDir, 'resume.tex'),
-  '\\documentclass{article}\\begin{document}\\newcommand{\\resumeItem}[1]{#1}\n\\resumeItem{Fabricated line}\n\\end{document}\n');
+  '\\documentclass{article}\\begin{document}\\newcommand{\\resumeItem}[2]{#2}\n\\resumeItem{}{Fabricated line}\n\\end{document}\n');
 writeFileSync(join(gateDir, 'config.json'), JSON.stringify({ requireResumeReview: false }));
 writeFileSync(join(gateJobDir, 'llm-judge.json'),
   JSON.stringify({ judgedAt: 'fixture', runs: 1, medianTotal: 95, pass: true, fixes: [] }));

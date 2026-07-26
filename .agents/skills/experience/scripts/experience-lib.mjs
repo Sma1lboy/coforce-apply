@@ -12,7 +12,7 @@ import {
 import { dirname, join } from 'node:path';
 import { writeJsonAtomic } from '../../../lib/fs-atomic.mjs';
 
-export const EXPERIENCE_SCHEMA = '1.0';
+export const EXPERIENCE_SCHEMA = '1.1';
 
 export const experiencePaths = dataDir => {
   const root = join(dataDir, 'experience');
@@ -128,11 +128,23 @@ const textOfBullets = value =>
     .filter(Boolean)
     .join('\n');
 
+const skillName = value =>
+  String(typeof value === 'string' ? value : value?.name || '').trim();
+
+const profileSkillNames = profile => normalizeStrings([
+  ...(Array.isArray(profile?.skills) ? profile.skills : []),
+  ...(Array.isArray(profile?.verifiedSkills) ? profile.verifiedSkills : []),
+].map(skillName));
+
+const firstBulletSource = value =>
+  (Array.isArray(value) ? value : [])
+    .find(item => typeof item === 'object' && item?.source)?.source || null;
+
 const profileTags = (text, skills = []) => {
   const lowered = String(text || '').toLowerCase();
   const tags = new Set();
   for (const skill of skills) {
-    const raw = String(skill || '').trim();
+    const raw = skillName(skill);
     if (raw && lowered.includes(raw.toLowerCase())) tags.add(`skill:${slugify(raw)}`);
   }
   return [...tags].sort();
@@ -140,7 +152,7 @@ const profileTags = (text, skills = []) => {
 
 function profileEntries(profile) {
   if (!profile || typeof profile !== 'object') return [];
-  const skills = Array.isArray(profile.skills) ? profile.skills : [];
+  const skills = profileSkillNames(profile);
   const entries = [];
 
   if (skills.length) {
@@ -153,6 +165,7 @@ function profileEntries(profile) {
       body: skills.join(', '),
       status: 'curated',
       tags: ['source:profile', ...skills.map(skill => `skill:${slugify(skill)}`)],
+      source_url: null,
     });
   }
 
@@ -168,6 +181,7 @@ function profileEntries(profile) {
       status: 'curated',
       authored_at: item.date || null,
       tags: ['source:profile', 'artifact:experience', ...profileTags(body, skills)],
+      source_url: item.url || firstBulletSource(item.description),
     });
   }
 
@@ -183,9 +197,98 @@ function profileEntries(profile) {
       status: 'curated',
       authored_at: item.dateRange || null,
       tags: ['source:profile', 'artifact:project', ...profileTags(body, skills)],
+      source_url: item.url || firstBulletSource(item.description),
     });
   }
   return entries;
+}
+
+const splitTechnologies = value =>
+  String(value || '')
+    .split(/[,|]/)
+    .map(item => item.trim())
+    .filter(Boolean);
+
+const displayNameForTag = tag => {
+  const slug = String(tag || '').replace(/^(?:repo-)?tech:/, '');
+  if (!slug) return null;
+  return slug
+    .split('-')
+    .map(part => part ? part[0].toUpperCase() + part.slice(1) : '')
+    .join(' ');
+};
+
+const escapeRegex = value => String(value).replace(/[.*+?^${}()|[\]\\]/g, '\\$&');
+
+const textMentionsSkill = (text, name) => {
+  const raw = String(name || '').trim();
+  if (!raw) return false;
+  return new RegExp(`(^|[^a-z0-9])${escapeRegex(raw)}([^a-z0-9]|$)`, 'i')
+    .test(String(text || ''));
+};
+
+export function buildSkillCandidates(entries, profile = null) {
+  const seeds = new Map();
+  const addSeed = (name, category = null) => {
+    const clean = String(name || '').trim();
+    if (!clean) return;
+    const key = clean.toLowerCase();
+    const existing = seeds.get(key);
+    if (!existing) seeds.set(key, {
+      name: clean,
+      category: category || 'Tools & Technologies',
+    });
+    else if (category && existing.category === 'Tools & Technologies') existing.category = category;
+  };
+
+  for (const item of profile?.skills || []) {
+    addSeed(skillName(item), typeof item === 'object' ? item?.category : null);
+  }
+  for (const item of profile?.verifiedSkills || []) addSeed(skillName(item), item?.category);
+  for (const project of profile?.projects || []) {
+    for (const name of splitTechnologies(project.technologies)) addSeed(name);
+  }
+  for (const entry of entries) {
+    for (const tag of entry.tags || []) {
+      if (/^(?:repo-)?tech:/.test(tag)) {
+        addSeed(displayNameForTag(tag), 'Repository Technologies');
+      }
+    }
+  }
+
+  const candidates = [];
+  for (const seed of seeds.values()) {
+    const evidence = [];
+    let evidenceCount = 0;
+    const seedSlug = slugify(seed.name);
+    for (const entry of entries) {
+      if (entry.artifact === 'profile_skills' || !entry.source_url) continue;
+      const tags = entry.tags || [];
+      const directTag = tags.some(tag =>
+        tag === `skill:${seedSlug}` ||
+        (/^(?:repo-)?tech:/.test(tag) && slugify(displayNameForTag(tag)) === seedSlug)
+      );
+      const searchable = [entry.title, entry.body, ...(entry.files || [])].filter(Boolean).join('\n');
+      if (!directTag && !textMentionsSkill(searchable, seed.name)) continue;
+      evidenceCount += 1;
+      if (evidence.length < 8) {
+        evidence.push({ id: entry.id, source: entry.source_url });
+      }
+    }
+    if (!evidenceCount) continue;
+    candidates.push({
+      id: `skill-${sha256(seed.name.toLowerCase()).slice(0, 8)}`,
+      name: seed.name,
+      category: seed.category,
+      evidenceCount,
+      evidence,
+    });
+  }
+  return candidates.sort((a, b) =>
+    b.evidenceCount - a.evidenceCount ||
+    a.category.localeCompare(b.category) ||
+    a.name.localeCompare(b.name)
+  );
 }
 
 const compactGithubEntry = entry => ({
@@ -223,6 +326,7 @@ export function buildExperienceIndex(dataDir, options = {}) {
   const curatedEntries = profileEntries(profile);
   const entries = [...curatedEntries, ...githubEntries];
   if (!entries.length) throw new Error('Tier 0 has no profile or GitHub evidence entries');
+  const skills = buildSkillCandidates(entries, profile);
 
   const tags = new Set();
   for (const entry of entries) {
@@ -245,8 +349,10 @@ export function buildExperienceIndex(dataDir, options = {}) {
       entries: entries.length,
       tags: tags.size,
       repositories: sources.repositories.length,
+      skills: skills.length,
     },
     entries,
+    skills,
   };
   writeJsonAtomic(paths.index, index);
   writeJsonAtomic(paths.manifest, {

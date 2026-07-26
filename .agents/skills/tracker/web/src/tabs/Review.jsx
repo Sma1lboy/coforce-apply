@@ -31,6 +31,13 @@ const experienceLabel = experience => {
   return 'missing · run /experience refresh';
 };
 
+const qaStatus = judge => {
+  if (!judge) return ['Not scored', 'text-faint border-rule2'];
+  return judge.pass
+    ? ['Pass', 'text-ok border-ok/50']
+    : ['Needs review', 'text-warn border-warn/50'];
+};
+
 function PdfPreview({ url, zoom }) {
   const canvasRef = useRef(null);
   const [error, setError] = useState('');
@@ -172,6 +179,7 @@ export default function Review({ state, onChanged }) {
   const jdUrl = `/campaign/files/jobs/${encodeURIComponent(selected.folder)}/job-description.md`;
   const hasPdf = !!selected.artifacts?.['resume.pdf'];
   const bullets = selected.match?.bullets || [];
+  const humanReviewReady = selected.reviewReady === true;
 
   return (
     <div className="review-shell flex-1 min-h-0 grid bg-well">
@@ -191,6 +199,7 @@ export default function Review({ state, onChanged }) {
         <div className="flex-1 min-h-0 overflow-y-auto p-2.5">
           {campaign.jobs.map((job, index) => {
             const [label, klass] = statusFor(job.status, job.approvalMode);
+            const [qaLabel, qaClass] = qaStatus(job.llmJudge);
             return (
               <button
                 key={job.id}
@@ -204,7 +213,14 @@ export default function Review({ state, onChanged }) {
                   <span className="min-w-0">
                     <span className="font-display text-[12.5px] text-ink block truncate">{job.company}</span>
                     <span className="text-[11px] text-muted block mt-0.5 line-clamp-2">{job.role}</span>
-                    <span className={`inline-block mt-2 border rounded-full px-2 py-0.5 text-[9px] uppercase tracking-wide ${klass}`}>{label}</span>
+                    <span className="flex flex-wrap gap-1.5 mt-2">
+                      <span className={`inline-block border rounded-full px-2 py-0.5 text-[9px] uppercase tracking-wide ${klass}`}>{label}</span>
+                      {job.llmJudge && (
+                        <span className={`inline-block border rounded-full px-2 py-0.5 text-[9px] uppercase tracking-wide ${qaClass}`}>
+                          QA {job.llmJudge.medianTotal ?? '—'} · {qaLabel}
+                        </span>
+                      )}
+                    </span>
                   </span>
                 </div>
               </button>
@@ -252,7 +268,7 @@ export default function Review({ state, onChanged }) {
         </div>
         <a href={selected.url} target="_blank" rel="noreferrer" className="block text-[11px] text-accentsoft hover:underline break-all mt-3">View job posting ↗</a>
 
-        <div className="h3">Match signal</div>
+        <div className="h3">Selected evidence</div>
         <div className="flex items-end gap-2">
           <span className="font-display text-3xl text-accentsoft">{selected.matchScore ?? '—'}</span>
           <span className="text-[10px] text-dim mb-1">bullets selected from your verified pool</span>
@@ -261,6 +277,55 @@ export default function Review({ state, onChanged }) {
           {selected.artifacts?.['job-description.md'] && <a className="mini" href={jdUrl} target="_blank" rel="noreferrer">JD</a>}
           {selected.artifacts?.['match-report.md'] && <a className="mini" href={matchUrl} target="_blank" rel="noreferrer">Full report</a>}
         </div>
+
+        <div className="h3 flex items-center justify-between">
+          <span>Internal QA</span>
+          <span className="text-[9px] font-normal normal-case tracking-normal text-dim">not ATS / hiring probability</span>
+        </div>
+        {selected.llmJudge ? (() => {
+          const [qaLabel, qaClass] = qaStatus(selected.llmJudge);
+          const machine = selected.machineJudge;
+          return (
+            <div className="rounded-lg border border-rule bg-well p-3">
+              <div className="flex items-end justify-between gap-3">
+                <div>
+                  <span className="font-display text-3xl text-accentsoft">{selected.llmJudge.medianTotal ?? '—'}</span>
+                  <span className="text-[10px] text-dim ml-1">/ 130 median</span>
+                </div>
+                <span className={`border rounded-full px-2 py-1 text-[9px] uppercase tracking-wide ${qaClass}`}>{qaLabel}</span>
+              </div>
+              {!!selected.llmJudge.runTotals?.length && (
+                <div className="flex gap-1.5 mt-2">
+                  {selected.llmJudge.runTotals.map((total, index) => (
+                    <span key={`${total}-${index}`} className="mini">run {index + 1}: {total}</span>
+                  ))}
+                </div>
+              )}
+              {machine && (
+                <div className="text-[10px] text-dim mt-2.5">
+                  Machine gate · {machine.pageCount ?? '—'} page
+                  {machine.verbatim === true && machine.skillsVerbatim === true ? ' · grounded ✓' : ''}
+                </div>
+              )}
+              {selected.llmJudge.jdFitNote && (
+                <div className="mt-2.5 border-t border-rule pt-2">
+                  <div className="text-[9px] uppercase tracking-wide text-faint mb-1">JD fit note</div>
+                  <div className="text-[10px] leading-4 text-muted">{selected.llmJudge.jdFitNote}</div>
+                </div>
+              )}
+              {!!selected.llmJudge.fixes?.length && (
+                <div className="mt-2.5 border-t border-rule pt-2">
+                  <div className="text-[9px] uppercase tracking-wide text-faint mb-1">Judge suggestions</div>
+                  {selected.llmJudge.fixes.map((fix, index) => (
+                    <div key={index} className="text-[10px] leading-4 text-muted mt-1">• {String(fix)}</div>
+                  ))}
+                </div>
+              )}
+            </div>
+          );
+        })() : (
+          <div className="text-[11px] text-dim">No context-isolated judge result for this render yet.</div>
+        )}
 
         <div className="h3">Selected bullets (verbatim)</div>
         {bullets.length ? bullets.slice(0, 8).map(item => (
@@ -287,8 +352,14 @@ export default function Review({ state, onChanged }) {
 
         {selected.error && <div className="mt-3 text-[11px] text-bad bg-bad/10 border border-bad/30 rounded-lg p-2.5">{selected.error}</div>}
         {message && <div className="mt-3 text-[11px] text-accentsoft bg-accent/10 border border-accent/30 rounded-lg p-2.5">{message}</div>}
-        <button className="btn w-full mt-3 disabled:opacity-40 disabled:cursor-not-allowed" disabled={!hasPdf || !selected.artifacts?.['resume.tex'] || selected.status === 'approved' || busy === 'approve'} onClick={approve}>
-          {selected.status === 'approved' ? 'Approved ✓' : busy === 'approve' ? 'Approving…' : 'Approve this resume'}
+        <button className="btn w-full mt-3 disabled:opacity-40 disabled:cursor-not-allowed" disabled={!hasPdf || !selected.artifacts?.['resume.tex'] || !humanReviewReady || selected.status === 'approved' || busy === 'approve'} onClick={approve}>
+          {selected.status === 'approved'
+            ? 'Approved ✓'
+            : !humanReviewReady
+              ? 'Revision in progress'
+              : busy === 'approve'
+                ? 'Approving…'
+                : 'Approve this resume'}
         </button>
         {selected.status === 'approved' && (
           <button className="btn-ghost w-full mt-2"

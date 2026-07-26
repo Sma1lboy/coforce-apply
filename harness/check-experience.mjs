@@ -83,6 +83,7 @@ execFileSync(process.execPath, [
 writeFileSync(join(dataDir, 'profile.json'), JSON.stringify({
   name: 'Candidate',
   skills: ['TypeScript', 'PostgreSQL'],
+  verifiedSkills: [{ name: 'TypeScript', category: 'Programming Languages' }],
   experience: [{
     company: 'Acme',
     title: 'Backend Engineer',
@@ -119,10 +120,20 @@ const index = buildExperienceIndex(dataDir);
 assert.equal(index.tier, 0);
 assert.deepEqual(index.authors, ['candidate']);
 assert.equal(index.counts.entries, 4);
-assert.deepEqual(Object.keys(index.counts).sort(), ['entries', 'repositories', 'tags']);
+assert.deepEqual(Object.keys(index.counts).sort(), ['entries', 'repositories', 'skills', 'tags']);
 assert.equal(index.entries.filter(item => item.id.startsWith('profile:')).length, 3);
 assert.ok(index.entries.some(item => item.tags.includes('skill:typescript')));
 assert.ok(index.entries.some(item => item.id === 'runtime:pr:owner/repo:42'));
+assert.ok(index.skills.some(skill =>
+  skill.name === 'TypeScript' &&
+  skill.category === 'Programming Languages' &&
+  skill.evidence.some(evidence => evidence.id === 'runtime:pr:owner/repo:42')
+), 'same Tier 0 pass aggregates source-backed skill candidates');
+assert.ok(index.skills.every(skill =>
+  skill.evidenceCount > 0 &&
+  skill.evidence.length > 0 &&
+  skill.evidence.every(evidence => evidence.id && evidence.source)
+), 'every skill candidate carries source-backed evidence');
 const githubEntry = index.entries.find(item => item.id === 'runtime:pr:owner/repo:42');
 assert.deepEqual(Object.keys(githubEntry).sort(), [
   'artifact', 'author', 'authored_at', 'body', 'files', 'id', 'project_id',
@@ -131,9 +142,13 @@ assert.deepEqual(Object.keys(githubEntry).sort(), [
 assert.equal(githubEntry.author, 'candidate');
 assert.equal('stats' in githubEntry, false);
 assert.deepEqual(Object.keys(index).sort(), [
-  'authors', 'counts', 'entries', 'generatedAt', 'schemaVersion', 'sourceFingerprint', 'tier',
+  'authors', 'counts', 'entries', 'generatedAt', 'schemaVersion', 'skills', 'sourceFingerprint', 'tier',
 ]);
 assert.equal(experienceView(dataDir).status, 'ready');
+const skillCandidates = JSON.parse(execFileSync(process.execPath, [
+  experienceCli, 'skills', '--data-dir', dataDir,
+], { encoding: 'utf8' }));
+assert.deepEqual(skillCandidates, index.skills, 'skills command reads the existing index without rebuilding');
 
 const profile = JSON.parse(readFileSync(join(dataDir, 'profile.json'), 'utf8'));
 profile.skills.push('React');

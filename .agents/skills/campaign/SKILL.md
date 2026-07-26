@@ -1,268 +1,142 @@
 ---
 name: campaign
-description: Build and review a batch of job-specific resumes — sync discovered jobs, fetch full JDs, strictly select verbatim bullets from the verified pool in profile.json, render the user's LaTeX template to PDF, collect feedback/approval in the CoForce Review console, and export approved job folders as one ZIP. Use for "/campaign", "批量岗位匹配", "生成岗位简历", "review resumes", or when start finds queued/revision-requested campaign jobs.
+description: Build and review a batch of job-specific resumes from local reviewed bullets and skills, render the managed LaTeX template, collect review, and export approved packages.
 ---
 
-# Campaign — jobs → grounded resumes → review → ZIP
+# Campaign — JD → grounded resume → review → ZIP
 
-This skill owns the resume-review stage. It does **not** submit applications.
-Application submission remains a later `apply`-skill action with its own explicit
-final-submit confirmation.
-
-Read `~/.coforce/instructions.md` first. It overrides all defaults below. All
-personal data and generated files stay under `~/.coforce/`; never copy them into
-the CoForce repository.
-
-The bundled scripts live relative to this skill directory:
+Campaign owns resume generation and review, never application submission. Read
+`~/.coforce/instructions.md` first. Keep personal data under `~/.coforce/`.
 
 ```sh
 node "<campaign-skill>/scripts/campaign.mjs" <command>
 ```
 
-## Campaign state schema (canonical)
+## Inputs and ownership
 
-`~/.coforce/campaigns/current/manifest.json` is the campaign's contract file —
-skills and the console both program against this schema, never against each
-other's code:
+- `~/.coforce/config.json` is the only runtime config. Its managed
+  `latexTemplate` is under `<dataHome>/templates/`; external files are
+  import-only. Review defaults on and page coverage defaults to 93%.
+- `profile.json` owns reviewed bullets, attested skills, and
+  `resumeSkillPolicy`.
+- `experience/experience-index.json` may add sourced skill candidates.
+- Campaign never calls GitHub, refreshes Tier 0, or invents resume content.
 
-```json
-{
-  "schemaVersion": "1.0",
-  "updatedAt": "ISO-8601",
-  "jobs": [{
-    "id": "stable hash", "applicationId": "tracker id | null",
-    "company": "…", "role": "…", "location": "…", "source": "…", "url": "…",
-    "folder": "slug of the jobs/<folder>/ dir",
-    "status": "queued | needs_browser_jd | jd_ready | matched | rendered | render_failed | revision_requested | approved",
-    "matchScore": 0, "evidenceIds": [],
-    "experienceIndexGeneratedAt": "ISO | null", "experienceIndexFingerprint": "sha | null",
-    "approvedAt": "ISO | null", "approvalMode": "manual | automatic | null",
-    "feedback": [], "error": null, "createdAt": "ISO", "updatedAt": "ISO"
-  }],
-  "lastExport": { "path": "…", "exportedAt": "ISO", "jobCount": 0 }
-}
-```
-
-Every write goes through the library's locked, atomic writer; each job also has
-a `jobs/<folder>/job.json` snapshot of its record. Bump `schemaVersion` on any
-breaking field change and keep a migration shim for one version back.
-
-## One-time inputs
-
-Require these values in `~/.coforce/config.json`:
-
-- `latexTemplate`: absolute path to the user's `.tex` template. Never modify the
-  template in place.
-- `requireResumeReview`: optional boolean, defaulting to `true`. When `false`,
-  a complete successfully rendered resume is automatically approved and the
-  ZIP is refreshed after the full batch completes.
-
-Require a non-empty **verified bullet pool**: the bullet points already
-reviewed into `~/.coforce/profile.json` (Module 1: the `experience` /
-`profile` skills generate bullets JD-free from repo contexts and the user
-approves them into the profile). If `campaign.mjs pool` reports none, stop and
-send the user to Module 1 first. A campaign must never discover repositories,
-invoke `gh`, or generate new bullet text — it only *selects*. The sibling
-`experience` skill's evidence index is Module-1 raw material, not a campaign
-input anymore.
+`campaigns/current/manifest.json` is atomic state; each job also has
+`jobs/<folder>/job.json`.
 
 ## Cycle
 
-1. **Sync tracked jobs into the campaign**:
-
-   ```sh
-   node "<campaign-skill>/scripts/campaign.mjs" sync
-   node "<campaign-skill>/scripts/campaign.mjs" show
-   ```
-
-   Work on `queued`, `needs_browser_jd`, `jd_ready`, `matched`, `render_failed`,
-   and `revision_requested` jobs. Existing approved jobs are left alone; reuse
-   any valid artifacts already present instead of starting over.
-
-2. **Load the verified bullet pool**:
-
-   ```sh
-   node "<campaign-skill>/scripts/campaign.mjs" pool
-   ```
-
-   Every bullet the user has reviewed into profile.json, with a stable 8-char
-   content id, its origin (which experience/project it belongs to) and
-   provenance (`source`, `verifiedAt` when present). The pool is small — read
-   it whole; there is no tag index and no relevance pre-filter.
-
-3. **Hydrate the full JD** for each queued job:
-
-   ```sh
-   node "<campaign-skill>/scripts/campaign.mjs" hydrate --id <job-id>
-   ```
-
-   This tries direct HTTP first. If it reports `needs_browser_jd`, use the
-   runtime's visible Chrome integration to open the posting, capture the actual
-   rendered job description, save it to a temporary local text file, then run:
-
-   ```sh
-   node "<campaign-skill>/scripts/campaign.mjs" hydrate --id <job-id> --file <captured-jd.txt>
-   ```
-
-   Do not substitute a search snippet, company careers index, or guessed JD.
-
-4. **Select bullets for this JD — strictly from the pool.** Read the full JD
-   and the full pool, pick the bullets that genuinely fit (typically 6–14),
-   then record the selection:
-
-   ```sh
-   node "<campaign-skill>/scripts/campaign.mjs" select --id <job-id> --bullets <id1,id2,…>
-   ```
-
-   The command **rejects any id outside the pool** — fabrication is
-   structurally impossible, not just discouraged. It writes `match-report.md`
-   (human-readable selection) and `match.json` (`mode: "selection"`, verbatim
-   bullets with provenance) and sets the job to `matched`.
-
-   **Best-fit selection prompt** — run the choice with this rubric, not vibes:
-
-   > You are selecting resume bullets for ONE job. Inputs: the full JD, the
-   > full verified pool (id + text + origin), and config.json. Rules:
-   > (1) cover the JD's top 3–5 required capabilities first — every one of
-   > them should have at least one bullet if the pool has it; (2) prefer
-   > bullets with concrete, verifiable outcomes over activity descriptions;
-   > (3) diversity beats repetition — max ~2 bullets making the same point;
-   > (4) respect entry coherence: bullets you pick determine which
-   > experience/project entries appear, so avoid orphan entries with one weak
-   > bullet; (5) 6–14 bullets total, one page after layout; (6) every entry
-   > you include MUST lead with its introductory bullet — the one that says
-   > what the project/product IS (type, purpose, scale) — before any detail
-   > bullets; an entry whose intro bullet doesn't fit doesn't fit; (7) output
-   > ONLY pool ids in display order — you cannot edit text, and ids outside
-   > the pool will be rejected.
-
-   Alongside the selection, check the JD against `~/.coforce/config.json`
-   (canonical user intent — `needsSponsorship`, `workMode`, `locations`,
-   `salaryFloor`; schema in the setup skill): a posting that violates a hard
-   preference (e.g. "no sponsorship" while `needsSponsorship` is true, or
-   onsite-only against `workMode: remote`) gets flagged in `match-report.md`
-   so the user sees the conflict at review time instead of after applying.
-
-5. **Assemble the job-specific resume from the selection — verbatim.** Copy
-   the template into the job folder as `resume.tex`; preserve its packages,
-   macros, typography, spacing, and section order. Every resume bullet must be
-   one of the selected bullets, **word for word** (LaTeX escaping aside);
-   tailoring means choosing, ordering, and cutting — never rewriting. If a
-   bullet should be phrased better, that is Module 1 work: regenerate →
-   user review → profile, then reselect. The one-page cut drops the
-   least-relevant selected bullets first, never edits them.
-
-   For a revision-requested job, read every open feedback item first and
-   regenerate the existing `resume.tex`; do not create parallel drafts.
-
-   **Judge every render before it reaches review.** Machine metrics first:
-
-   ```sh
-   node "<campaign-skill>/scripts/campaign.mjs" judge --id <job-id>
-   ```
-
-   `judge.json` must show `onePage: true` (exactly one page), `fullPage: true`
-   (content reaches ≥88% down the page — a half-empty page is as much a failed
-   product as a second page; fix by selecting MORE pool bullets, never by
-   inflating text), and `verbatim: true` (every `\resumeItem` is one of the
-   selected bullets, word for word). A failed metric blocks automatic approval
-   in code; fix and re-render, don't argue.
-
-   Then the LLM judge — **one spec, run context-free**: spawn a fresh
-   subagent (Task tool) whose entire context is the resume text, the JD,
-   and `references/resume-judge.md`.
-   The agent that assembled the resume never judges it; do not pass it the
-   pool or your selection rationale. Run 3× and take the median when the
-   score drives a decision. Record the verdict as `llm-judge.json` in the job
-   folder (schema + pass bar in the spec): **automatic approval is code-gated
-   on a recorded passing verdict**, and a failing score loops — apply the
-   fixes, re-render, re-judge, at most 3 rounds, then escalate to the user
-   with the verdicts. Isolation is two-way — the selection/assembly
-   steps above must never read the judge spec: a generator that sees the
-   rubric games the score instead of telling the truth.
-
-   Its `deductions.reasons` + `fixes` are the regenerate work list, split by
-   root cause into the **improvement loop**:
-
-   - *selection problem* (wrong bullets, ordering, sparse page) → fix this
-     resume: reselect/reorder, re-render, re-judge.
-   - *generation-rule problem* (a whole class of resumes would fail the same
-     way: missing project links, unevidenced skills, no demo URLs) → sediment
-     a rule change into Module 1's prompts (experience / profile SKILL.md)
-     with the user's sign-off, then regenerate downstream. Judge findings are
-     how the generation prompts iterate — never edit the judge to make a
-     finding go away.
-
-   Already-sedimented examples: full page ⇒ select more bullets (never
-   inflate text); projects are born with repo/demo links.
-
-6. **Render and inspect**:
-
-   ```sh
-   node "<campaign-skill>/scripts/campaign.mjs" render --id <job-id>
-   ```
-
-   Rendering requires `latexmk`, `pdflatex`, or `tectonic` and enforces the
-   one-page gate when `pdfinfo` is available. If `pdftoppm` is available, render
-   the PDF to PNG at 150 DPI and visually inspect it for clipping, overlap,
-   missing glyphs, broken links, and accidental blank space before marking it
-   ready. Iterate until the output is clean. With `requireResumeReview: false`,
-   this successful completion automatically records approval mode `automatic`;
-   failures and incomplete artifact sets never auto-approve.
-
-7. **Review when required**. With the default `requireResumeReview: true`, serve
-   the tracker and open the **Review** tab. It shows the job link, match evidence,
-   zoomable PDF, prior feedback, revision request, and approval controls.
-   Feedback changes the job to `revision_requested`; the next `/start` or
-   `/campaign` cycle consumes it. With the setting off, Review remains available
-   for optional inspection but does not block approval or export.
-
-8. **Export after approval**. The Review tab enables **Export approved ZIP**
-   only when every campaign job is approved. In auto mode the state machine
-   performs the same export automatically when the final job completes. The
-   equivalent CLI is:
-
-   ```sh
-   node "<campaign-skill>/scripts/campaign.mjs" export
-   ```
-
-   Output: `~/.coforce/campaigns/current/exports/resume-applications.zip`.
-   It contains a root `manifest.json` and one `<company>-<role>/` folder per job
-   with `resume.pdf`, `resume.tex`, `job-description.md`, `job.json`, and
-   `match-report.md`.
-
-## Closing the loop (outcomes)
-
-The pipeline optimises for producing resumes; nothing else looks back at which
-ones worked. `outcomes` joins the bullets selected per job (`evidenceIds` in
-the manifest) with where that application ended up in the tracker:
+### 1. Sync and hydrate
 
 ```sh
-node "<campaign-skill>/scripts/campaign.mjs" outcomes
+node "<campaign-skill>/scripts/campaign.mjs" sync
+node "<campaign-skill>/scripts/campaign.mjs" show
+node "<campaign-skill>/scripts/campaign.mjs" hydrate --id <job-id>
 ```
 
-Returns each bullet with `advanced` (interviewing/offer) and `rejected`
-counts, the jobs it rode on, a `neverUsed` list of pool bullets that have
-never made it onto a resume, and `detached` — ids that were used but no longer
-match any pool bullet, which means the profile text was edited afterwards
-(bullet ids are content hashes).
+If hydration returns `needs_browser_jd`, capture the visible JD and provide it:
 
-**Report the `caveat` field verbatim whenever you show this.** A person applies
-to tens of jobs, and the same bullets ride along on nearly every resume, so
-these counts cannot separate cause from correlation. Use it as a reading aid
-when selecting for the next batch, or to spot pool bullets nobody ever picks —
-never as proof a bullet works. Do not compute rates or rank "best bullets".
+```sh
+node "<campaign-skill>/scripts/campaign.mjs" hydrate --id <job-id> --file <jd.txt>
+```
 
-## State rules
+Never substitute a search snippet or guessed description.
 
-- `profile.json` remains curated user truth. Tier 0 experience tags and per-JD
-  matches are separate, reviewable data.
-- Only the `experience` skill may scan GitHub. Campaign work is a local index
-  read, no matter how many jobs are matched.
-- Re-running is idempotent by job URL. Do not rebuild approved jobs unless the
-  user explicitly reopens them.
-- A campaign approval approves only the resume package, never the irreversible
-  application submit.
-- Resume review may be automatic; final application submission may not.
-- Report blockers per job; one blocked listing must not prevent other resumes
-  from reaching Review.
+### 2. Load reviewed pools
+
+```sh
+node "<campaign-skill>/scripts/campaign.mjs" pool
+node "<campaign-skill>/scripts/campaign.mjs" skills
+node "<campaign-skill>/scripts/campaign.mjs" skill-review
+```
+
+Bullet IDs derive from English text; nullable `textZh` is metadata. Skill
+records preserve source category and provenance. Profile skills need no public
+proof; Tier 0 can enrich or add candidates.
+
+`skill-review` must be approved with a non-empty baseline and role packs. An
+Agent may propose policy membership, but only the user approves it.
+
+### 3. Select for one JD
+
+Read the full JD and pools. Choose strong, diverse bullets plus the baseline,
+one complete role pack, and useful JD extras. Use judgment for quantity and
+ordering; never dump the pool or omit an entry's reviewed introductory bullet.
+
+```sh
+node "<campaign-skill>/scripts/campaign.mjs" select --id <job-id> \
+  --bullets <bullet-ids> \
+  --skills <skill-ids> \
+  --skill-pack <approved-pack>
+```
+
+The command rejects pool violations and missing policy members, writes
+`match.json` plus `match-report.md`, and invalidates prior judges.
+
+Also flag hard preference conflicts from config (sponsorship, location,
+work-mode, salary) in the match report.
+
+### 4. Assemble and render
+
+Tailoring is selection, ordering, and cutting:
+
+- Render bullet English text verbatim, apart from LaTeX escaping.
+- Render each selected skill name exactly once. Group by source-owned category;
+  sparse categories may use a neutral combined label.
+- Never retain unselected template skills.
+- Preserve template preamble, macros, contact header, section order, wrappers,
+  and spacing. Replace only semantic content.
+- Use `\resumeItem{}{<bullet>}`; the first argument is a bold label.
+- For feedback, update the same resume rather than creating parallel drafts.
+
+```sh
+node "<campaign-skill>/scripts/campaign.mjs" render --id <job-id>
+node "<campaign-skill>/scripts/campaign.mjs" judge --id <job-id>
+```
+
+Machine review must pass:
+
+- exactly one page and configured page coverage;
+- selected bullets and skills are verbatim and complete;
+- compact section transitions;
+- template preamble, contact header, Skills leading spacing, Project entry
+  scaffolding/transitions/tail, and resume-item argument placement match the
+  managed template.
+
+Coverage failure uses internal reason `page_coverage_insufficient` and remains
+hidden from Human Review. A newer pass records delivery proof and resolves it.
+Fix coverage with reviewed content, never typography or spacing.
+
+Render the latest PDF to PNG and inspect it for collisions, clipping, awkward
+wraps, and inconsistent spacing. Machine checks do not replace visual review.
+
+Run the context-free LLM judge from `references/resume-judge.md` three times in
+a fresh agent using only the JD and resume. Save the median in `llm-judge.json`;
+the generator must not read the rubric.
+
+### 5. Review and export
+
+With `requireResumeReview: true`, the Review tab handles feedback and approval.
+With it disabled, a complete passing render can auto-approve. Neither mode
+authorizes submitting an application.
+
+Export only when every job is approved:
+
+```sh
+node "<campaign-skill>/scripts/campaign.mjs" export
+```
+
+Output: `campaigns/current/exports/resume-applications.zip`, containing one
+folder per job with the PDF, TeX, JD, job snapshot, and match report.
+
+## Invariants
+
+- Profile and the local Tier 0 skill index are the only selection sources.
+- Policy, resume, and final submission are separate approval gates.
+- Only the experience skill may scan GitHub.
+- Re-running is idempotent by job URL; do not reopen approved jobs without an
+  explicit request.
+- One blocked job must not stop other campaign jobs from reaching Review.
+- `campaign.mjs outcomes` joins bullet IDs to tracker results; always report
+  its caveat because correlation is not causation.

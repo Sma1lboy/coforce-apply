@@ -10,11 +10,14 @@ repo). The authoritative schema is the shape below. Never invent fields.
 
 Shape (all fields optional): `name`, `title`, `email`, `phone`, `location`,
 `linkedin`, `github`, `website`, `summary`, `skills[]`, `courses[]`,
-`experience[] {company, title, date, location?, description[{text, weight?}], weight?}`,
+`verifiedSkills[] {name, category?, source?, evidenceIds[]?, verifiedAt?}`,
+`resumeSkillPolicy {status: "review_requested" | "approved", baseline: string[],
+rolePacks: Record<string, string[]>, reviewedAt?: string | null}`,
+`experience[] {company, title, date, location?, description[{text, textZh?, weight?, source?, verifiedAt?}], weight?}`,
 `education[] {institution, degree, date, location?, relevantCourses?}`,
-`projects[] {name, description[{text, weight?}], technologies?, dateRange?, weight?}`,
+`projects[] {name, description[{text, textZh?, weight?, source?, verifiedAt?}], technologies?, dateRange?, weight?}`,
 `certifications[] {name, issuer, date}`, `languages[] {language, proficiency}`,
-`customSections[] {title, weight?, entries[{heading?, subheading?, date?, description?[{text, weight?}]}]}`
+`customSections[] {title, weight?, entries[{heading?, subheading?, date?, description?[{text, textZh?, weight?, source?, verifiedAt?}]}]}`
 — user-defined resume sections (Awards, Publications, Leadership, Open Source…)
 that tailor renders as additional sections when relevant.
 `weight` (higher = more important) drives what gets picked when tailoring a resume
@@ -27,9 +30,9 @@ to a JD — set it when the user signals importance, otherwise omit.
   (PDF/JSON/text), read it and map into the schema.
 - Point the user at the console's Profile tab (tracker skill, port 4517) as
   the friendly editing surface: structured form (basics, skill chips,
-  experience/project/education cards with per-bullet editing) plus an
-  "Import resume (AI)" button that parses pasted text via the local agent
-  runtime for review-then-save.
+  experience/project/education cards with per-bullet editing), a skill-policy
+  review ledger, plus an "Import resume (AI)" button that parses pasted text
+  via the local agent runtime for review-then-save.
 - Otherwise interview briefly: contact basics → education → experience → projects
   → skills. Don't interrogate; accept partial data, everything is optional.
 
@@ -68,10 +71,25 @@ point out gaps: missing dates, bullets with no results/metrics, stale `title`.
 ## Rules
 
 - Validate against the shape above before writing; `description` entries are
-  objects `{text, weight?}`, not bare strings.
+  objects, not bare strings. `text` is the canonical English resume line;
+  `textZh` is its optional Chinese translation and may be `null`.
 - Never fabricate experience, dates, or metrics. Unknown → omit or ask.
 - Never commit `~/.coforce/profile.json` anywhere or paste its contents into
   commits/PRs.
+
+## Skill inventory and policy
+
+- `skills[]` is user-attested resume/coursework truth and needs no public proof.
+- `verifiedSkills[]` optionally adds Tier 0 category/source/evidence metadata.
+- Campaign also reads `experience-index.json.skills[]`; merging is
+  case-insensitive and never uses JD text as a source.
+- `resumeSkillPolicy.baseline` and each `rolePack` contain canonical names from
+  that merged pool. Everything else remains an optional JD extra.
+
+An Agent may propose policy membership, but only the user may approve it.
+Draft, empty, or stale references mean `review_requested`; newly discovered
+optional skills do not invalidate an already approved policy. Policy approval
+does not approve a resume or application.
 
 ## Entries carry their links
 
@@ -83,9 +101,12 @@ a resume should be born with its links, not have them patched in review.
 
 ## The profile is the verified bullet pool
 
-Every `description` bullet may carry two optional provenance fields alongside
-`text`: `source` (URL of the repo/PR/commit it derives from) and `verifiedAt`
+Every `description` bullet may carry `textZh: string | null` for bilingual
+review plus two optional provenance fields alongside `text`: `source` (URL of
+the repo/PR/commit it derives from) and `verifiedAt`
 (ISO date the user approved it into the profile). Nothing enters the profile
 without explicit user approval — which is exactly why downstream resume
 generation (the campaign skill) is allowed to select ONLY from these bullets,
-verbatim. Editors must preserve unknown/optional fields on save.
+verbatim. English `text` remains the value consumed by resume rendering and
+verbatim checks; editors and downstream data files must preserve `textZh` and
+all other optional fields on save.

@@ -10,6 +10,7 @@ import {
   readFileSync,
   rmdirSync,
   statSync,
+  unlinkSync,
   writeFileSync,
 } from 'node:fs';
 import { createHash } from 'node:crypto';
@@ -46,9 +47,113 @@ const ensureDir = path => {
 
 const readJson = path => JSON.parse(readFileSync(path, 'utf8'));
 
+const removeIfExists = path => {
+  if (existsSync(path)) unlinkSync(path);
+};
+
+export const DEFAULT_RESUME_PAGE_COVERAGE_MINIMUM_PERCENT = 93;
+export const PAGE_COVERAGE_INSUFFICIENT_REASON = 'page_coverage_insufficient';
+
+export const REVIEW_FEEDBACK_REASONS = {
+  [PAGE_COVERAGE_INSUFFICIENT_REASON]:
+    'Page coverage is below the configured minimum; add relevant reviewed content without changing template spacing.',
+};
+
+export const resumePageCoverageMinimumPercent = dataDir => {
+  try {
+    const raw = loadConfig(dataDir).resumePageCoverageMinimumPercent;
+    if (raw === '' || raw === null || raw === undefined) {
+      return DEFAULT_RESUME_PAGE_COVERAGE_MINIMUM_PERCENT;
+    }
+    const value = Number(raw);
+    return Number.isFinite(value) && value >= 0 && value <= 100
+      ? value
+      : DEFAULT_RESUME_PAGE_COVERAGE_MINIMUM_PERCENT;
+  } catch {
+    return DEFAULT_RESUME_PAGE_COVERAGE_MINIMUM_PERCENT;
+  }
+};
+
+const currentResumeJudge = (dataDir, job) => {
+  const dir = jobDir(dataDir, job);
+  const path = join(dir, 'judge.json');
+  const minimumPageCoveragePercent = resumePageCoverageMinimumPercent(dataDir);
+  if (existsSync(path)) {
+    try {
+      const saved = readJson(path);
+      const judgeModifiedAt = statSync(path).mtimeMs;
+      const newestInputModifiedAt = ['resume.pdf', 'resume.tex', 'match.json']
+        .map(name => join(dir, name))
+        .filter(existsSync)
+        .reduce((latest, input) => Math.max(latest, statSync(input).mtimeMs), 0);
+      if (
+        saved.minimumPageCoveragePercent === minimumPageCoveragePercent &&
+        judgeModifiedAt >= newestInputModifiedAt
+      ) return saved;
+    } catch {}
+  }
+  return judgeResume(dataDir, job.id);
+};
+
+const pageCoverageActualPercent = fullness =>
+  Number.isFinite(fullness) ? Math.round(fullness * 1000) / 10 : null;
+
+export const pageCoverageDeliveryProof = judge => {
+  if (judge?.fullPage !== true || !Number.isFinite(judge?.fullness)) return null;
+  return {
+    status: 'passed',
+    actualPercent: pageCoverageActualPercent(judge.fullness),
+    minimumPercent: judge.minimumPageCoveragePercent,
+    judgedAt: judge.judgedAt,
+    artifact: 'judge.json',
+  };
+};
+
+const coverageFeedbackText = ({ fullness, minimumPageCoveragePercent }) => {
+  const actual = pageCoverageActualPercent(fullness);
+  return actual === null
+    ? `Page coverage could not be verified against the configured ${minimumPageCoveragePercent}% minimum.`
+    : `Page coverage is ${actual}%, below the configured ${minimumPageCoveragePercent}% minimum.`;
+};
+
+const addCoverageFeedbackIfMissing = (job, details) => {
+  const feedback = job.feedback || [];
+  const existing = feedback.find(item =>
+    item.reasonCode === PAGE_COVERAGE_INSUFFICIENT_REASON && item.status === 'open');
+  if (existing) {
+    existing.visibility = 'internal';
+    return false;
+  }
+  job.feedback = [...feedback, {
+    id: `feedback-${Date.now()}-${job.id}`,
+    reasonCode: PAGE_COVERAGE_INSUFFICIENT_REASON,
+    visibility: 'internal',
+    text: coverageFeedbackText(details),
+    createdAt: now(),
+    status: 'open',
+  }];
+  return true;
+};
+
+const resolveCoverageFeedback = (feedback, proof) =>
+  (feedback || []).map(item =>
+    item.reasonCode === PAGE_COVERAGE_INSUFFICIENT_REASON && item.status === 'open'
+      ? {
+          ...item,
+          status: 'resolved',
+          resolvedAt: proof.judgedAt || now(),
+          resolutionEvidence: proof,
+        }
+      : item);
+
 // Fails safe to human review: an unreadable or absent config means review.
 export const resumeReviewRequired = dataDir =>
   loadConfig(dataDir).requireResumeReview !== false;
+
+const latexTemplatePath = dataDir => {
+  const templatePath = loadConfig(dataDir).latexTemplate;
+  return templatePath && existsSync(templatePath) ? templatePath : null;
+};
 
 const slugify = value =>
   String(value || 'job')
@@ -143,6 +248,8 @@ const snapshotFor = job => ({
   status: job.status,
   matchScore: job.matchScore ?? null,
   evidenceIds: job.evidenceIds || [],
+  selectedSkillIds: job.selectedSkillIds || [],
+  selectedSkillPack: job.selectedSkillPack || null,
   experienceIndexGeneratedAt: job.experienceIndexGeneratedAt || null,
   experienceIndexFingerprint: job.experienceIndexFingerprint || null,
   approvedAt: job.approvedAt || null,
@@ -187,6 +294,8 @@ export function syncJobs(dataDir, incoming) {
       status: 'queued',
       matchScore: null,
       evidenceIds: [],
+      selectedSkillIds: [],
+      selectedSkillPack: null,
       feedback: [],
       approvedAt: null,
       approvalMode: null,
@@ -237,13 +346,30 @@ export function applyResumeReviewPolicy(dataDir) {
     if (missing.length) continue;
     let judge = null;
     try {
-      judge = existsSync(join(dir, 'judge.json')) ? readJson(join(dir, 'judge.json')) : judgeResume(dataDir, job.id);
+      // Recompute when the configurable coverage threshold changed. A saved
+      // judge must never keep passing under an older, lower setting.
+      judge = currentResumeJudge(dataDir, job);
     } catch {
       continue;
     }
     // null = unverifiable (no pdfinfo / template without \resumeItem); only a
     // FAILED metric blocks auto-approval — humans can still approve manually
-    if (judge.onePage === false || judge.fullPage === false || judge.verbatim === false) continue;
+    if (
+      judge.onePage === false ||
+      judge.fullPage === false ||
+      judge.sectionTransitionsCompact === false ||
+      judge.templatePreambleExact === false ||
+      judge.templateContactHeaderExact === false ||
+      judge.skillsSectionSpacingExact === false ||
+      judge.projectEntryScaffoldingExact === false ||
+      judge.projectTransitionSpacingExact === false ||
+      judge.projectTailSpacingExact === false ||
+      judge.resumeItemsUseBodyArgument === false ||
+      judge.verbatim === false ||
+      judge.skillsVerbatim === false
+    ) continue;
+    const coverageProof = pageCoverageDeliveryProof(judge);
+    if (!coverageProof) continue;
     // the LLM review is mandatory: no recorded passing verdict, no automatic
     // approval — the playbook records llm-judge.json after the context-free
     // judge run (see references/resume-judge.md)
@@ -255,7 +381,12 @@ export function applyResumeReviewPolicy(dataDir) {
     job.status = 'approved';
     job.approvedAt = now();
     job.approvalMode = 'automatic';
-    job.feedback = (job.feedback || []).map(item => ({ ...item, status: 'resolved' }));
+    job.reviewDeliveryProof = {
+      ...(job.reviewDeliveryProof || {}),
+      pageCoverage: coverageProof,
+    };
+    job.feedback = resolveCoverageFeedback(job.feedback, coverageProof)
+      .map(item => ({ ...item, status: 'resolved' }));
     job.error = null;
     job.updatedAt = now();
     persistJobSnapshot(dataDir, job);
@@ -343,12 +474,17 @@ const STOP = new Set([
 ]);
 
 // ---- Module 2: JD → strict selection from the verified bullet pool ---------
-// Module 1 (repo-bullets / profile skills) generates bullets JD-free and the
+// Module 1 (experience / profile skills) generates bullets JD-free and the
 // user reviews them INTO profile.json — so the profile IS the verified pool.
 // Selection can only reference pool ids; fabrication is structurally
 // impossible, not prompt-discouraged.
 
 const bulletId = text => createHash('sha256').update(text).digest('hex').slice(0, 8);
+const skillId = name => createHash('sha256')
+  .update(`skill:${String(name || '').trim().toLowerCase()}`)
+  .digest('hex')
+  .slice(0, 8);
+const normalizeSkillName = value => String(value || '').trim().toLowerCase();
 
 export function bulletPool(dataDir) {
   const profilePath = join(dataDir, 'profile.json');
@@ -358,9 +494,13 @@ export function bulletPool(dataDir) {
   const push = (bullet, origin) => {
     const text = String(typeof bullet === 'string' ? bullet : bullet?.text || '').trim();
     if (!text) return;
+    const textZh = typeof bullet === 'object' && typeof bullet?.textZh === 'string'
+      ? bullet.textZh.trim() || null
+      : null;
     pool.push({
       id: bulletId(text),
       text,
+      textZh,
       origin,
       source: (typeof bullet === 'object' && bullet?.source) || null,
       verifiedAt: (typeof bullet === 'object' && bullet?.verifiedAt) || null,
@@ -378,12 +518,154 @@ export function bulletPool(dataDir) {
     }
   }
   if (!pool.length) {
-    throw new Error('profile.json has no bullet points — build the verified pool first (repo-bullets or profile skill), then retry');
+    throw new Error('profile.json has no bullet points — build the verified pool first (experience or profile skill), then retry');
   }
   return pool;
 }
 
-export function selectBullets(dataDir, id, bulletIds) {
+export function skillPool(dataDir) {
+  const profilePath = join(dataDir, 'profile.json');
+  if (!existsSync(profilePath)) throw new Error('profile.json is missing — run the profile skill first');
+  const profile = readJson(profilePath);
+  const experienceIndexPath = join(dataDir, 'experience', 'experience-index.json');
+  const experienceIndex = existsSync(experienceIndexPath) ? readJson(experienceIndexPath) : null;
+  const byName = new Map();
+  const add = (item, origin) => {
+    const name = String(typeof item === 'string' ? item : item?.name || '').trim();
+    if (!name) return;
+    const key = name.toLowerCase();
+    const evidence = typeof item === 'object' && Array.isArray(item?.evidence)
+      ? item.evidence
+      : [];
+    const evidenceIds = [
+      ...(typeof item === 'object' && Array.isArray(item?.evidenceIds) ? item.evidenceIds : []),
+      ...evidence.map(value => value?.id),
+    ].map(value => String(value || '').trim()).filter(Boolean);
+    const source = (typeof item === 'object' && item?.source) ||
+      evidence.find(value => value?.source)?.source ||
+      null;
+    const category = String(typeof item === 'object' ? item?.category || '' : '').trim() ||
+      'Tools & Technologies';
+    const existing = byName.get(key);
+    if (existing) {
+      if (existing.category === 'Tools & Technologies' && category !== existing.category) {
+        existing.category = category;
+      }
+      if (!existing.source && source) existing.source = source;
+      existing.evidenceIds = [...new Set([...existing.evidenceIds, ...evidenceIds])];
+      existing.origins = [...new Set([...existing.origins, origin])];
+      existing.attested ||= origin === 'resume';
+      existing.evidenceBacked ||= evidenceIds.length > 0 || origin === 'experience';
+      if (!existing.verifiedAt && typeof item === 'object' && item?.verifiedAt) {
+        existing.verifiedAt = item.verifiedAt;
+      }
+      return;
+    }
+    byName.set(key, {
+      id: skillId(name),
+      name,
+      category,
+      source,
+      evidenceIds: [...new Set(evidenceIds)],
+      verifiedAt: (typeof item === 'object' && item?.verifiedAt) || null,
+      origins: [origin],
+      attested: origin === 'resume',
+      evidenceBacked: evidenceIds.length > 0 || origin === 'experience',
+      legacy: false,
+    });
+  };
+  for (const item of profile.skills || []) add(item, 'resume');
+  for (const item of profile.verifiedSkills || []) add(item, 'experience');
+  for (const item of experienceIndex?.skills || []) add(item, 'experience');
+  const strategy = profile.resumeSkillPolicy && typeof profile.resumeSkillPolicy === 'object'
+    ? profile.resumeSkillPolicy
+    : {};
+  const baseline = new Set((strategy.baseline || []).map(normalizeSkillName).filter(Boolean));
+  const rolePacks = strategy.rolePacks && typeof strategy.rolePacks === 'object' &&
+    !Array.isArray(strategy.rolePacks)
+    ? strategy.rolePacks
+    : {};
+  return [...byName.values()].map(skill => {
+    const key = normalizeSkillName(skill.name);
+    return {
+      ...skill,
+      source: skill.source || (skill.attested ? 'resume-attested' : null),
+      baseline: baseline.has(key),
+      rolePacks: Object.entries(rolePacks)
+        .filter(([, names]) => Array.isArray(names) &&
+          names.some(name => normalizeSkillName(name) === key))
+        .map(([name]) => name),
+    };
+  });
+}
+
+export function skillReview(dataDir) {
+  const profilePath = join(dataDir, 'profile.json');
+  if (!existsSync(profilePath)) throw new Error('profile.json is missing — run the profile skill first');
+  const profile = readJson(profilePath);
+  const strategy = profile.resumeSkillPolicy && typeof profile.resumeSkillPolicy === 'object'
+    ? profile.resumeSkillPolicy
+    : {};
+  const skills = skillPool(dataDir);
+  const namesByKey = new Map(skills.map(skill => [normalizeSkillName(skill.name), skill.name]));
+  const baseline = [...new Set((strategy.baseline || [])
+    .map(value => String(value || '').trim()).filter(Boolean))];
+  const rawRolePacks = strategy.rolePacks && typeof strategy.rolePacks === 'object' &&
+    !Array.isArray(strategy.rolePacks)
+    ? strategy.rolePacks
+    : {};
+  const rolePacks = Object.fromEntries(Object.entries(rawRolePacks)
+    .map(([name, values]) => [
+      String(name || '').trim(),
+      [...new Set((Array.isArray(values) ? values : [])
+        .map(value => String(value || '').trim()).filter(Boolean))],
+    ])
+    .filter(([name, values]) => name && values.length));
+  const referenced = [...baseline, ...Object.values(rolePacks).flat()];
+  const unknown = [...new Set(referenced
+    .filter(name => !namesByKey.has(normalizeSkillName(name))))];
+  const declaredStatus = strategy.status === 'approved' ? 'approved' : 'review_requested';
+  const reviewedAt = typeof strategy.reviewedAt === 'string' && strategy.reviewedAt.trim()
+    ? strategy.reviewedAt
+    : null;
+  const complete = baseline.length > 0 && Object.keys(rolePacks).length > 0 && unknown.length === 0;
+  const status = declaredStatus === 'approved' && reviewedAt && complete ? 'approved' : 'review_requested';
+  const reasons = [];
+  if (declaredStatus !== 'approved') reasons.push('human approval has not been recorded');
+  if (declaredStatus === 'approved' && !reviewedAt) reasons.push('human approval timestamp is missing');
+  if (!baseline.length) reasons.push('the mandatory baseline is empty');
+  if (!Object.keys(rolePacks).length) reasons.push('no non-empty role packs are defined');
+  if (unknown.length) reasons.push(`${unknown.length} baseline or role-pack skills are no longer in the merged pool`);
+  const jdOnly = skills
+    .filter(skill => !skill.baseline && skill.rolePacks.length === 0)
+    .map(skill => skill.name);
+  return {
+    schemaVersion: '1.0',
+    status,
+    declaredStatus,
+    reviewedAt,
+    policy: {
+      baseline: 'mandatory',
+      rolePack: 'mandatory-selected-pack',
+      jdExtras: 'dynamic-from-eligible-pool',
+      classifier: 'human',
+    },
+    counts: {
+      total: skills.length,
+      baseline: skills.filter(skill => skill.baseline).length,
+      rolePacks: Object.keys(rolePacks).length,
+      rolePackMemberships: Object.values(rolePacks).flat().length,
+      jdOnly: jdOnly.length,
+    },
+    baseline,
+    rolePacks,
+    jdOnly,
+    unknown,
+    reasons,
+  };
+}
+
+export function selectBullets(dataDir, id, bulletIds, selectedSkills = [], selectedRolePack = '') {
   const ids = [...new Set((bulletIds || []).map(value => String(value).trim()).filter(Boolean))];
   if (!ids.length) throw new Error('no bullet ids given');
   const pool = bulletPool(dataDir);
@@ -396,6 +678,40 @@ export function selectBullets(dataDir, id, bulletIds) {
   const jdPath = join(jobDir(dataDir, job), 'job-description.md');
   if (!existsSync(jdPath)) throw new Error('job-description.md is missing');
   const bullets = ids.map(item => byId.get(item));
+  const skillIds = [...new Set((selectedSkills || []).map(value => String(value).trim()).filter(Boolean))];
+  const availableSkills = skillPool(dataDir);
+  const skillsById = new Map(availableSkills.map(skill => [skill.id, skill]));
+  const unknownSkills = skillIds.filter(item => !skillsById.has(item));
+  if (unknownSkills.length) {
+    throw new Error(`selection includes skills outside the eligible pool: ${unknownSkills.join(', ')} — skills must come from the user's resume/coursework inventory or local Tier 0 experience index`);
+  }
+  const review = skillReview(dataDir);
+  if (review.status !== 'approved') {
+    throw new Error(`skill policy is review_requested: ${review.reasons.join('; ')} — a human must approve the mandatory baseline and role packs before campaign selection`);
+  }
+  const requestedPack = String(selectedRolePack || '').trim();
+  const rolePackName = Object.keys(review.rolePacks)
+    .find(name => name.toLowerCase() === requestedPack.toLowerCase());
+  if (!rolePackName) {
+    throw new Error(`role pack is review_requested: choose one approved pack for this job (${Object.keys(review.rolePacks).join(', ')})`);
+  }
+  const requiredNames = [...new Set([...review.baseline, ...review.rolePacks[rolePackName]])];
+  const selectedNameKeys = new Set(skillIds
+    .map(skillIdValue => skillsById.get(skillIdValue)?.name)
+    .filter(Boolean)
+    .map(normalizeSkillName));
+  const missingRequired = requiredNames
+    .filter(name => !selectedNameKeys.has(normalizeSkillName(name)));
+  if (missingRequired.length) {
+    throw new Error(`selection omits mandatory skills for baseline + ${rolePackName}: ${missingRequired.join(', ')}`);
+  }
+  const skills = skillIds.map(item => skillsById.get(item));
+  const composition = {
+    total: skills.length,
+    baseline: skills.filter(skill => skill.baseline).length,
+    rolePack: skills.filter(skill => !skill.baseline && skill.rolePacks.includes(rolePackName)).length,
+    jdExtras: skills.filter(skill => !skill.baseline && !skill.rolePacks.includes(rolePackName)).length,
+  };
 
   const report = [
     `# Selection Report — ${job.role} at ${job.company}`,
@@ -403,13 +719,30 @@ export function selectBullets(dataDir, id, bulletIds) {
     `- Job: ${job.url}`,
     `- Verified pool: ${pool.length} bullets from profile.json`,
     `- Selected: **${bullets.length}**`,
+    `- Eligible skill pool: ${availableSkills.length} skills from resume/coursework plus the local Tier 0 experience index`,
+    `- Selected skills: **${skills.length}**`,
+    `- Skill policy: **${composition.baseline} baseline + ${composition.rolePack} ${rolePackName} pack + ${composition.jdExtras} JD extras**`,
     '',
     '## Selected Bullets (verbatim — the resume may reorder and cut, never rewrite)',
     '',
     ...bullets.flatMap(bullet => [
       `- \`${bullet.id}\` — ${bullet.text}`,
+      ...(bullet.textZh ? [`  - 中文：${bullet.textZh}`] : []),
       `  - ${bullet.origin}${bullet.source ? ` · ${bullet.source}` : ''}`,
     ]),
+    '',
+    '## Selected Skills (verbatim — group and reorder only)',
+    '',
+    ...(skills.length ? skills.flatMap(skill => [
+      `- \`${skill.id}\` — **${skill.name}** · ${skill.category} · ${
+        skill.baseline
+          ? 'baseline'
+          : skill.rolePacks.includes(rolePackName)
+            ? `role-pack:${rolePackName}`
+            : 'jd-extra'
+      }`,
+      `  - ${skill.source || 'profile-attested'}${skill.evidenceIds.length ? ` · evidence: ${skill.evidenceIds.join(', ')}` : ''}`,
+    ]) : ['_No skills selected._']),
     '',
     '## Iron Law',
     '',
@@ -420,18 +753,31 @@ export function selectBullets(dataDir, id, bulletIds) {
     current.status = 'matched';
     current.matchScore = bullets.length;
     current.evidenceIds = ids;
+    current.selectedSkillIds = skillIds;
+    current.selectedSkillPack = rolePackName;
     current.error = null;
     current.approvedAt = null;
     current.approvalMode = null;
   });
   const dir = jobDir(dataDir, updated);
+  removeIfExists(join(dir, 'judge.json'));
+  removeIfExists(join(dir, 'llm-judge.json'));
   writeFileSync(join(dir, 'match-report.md'), `${report.trim()}\n`);
   writeJsonAtomic(join(dir, 'match.json'), {
     schemaVersion: CAMPAIGN_SCHEMA,
     mode: 'selection',
     selectedAt: now(),
     poolSize: pool.length,
+    skillPoolSize: availableSkills.length,
+    resumeSkillPolicy: {
+      status: review.status,
+      reviewedAt: review.reviewedAt,
+      policy: review.policy,
+    },
+    selectedRolePack: rolePackName,
+    skillComposition: composition,
     bullets,
+    skills,
   });
   return updated;
 }
@@ -446,6 +792,8 @@ const safeCopy = (source, target) => {
 export function stageArtifacts(dataDir, id, artifacts) {
   const { job } = findJob(dataDir, id);
   const dir = ensureDir(jobDir(dataDir, job));
+  removeIfExists(join(dir, 'judge.json'));
+  removeIfExists(join(dir, 'llm-judge.json'));
   const mapping = {
     jd: 'job-description.md',
     tex: 'resume.tex',
@@ -453,14 +801,51 @@ export function stageArtifacts(dataDir, id, artifacts) {
     match: 'match-report.md',
   };
   for (const [key, name] of Object.entries(mapping)) safeCopy(artifacts[key], join(dir, name));
-  const staged = updateJob(dataDir, id, current => {
+  let staged = updateJob(dataDir, id, current => {
     const hasPdf = existsSync(join(dir, 'resume.pdf'));
     const hasTex = existsSync(join(dir, 'resume.tex'));
-    current.status = hasPdf && hasTex ? 'rendered' : current.status;
+    current.status = hasPdf && hasTex ? 'matched' : current.status;
     current.approvedAt = null;
     current.approvalMode = null;
+    current.reviewDeliveryProof = null;
     current.error = null;
   });
+  if (existsSync(join(dir, 'resume.pdf')) && existsSync(join(dir, 'resume.tex'))) {
+    try {
+      const judge = judgeResume(dataDir, id);
+      const proof = pageCoverageDeliveryProof(judge);
+      staged = updateJob(dataDir, id, current => {
+        if (proof) {
+          current.status = 'rendered';
+          current.reviewDeliveryProof = {
+            ...(current.reviewDeliveryProof || {}),
+            pageCoverage: proof,
+          };
+          current.feedback = resolveCoverageFeedback(current.feedback, proof);
+          current.error = null;
+        } else {
+          current.status = 'revision_requested';
+          current.reviewDeliveryProof = null;
+          current.error = judge.fullPage === false
+            ? coverageFeedbackText({
+                fullness: judge.fullness,
+                minimumPageCoveragePercent: judge.minimumPageCoveragePercent,
+              })
+            : 'Page coverage could not be measured; Review delivery proof is required';
+          addCoverageFeedbackIfMissing(current, {
+            fullness: judge.fullness,
+            minimumPageCoveragePercent: judge.minimumPageCoveragePercent,
+          });
+        }
+      });
+    } catch (error) {
+      staged = updateJob(dataDir, id, current => {
+        current.status = 'render_failed';
+        current.reviewDeliveryProof = null;
+        current.error = String(error.message || error);
+      });
+    }
+  }
   if (staged.status === 'rendered' && !resumeReviewRequired(dataDir)) {
     applyResumeReviewPolicy(dataDir);
     return findJob(dataDir, id).job;
@@ -477,12 +862,147 @@ const findBinary = names => {
   return null;
 };
 
+const escapeSkillTex = value => String(value)
+  .replace(/\\/g, '\\textbackslash{}')
+  .replace(/([&%#_$])/g, '\\$1');
+
+const consolidatedSkillGroups = skills => {
+  const byLabel = new Map();
+  for (const skill of skills) {
+    const label = String(skill.category || 'Tools & Technologies').trim();
+    if (!byLabel.has(label)) byLabel.set(label, []);
+    byLabel.get(label).push(String(skill.name || '').trim());
+  }
+  const active = [...byLabel].map(([label, names]) => ({ label, names }));
+  const minimum = Math.min(5, skills.length);
+  const sparse = active.filter(group => group.names.length < minimum);
+  if (sparse.length === active.length && active.length > 1) {
+    return [{ label: 'Relevant Skills', names: active.flatMap(group => group.names) }];
+  }
+  if (sparse.length) {
+    const names = sparse.flatMap(group => group.names);
+    active.splice(0, active.length, ...active.filter(group => !sparse.includes(group)));
+    if (names.length >= minimum) {
+      active.push({ label: 'Additional Relevant Skills', names });
+    } else {
+      const target = active.sort((a, b) => a.names.length - b.names.length)[0];
+      target.names.push(...names);
+      target.label = `${target.label} & Additional Skills`;
+    }
+  }
+  return active;
+};
+
+export function syncSelectedSkillsToResume(dataDir, id) {
+  const { job } = findJob(dataDir, id);
+  const dir = jobDir(dataDir, job);
+  const texPath = join(dir, 'resume.tex');
+  const matchPath = join(dir, 'match.json');
+  if (!existsSync(texPath)) throw new Error('resume.tex is missing');
+  if (!existsSync(matchPath)) return { updated: false, skills: 0 };
+  const match = readJson(matchPath);
+  const skills = Array.isArray(match.skills) ? match.skills : [];
+  if (!skills.length) return { updated: false, skills: 0 };
+
+  const groups = consolidatedSkillGroups(skills);
+  const rows = groups.map(group =>
+    `\\resumeSubItem{${escapeSkillTex(group.label)}:}\n  {${group.names.map(escapeSkillTex).join(', ')}}`
+  ).join('\n\\vspace{-1mm}\n');
+
+  const tex = readFileSync(texPath, 'utf8');
+  const section = tex.match(/\\section\s*\{\s*(?:\\textbf\s*\{\s*)?Skills\s*\}?\s*\}/i);
+  if (!section || section.index === undefined) throw new Error('resume.tex has no Skills section');
+  const startAt = tex.indexOf('\\resumeHeadingSkillStart', section.index + section[0].length);
+  const endAt = tex.indexOf('\\resumeHeadingSkillEnd', startAt);
+  if (startAt === -1 || endAt === -1) {
+    throw new Error('Skills section must use resumeHeadingSkillStart/resumeHeadingSkillEnd');
+  }
+  const bodyStart = startAt + '\\resumeHeadingSkillStart'.length;
+  const next = `${tex.slice(0, bodyStart)}\n${rows}\n${tex.slice(endAt)}`;
+  if (next !== tex) writeFileSync(texPath, next);
+  return {
+    updated: next !== tex,
+    skills: skills.length,
+    groups: groups.length,
+  };
+}
+
+export function syncTemplateContractToResume(dataDir, id) {
+  const templatePath = latexTemplatePath(dataDir);
+  if (!templatePath) return { updated: false, reason: 'no latex template configured' };
+  const { job } = findJob(dataDir, id);
+  const texPath = join(jobDir(dataDir, job), 'resume.tex');
+  if (!existsSync(texPath)) throw new Error('resume.tex is missing');
+  const template = readFileSync(templatePath, 'utf8');
+  const source = readFileSync(texPath, 'utf8');
+  const marker = '\\begin{document}';
+  const templateBodyStart = template.indexOf(marker);
+  const sourceBodyStart = source.indexOf(marker);
+  if (templateBodyStart === -1 || sourceBodyStart === -1) {
+    throw new Error('template and resume.tex must contain \\begin{document}');
+  }
+
+  let body = source.slice(sourceBodyStart);
+  body = body.replace(
+    /^(\s*)\\resumeItem\{(.*)\}\{\}\s*$/gm,
+    '$1\\resumeItem{}{$2}'
+  );
+  body = syncSectionLeadingSpacerFromTemplate(template, body, 'Skills');
+  body = syncProjectScaffoldingFromTemplate(template, body);
+  const expectedSpacers = [...new Set(texProjectTransitionSpacers(template))];
+  if (expectedSpacers.length === 1) {
+    body = body.replace(
+      /(\\resumeSubHeadingListEnd\s*\n\s*)\\vspace\{[^}]+\}(\s*\n\s*\\resumeSubHeadingListStart)/g,
+      `$1\\vspace{${expectedSpacers[0]}}$2`
+    );
+  }
+  const templateHeader = templateDocumentHeader(template);
+  const resumeHeader = templateDocumentHeader(body);
+  if (templateHeader !== null && resumeHeader !== null) {
+    body = templateHeader + body.slice(resumeHeader.length);
+  } else {
+    const templateContact = template.split(/\r?\n/).find(line => line.includes('mailto:'));
+    if (templateContact) {
+      const bodyLines = body.split(/\r?\n/);
+      const contactIndex = bodyLines.findIndex(line => line.includes('mailto:'));
+      if (contactIndex === -1) throw new Error('resume.tex is missing the template contact line');
+      bodyLines[contactIndex] = templateContact;
+      body = bodyLines.join('\n');
+    }
+  }
+
+  const next = template.slice(0, templateBodyStart) + body;
+  const metrics = compareTemplateContract(template, next);
+  const nextBody = next.slice(next.indexOf(marker));
+  const resumeItemArguments = texCommandArguments(nextBody, '\\resumeItem', 2);
+  const resumeItemsUseBodyArgument = resumeItemArguments.length
+    ? resumeItemArguments.every(([label, value]) => !label.trim() && value.trim())
+    : null;
+  if (
+    metrics.templatePreambleExact === false ||
+    metrics.templateContactHeaderExact === false ||
+    metrics.skillsSectionSpacingExact === false ||
+    metrics.projectEntryScaffoldingExact === false ||
+    metrics.projectTransitionSpacingExact === false ||
+    metrics.projectTailSpacingExact === false ||
+    resumeItemsUseBodyArgument === false
+  ) {
+    throw new Error('resume.tex could not be normalized to the LaTeX template contract');
+  }
+  if (next !== source) writeFileSync(texPath, next);
+  return { updated: next !== source, ...metrics, resumeItemsUseBodyArgument };
+}
+
 export function renderResume(dataDir, id, texSource = null) {
   const { job } = findJob(dataDir, id);
   const dir = ensureDir(jobDir(dataDir, job));
   const tex = join(dir, 'resume.tex');
+  removeIfExists(join(dir, 'judge.json'));
+  removeIfExists(join(dir, 'llm-judge.json'));
   safeCopy(texSource, tex);
   if (!existsSync(tex)) throw new Error('resume.tex is missing');
+  syncTemplateContractToResume(dataDir, id);
+  syncSelectedSkillsToResume(dataDir, id);
   const latexmk = findBinary(['latexmk']);
   const pdflatex = findBinary(['pdflatex']);
   const tectonic = findBinary(['tectonic']);
@@ -506,15 +1026,36 @@ export function renderResume(dataDir, id, texSource = null) {
       pages = Number(info.match(/^Pages:\s+(\d+)/m)?.[1] || 0) || null;
       if (pages !== 1) throw new Error(`Resume must be exactly one page; rendered ${pages}`);
     }
+    writeFileSync(join(dir, 'render.log'), output);
+    const judge = judgeResume(dataDir, id);
+    if (judge.fullPage === false) {
+      const error = new Error(
+        `Resume page coverage ${Math.round(judge.fullness * 1000) / 10}% is below the configured ` +
+        `${judge.minimumPageCoveragePercent}% minimum`
+      );
+      error.code = 'PAGE_COVERAGE_INSUFFICIENT';
+      error.judge = judge;
+      throw error;
+    }
+    const proof = pageCoverageDeliveryProof(judge);
+    if (!proof) {
+      const error = new Error('Resume page coverage must be measured before delivery to Review');
+      error.code = 'PAGE_COVERAGE_UNVERIFIABLE';
+      error.judge = judge;
+      throw error;
+    }
     const updated = updateJob(dataDir, id, current => {
       current.status = 'rendered';
       current.pageCount = pages;
       current.approvedAt = null;
       current.approvalMode = null;
       current.error = null;
+      current.reviewDeliveryProof = {
+        ...(current.reviewDeliveryProof || {}),
+        pageCoverage: proof,
+      };
+      current.feedback = resolveCoverageFeedback(current.feedback, proof);
     });
-    writeFileSync(join(dir, 'render.log'), output);
-    judgeResume(dataDir, id);
     if (!resumeReviewRequired(dataDir)) {
       applyResumeReviewPolicy(dataDir);
       return findJob(dataDir, id).job;
@@ -522,8 +1063,18 @@ export function renderResume(dataDir, id, texSource = null) {
     return updated;
   } catch (error) {
     updateJob(dataDir, id, current => {
-      current.status = 'render_failed';
+      const coverageFailure = String(error.code || '').startsWith('PAGE_COVERAGE_');
+      current.status = coverageFailure ? 'revision_requested' : 'render_failed';
       current.error = String(error.message || error);
+      if (coverageFailure) {
+        current.reviewDeliveryProof = null;
+        addCoverageFeedbackIfMissing(current, {
+          fullness: error.judge?.fullness ?? null,
+          minimumPageCoveragePercent:
+            error.judge?.minimumPageCoveragePercent ??
+            resumePageCoverageMinimumPercent(dataDir),
+        });
+      }
     });
     throw error;
   }
@@ -541,23 +1092,270 @@ const unescapeTex = value => String(value)
 
 const texResumeItems = tex => {
   const items = [];
-  const needle = '\\resumeItem{';
+  const needle = '\\resumeItem';
   let idx = 0;
   for (;;) {
     const at = tex.indexOf(needle, idx);
     if (at === -1) break;
-    let depth = 1;
     let i = at + needle.length;
-    const start = i;
-    while (i < tex.length && depth > 0) {
-      if (tex[i] === '{') depth += 1;
-      else if (tex[i] === '}') depth -= 1;
-      i += 1;
+    const args = [];
+    while (args.length < 2) {
+      while (/\s/.test(tex[i] || '')) i += 1;
+      if (tex[i] !== '{') break;
+      let depth = 1;
+      const start = ++i;
+      while (i < tex.length && depth > 0) {
+        if (tex[i] === '{') depth += 1;
+        else if (tex[i] === '}') depth -= 1;
+        i += 1;
+      }
+      args.push(tex.slice(start, i - 1));
     }
-    items.push(tex.slice(start, i - 1));
-    idx = i;
+    if (args.length) items.push(args.filter(value => value.trim()).join(' '));
+    idx = Math.max(i, at + needle.length);
   }
   return items;
+};
+
+const texCommandArguments = (tex, command, count) => {
+  const rows = [];
+  let cursor = 0;
+  for (;;) {
+    const at = tex.indexOf(command, cursor);
+    if (at === -1) break;
+    let index = at + command.length;
+    const args = [];
+    while (args.length < count) {
+      while (/\s/.test(tex[index] || '')) index += 1;
+      if (tex[index] !== '{') break;
+      let depth = 1;
+      const start = ++index;
+      while (index < tex.length && depth > 0) {
+        if (tex[index] === '{') depth += 1;
+        else if (tex[index] === '}') depth -= 1;
+        index += 1;
+      }
+      args.push(tex.slice(start, index - 1));
+    }
+    if (args.length === count) rows.push(args);
+    cursor = Math.max(index, at + command.length);
+  }
+  return rows;
+};
+
+const texSkillGroups = tex => {
+  const section = tex.match(/\\section\s*\{\s*(?:\\textbf\s*\{\s*)?Skills\s*\}?\s*\}/i);
+  if (!section || section.index === undefined) return [];
+  const start = section.index + section[0].length;
+  const nextSection = tex.indexOf('\\section', start);
+  const block = tex.slice(start, nextSection === -1 ? tex.length : nextSection);
+  return texCommandArguments(block, '\\resumeSubItem', 2)
+    .map(([label, value]) => ({
+      label: unescapeTex(label).replace(/[{}]/g, '').replace(/:\s*$/, ''),
+      names: unescapeTex(value)
+        .replace(/\\(?:textbf|textit|emph)\{([^{}]*)\}/g, '$1')
+        .replace(/[{}]/g, '')
+        .split(',')
+        .map(item => item.trim())
+        .filter(Boolean),
+    }));
+};
+
+const texProjectTransitionSpacers = tex => {
+  const section = tex.match(/\\section\s*\{\s*(?:\\textbf\s*\{\s*)?Projects\s*\}?\s*\}/i);
+  if (!section || section.index === undefined) return [];
+  const block = tex.slice(section.index + section[0].length);
+  return [...block.matchAll(
+    /\\resumeSubHeadingListEnd\s*\\vspace\{([^}]+)\}\s*\\resumeSubHeadingListStart/g
+  )].map(match => match[1].trim());
+};
+
+const sectionMatch = (tex, name) => String(tex).match(new RegExp(
+  `\\\\section\\s*\\{\\s*(?:\\\\textbf\\s*\\{\\s*)?${name}\\s*\\}?\\s*\\}`,
+  'i'
+));
+
+const sectionLeadingSpacer = (tex, name) => {
+  const source = String(tex);
+  const section = sectionMatch(source, name);
+  if (!section || section.index === undefined) return null;
+  const before = source.slice(0, section.index);
+  const spacer = before.match(/\\vspace\{([^}]+)\}(\s*)$/);
+  if (!spacer || spacer.index === undefined) return null;
+  return {
+    value: spacer[1].trim(),
+    start: spacer.index,
+    end: before.length,
+  };
+};
+
+const syncSectionLeadingSpacerFromTemplate = (template, resume, name) => {
+  const expected = sectionLeadingSpacer(template, name);
+  const rendered = sectionLeadingSpacer(resume, name);
+  if (!expected || !rendered) return resume;
+  return resume.slice(0, rendered.start) +
+    `\\vspace{${expected.value}}` +
+    resume.slice(rendered.end);
+};
+
+const projectSectionRange = tex => {
+  const source = String(tex);
+  const section = source.match(
+    /\\section\s*\{\s*(?:\\textbf\s*\{\s*)?Projects\s*\}?\s*\}/i
+  );
+  if (!section || section.index === undefined) return null;
+  const start = section.index + section[0].length;
+  const nextSection = source.indexOf('\\section', start);
+  const endDocument = source.indexOf('\\end{document}', start);
+  const candidates = [nextSection, endDocument].filter(index => index !== -1);
+  const end = candidates.length ? Math.min(...candidates) : source.length;
+  return { start, end, block: source.slice(start, end) };
+};
+
+const texProjectEntryLeadings = tex => {
+  const range = projectSectionRange(tex);
+  if (!range) return [];
+  return [...range.block.matchAll(
+    /\\resumeSubHeadingListStart([\s\S]*?)\\resumeSubheading/g
+  )].map(match => match[1]);
+};
+
+const texProjectTail = tex => {
+  const range = projectSectionRange(tex);
+  if (!range) return null;
+  const command = '\\resumeSubHeadingListEnd';
+  const last = range.block.lastIndexOf(command);
+  return last === -1 ? null : range.block.slice(last + command.length);
+};
+
+const syncProjectScaffoldingFromTemplate = (template, resume) => {
+  const expectedLeadings = texProjectEntryLeadings(template);
+  const expectedTail = texProjectTail(template);
+  const range = projectSectionRange(resume);
+  if (!range) return resume;
+  let entryIndex = 0;
+  let block = range.block.replace(
+    /(\\resumeSubHeadingListStart)([\s\S]*?)(\\resumeSubheading)/g,
+    (match, start, gap, heading) => {
+      if (!expectedLeadings.length) return match;
+      const expected = expectedLeadings[
+        Math.min(entryIndex, expectedLeadings.length - 1)
+      ];
+      entryIndex += 1;
+      return `${start}${expected}${heading}`;
+    }
+  );
+  if (expectedTail !== null) {
+    const command = '\\resumeSubHeadingListEnd';
+    const last = block.lastIndexOf(command);
+    if (last !== -1) {
+      block = block.slice(0, last + command.length) + expectedTail;
+    }
+  }
+  return resume.slice(0, range.start) + block + resume.slice(range.end);
+};
+
+const templateContactLine = tex =>
+  String(tex).split(/\r?\n/).map(line => line.trim()).find(line => line.includes('mailto:')) || null;
+
+const templateDocumentHeader = tex => {
+  const source = String(tex);
+  const marker = '\\begin{document}';
+  const bodyStart = source.indexOf(marker);
+  if (bodyStart === -1) return null;
+  const body = source.slice(bodyStart);
+  const firstSection = body.search(/\\section\s*\{/);
+  return firstSection === -1 ? null : body.slice(0, firstSection);
+};
+
+export const compareTemplateContract = (templateSource, resumeSource) => {
+  const marker = '\\begin{document}';
+  const templateBodyStart = String(templateSource).indexOf(marker);
+  const resumeBodyStart = String(resumeSource).indexOf(marker);
+  const templatePreambleExact = templateBodyStart === -1 || resumeBodyStart === -1
+    ? null
+    : String(templateSource).slice(0, templateBodyStart) ===
+      String(resumeSource).slice(0, resumeBodyStart);
+  const expectedContactHeader = templateDocumentHeader(templateSource);
+  const renderedContactHeader = templateDocumentHeader(resumeSource);
+  const expectedContactLine = templateContactLine(templateSource);
+  const renderedContactLine = templateContactLine(resumeSource);
+  const templateContactHeaderExact = expectedContactHeader !== null
+    ? renderedContactHeader === expectedContactHeader
+    : expectedContactLine === null
+      ? null
+      : renderedContactLine === expectedContactLine;
+  const expectedSkillsSpacer = sectionLeadingSpacer(templateSource, 'Skills');
+  const renderedSkillsSpacer = sectionLeadingSpacer(resumeSource, 'Skills');
+  const skillsSectionSpacingExact = expectedSkillsSpacer === null
+    ? null
+    : renderedSkillsSpacer?.value === expectedSkillsSpacer.value;
+  const expectedProjectTransitionSpacers = [
+    ...new Set(texProjectTransitionSpacers(templateSource)),
+  ];
+  const renderedProjectTransitionSpacers = texProjectTransitionSpacers(resumeSource);
+  const expectedProjectEntryLeadings = texProjectEntryLeadings(templateSource);
+  const renderedProjectEntryLeadings = texProjectEntryLeadings(resumeSource);
+  const projectEntryScaffoldingExact = expectedProjectEntryLeadings.length
+    ? renderedProjectEntryLeadings.every((leading, index) =>
+      leading === expectedProjectEntryLeadings[
+        Math.min(index, expectedProjectEntryLeadings.length - 1)
+      ])
+    : null;
+  const projectTransitionSpacingExact = expectedProjectTransitionSpacers.length
+    ? renderedProjectTransitionSpacers.every(spacer =>
+      expectedProjectTransitionSpacers.includes(spacer))
+    : null;
+  const expectedProjectTail = texProjectTail(templateSource);
+  const renderedProjectTail = texProjectTail(resumeSource);
+  const projectTailSpacingExact = expectedProjectTail === null
+    ? null
+    : renderedProjectTail === expectedProjectTail;
+  return {
+    templatePreambleExact,
+    templateContactHeaderExact,
+    skillsSectionSpacingExact,
+    projectEntryScaffoldingExact,
+    expectedProjectTransitionSpacers,
+    renderedProjectTransitionSpacers,
+    projectTransitionSpacingExact,
+    projectTailSpacingExact,
+  };
+};
+
+export const measureWorkProjectsGap = bbox => {
+  const words = [...String(bbox || '').matchAll(
+    /<word xMin="([\d.]+)" yMin="([\d.]+)" xMax="([\d.]+)" yMax="([\d.]+)">([^<]*)<\/word>/g
+  )].map(match => ({
+    yMin: Number(match[2]),
+    text: match[5].replace(/&amp;/g, '&').trim().toUpperCase(),
+  }));
+  let headingY = null;
+  for (let index = 0; index < words.length; index += 1) {
+    const word = words[index];
+    if (word.text === 'PROJECTS') {
+      headingY = word.yMin;
+      break;
+    }
+    const next = words[index + 1];
+    if (
+      word.text === 'P' &&
+      next?.text === 'ROJECTS' &&
+      Math.abs(word.yMin - next.yMin) <= 3
+    ) {
+      headingY = Math.min(word.yMin, next.yMin);
+      break;
+    }
+  }
+  if (headingY === null) return null;
+  // Compare line baselines (represented by each word's yMin), not glyph
+  // bottoms. Glyph bottoms vary with letters such as g/p/y and caused clean
+  // adjacent lines to be misclassified as a large gap.
+  const previousBaseline = Math.max(
+    ...words.filter(word => word.yMin < headingY - 0.1).map(word => word.yMin)
+  );
+  if (!Number.isFinite(previousBaseline)) return null;
+  return Math.round(Math.max(0, headingY - previousBaseline) * 100) / 100;
 };
 
 export function judgeResume(dataDir, id) {
@@ -579,27 +1377,93 @@ export function judgeResume(dataDir, id) {
   // page is a failed product too. Measure how far content reaches down the
   // page from the pdftotext bounding boxes.
   let fullness = null;
+  let workProjectsGapPoints = null;
   const pdftotext = findBinary(['pdftotext']);
   if (pdftotext) {
     const bbox = execFileSync(pdftotext, ['-bbox', pdfPath, '-'], { encoding: 'utf8' });
     const page = bbox.match(/<page width="([\d.]+)" height="([\d.]+)"/);
     const ys = [...bbox.matchAll(/yMax="([\d.]+)"/g)].map(m => Number(m[1]));
     if (page && ys.length) fullness = Math.round((Math.max(...ys) / Number(page[2])) * 1000) / 1000;
+    workProjectsGapPoints = measureWorkProjectsGap(bbox);
   }
-  const FULL_PAGE_MIN = 0.93; // 撑满: content must press into the bottom margin zone (~0.77in of slack on letter); a page in the 0.8s reads half-hearted
-  const fullPage = fullness === null ? null : fullness >= FULL_PAGE_MIN;
+  const minimumPageCoveragePercent = resumePageCoverageMinimumPercent(dataDir);
+  const minimumPageCoverage = minimumPageCoveragePercent / 100;
+  const fullPage = fullness === null ? null : fullness >= minimumPageCoverage;
+  const MAX_WORK_PROJECTS_GAP_POINTS = 13;
+  const sectionTransitionsCompact = workProjectsGapPoints === null
+    ? null
+    : workProjectsGapPoints <= MAX_WORK_PROJECTS_GAP_POINTS;
   // judge only the document body — the preamble's macro definitions contain
   // \resumeItem{#1} and are not resume content
   const texSource = readFileSync(texPath, 'utf8');
   const bodyStart = texSource.indexOf('\\begin{document}');
-  const items = texResumeItems(bodyStart === -1 ? texSource : texSource.slice(bodyStart)).map(unescapeTex);
+  const texBody = bodyStart === -1 ? texSource : texSource.slice(bodyStart);
+  const items = texResumeItems(texBody).map(unescapeTex);
+  const resumeItemArguments = texCommandArguments(texBody, '\\resumeItem', 2);
+  const resumeItemsUseBodyArgument = resumeItemArguments.length
+    ? resumeItemArguments.every(([label, body]) => !label.trim() && body.trim())
+    : null;
+  let templatePreambleExact = null;
+  let templateContactHeaderExact = null;
+  let skillsSectionSpacingExact = null;
+  let projectEntryScaffoldingExact = null;
+  let projectTransitionSpacingExact = null;
+  let projectTailSpacingExact = null;
+  let expectedProjectTransitionSpacers = [];
+  let renderedProjectTransitionSpacers = texProjectTransitionSpacers(texBody);
+  const configuredTemplatePath = latexTemplatePath(dataDir);
+  if (configuredTemplatePath) {
+    try {
+      const templateSource = readFileSync(configuredTemplatePath, 'utf8');
+      ({
+        templatePreambleExact,
+        templateContactHeaderExact,
+        skillsSectionSpacingExact,
+        projectEntryScaffoldingExact,
+        expectedProjectTransitionSpacers,
+        renderedProjectTransitionSpacers,
+        projectTransitionSpacingExact,
+        projectTailSpacingExact,
+      } = compareTemplateContract(templateSource, texSource));
+    } catch {}
+  }
   const matchPath = join(dir, 'match.json');
   let verbatim = null;
   const unknownLines = [];
-  if (items.length && existsSync(matchPath)) {
-    const allowed = new Set((readJson(matchPath).bullets || []).map(bullet => bullet.text.replace(/\s+/g, ' ').trim()));
-    for (const item of items) if (!allowed.has(item)) unknownLines.push(item);
-    verbatim = unknownLines.length === 0;
+  let skillsVerbatim = null;
+  const renderedSkillGroups = texSkillGroups(bodyStart === -1 ? texSource : texSource.slice(bodyStart));
+  const renderedSkills = renderedSkillGroups.flatMap(group => group.names);
+  const unknownSkills = [];
+  const missingSkills = [];
+  if (existsSync(matchPath)) {
+    const match = readJson(matchPath);
+    if (items.length) {
+      const allowed = new Set((match.bullets || [])
+        .map(bullet => bullet.text.replace(/\s+/g, ' ').trim()));
+      for (const item of items) if (!allowed.has(item)) unknownLines.push(item);
+      verbatim = unknownLines.length === 0;
+    }
+    const selectedSkills = (match.skills || []).map(skill => skill.name.replace(/\s+/g, ' ').trim());
+    const allowedSkills = new Set(selectedSkills.map(skill => skill.toLowerCase()));
+    const renderedNormalized = renderedSkills.map(skill => skill.replace(/\s+/g, ' ').trim());
+    for (const skill of renderedNormalized) {
+      if (!allowedSkills.has(skill.toLowerCase())) unknownSkills.push(skill);
+    }
+    const renderedSet = new Set(renderedNormalized.map(skill => skill.toLowerCase()));
+    for (const skill of selectedSkills) {
+      if (!renderedSet.has(skill.toLowerCase())) missingSkills.push(skill);
+    }
+    if (renderedSkills.length || selectedSkills.length) {
+      skillsVerbatim = unknownSkills.length === 0 && missingSkills.length === 0;
+    }
+  }
+  const issues = [];
+  if (fullPage === false) {
+    issues.push({
+      code: PAGE_COVERAGE_INSUFFICIENT_REASON,
+      actualPercent: pageCoverageActualPercent(fullness),
+      minimumPercent: minimumPageCoveragePercent,
+    });
   }
   const judge = {
     schemaVersion: CAMPAIGN_SCHEMA,
@@ -607,21 +1471,56 @@ export function judgeResume(dataDir, id) {
     pageCount,
     onePage,
     fullness,
+    minimumPageCoverage,
+    minimumPageCoveragePercent,
     fullPage,
+    issues,
+    workProjectsGapPoints,
+    maximumWorkProjectsGapPoints: MAX_WORK_PROJECTS_GAP_POINTS,
+    sectionTransitionsCompact,
+    templatePreambleExact,
+    templateContactHeaderExact,
+    skillsSectionSpacingExact,
+    projectEntryScaffoldingExact,
+    expectedProjectTransitionSpacers,
+    renderedProjectTransitionSpacers,
+    projectTransitionSpacingExact,
+    projectTailSpacingExact,
+    resumeItemsUseBodyArgument,
     itemCount: items.length,
     verbatim,
     unknownLines,
+    renderedSkillCount: renderedSkills.length,
+    renderedSkillGroupCount: renderedSkillGroups.length,
+    skillGroupSizes: renderedSkillGroups.map(group => ({
+      label: group.label,
+      count: group.names.length,
+    })),
+    skillsVerbatim,
+    unknownSkills,
+    missingSkills,
   };
   writeJsonAtomic(join(dir, 'judge.json'), judge);
   return judge;
 }
 
-export function addFeedback(dataDir, id, text) {
-  const body = String(text || '').trim();
+export function addFeedback(dataDir, id, text, reasonCode = null) {
+  const normalizedReason = reasonCode ? String(reasonCode).trim() : null;
+  if (normalizedReason && !Object.hasOwn(REVIEW_FEEDBACK_REASONS, normalizedReason)) {
+    throw new Error(`Unknown feedback reason: ${normalizedReason}`);
+  }
+  const body = String(text || REVIEW_FEEDBACK_REASONS[normalizedReason] || '').trim();
   if (!body) throw new Error('Feedback cannot be empty');
   return updateJob(dataDir, id, job => {
-    job.feedback = [...(job.feedback || []), {
+    const feedback = job.feedback || [];
+    const duplicateReason = normalizedReason && feedback.some(item =>
+      item.reasonCode === normalizedReason && item.status === 'open');
+    job.feedback = duplicateReason ? feedback : [...feedback, {
       id: `feedback-${Date.now()}`,
+      ...(normalizedReason ? { reasonCode: normalizedReason } : {}),
+      ...(normalizedReason === PAGE_COVERAGE_INSUFFICIENT_REASON
+        ? { visibility: 'internal' }
+        : {}),
       text: body,
       createdAt: now(),
       status: 'open',
@@ -629,6 +1528,7 @@ export function addFeedback(dataDir, id, text) {
     job.status = 'revision_requested';
     job.approvedAt = null;
     job.approvalMode = null;
+    job.reviewDeliveryProof = null;
     job.error = null;
   });
 }
@@ -638,13 +1538,106 @@ export function approveJob(dataDir, id) {
   const dir = jobDir(dataDir, job);
   const missing = REQUIRED_EXPORT_FILES.filter(name => !existsSync(join(dir, name)));
   if (missing.length) throw new Error(`Cannot approve; missing ${missing.join(', ')}`);
+  const judge = currentResumeJudge(dataDir, job);
+  if (judge.fullPage === false) {
+    throw new Error(
+      `Cannot approve; page coverage ${Math.round(judge.fullness * 1000) / 10}% is below the ` +
+      `${judge.minimumPageCoveragePercent}% minimum`
+    );
+  }
+  const proof = pageCoverageDeliveryProof(judge);
+  if (!proof) throw new Error('Cannot approve; page coverage delivery proof is missing');
   return updateJob(dataDir, id, current => {
     current.status = 'approved';
     current.approvedAt = now();
     current.approvalMode = 'manual';
     current.error = null;
+    current.reviewDeliveryProof = {
+      ...(current.reviewDeliveryProof || {}),
+      pageCoverage: proof,
+    };
+    current.feedback = resolveCoverageFeedback(current.feedback, proof);
     current.feedback = (current.feedback || []).map(item => ({ ...item, status: 'resolved' }));
   });
+}
+
+export function reconcileResumePageCoverage(dataDir) {
+  const manifest = loadCampaign(dataDir);
+  const minimumPageCoveragePercent = resumePageCoverageMinimumPercent(dataDir);
+  const failed = [];
+  const passed = [];
+  let judged = 0;
+  for (const job of manifest.jobs) {
+    const dir = jobDir(dataDir, job);
+    if (!existsSync(join(dir, 'resume.pdf')) || !existsSync(join(dir, 'resume.tex'))) continue;
+    try {
+      const judge = currentResumeJudge(dataDir, job);
+      judged += 1;
+      if (judge.fullPage === false) {
+        failed.push({
+          id: job.id,
+          fullness: judge.fullness,
+          minimumPageCoveragePercent,
+        });
+      } else {
+        const proof = pageCoverageDeliveryProof(judge);
+        if (proof) passed.push({ id: job.id, proof });
+      }
+    } catch (error) {
+      judged += 1;
+      failed.push({
+        id: job.id,
+        fullness: null,
+        minimumPageCoveragePercent,
+        error: String(error.message || error),
+      });
+    }
+  }
+  const failedIds = new Set(failed.map(item => item.id));
+  const passedById = new Map(passed.map(item => [item.id, item.proof]));
+  let reopened = 0;
+  let proofRecorded = 0;
+  withCampaignLock(dataDir, () => {
+    const current = loadCampaign(dataDir);
+    for (const job of current.jobs) {
+      const proof = passedById.get(job.id);
+      if (proof) {
+        const previous = job.reviewDeliveryProof?.pageCoverage;
+        const hadOpenCoverageFeedback = (job.feedback || []).some(item =>
+          item.reasonCode === PAGE_COVERAGE_INSUFFICIENT_REASON && item.status === 'open');
+        if (JSON.stringify(previous) !== JSON.stringify(proof) || hadOpenCoverageFeedback) {
+          job.reviewDeliveryProof = {
+            ...(job.reviewDeliveryProof || {}),
+            pageCoverage: proof,
+          };
+          job.feedback = resolveCoverageFeedback(job.feedback, proof);
+          job.updatedAt = now();
+          persistJobSnapshot(dataDir, job);
+          proofRecorded += 1;
+        }
+      }
+      if (!failedIds.has(job.id)) continue;
+      const details = failed.find(item => item.id === job.id);
+      const wasDelivered = ['approved', 'rendered'].includes(job.status);
+      if (wasDelivered) {
+        job.status = 'revision_requested';
+        job.approvedAt = null;
+        job.approvalMode = null;
+        reopened += 1;
+      }
+      job.reviewDeliveryProof = null;
+      job.error = details?.error ||
+        `Page coverage is below the configured ${minimumPageCoveragePercent}% minimum`;
+      addCoverageFeedbackIfMissing(job, details);
+      job.updatedAt = now();
+      persistJobSnapshot(dataDir, job);
+    }
+    if (failed.length) current.lastExport = null;
+    if (failed.length || proofRecorded) {
+      saveCampaign(dataDir, current);
+    }
+  });
+  return { minimumPageCoveragePercent, judged, reopened, proofRecorded, failed };
 }
 
 const crcTable = Array.from({ length: 256 }, (_, n) => {
@@ -731,6 +1724,12 @@ export function createZip(entries, output) {
 }
 
 export function exportCampaign(dataDir, output = null) {
+  const coverage = reconcileResumePageCoverage(dataDir);
+  if (coverage.failed.length) {
+    throw new Error(
+      `All resumes must meet the ${coverage.minimumPageCoveragePercent}% page coverage minimum before export`
+    );
+  }
   return withCampaignLock(dataDir, () => {
   const manifest = loadCampaign(dataDir);
   if (!manifest.jobs.length) throw new Error('Campaign has no jobs');
@@ -848,14 +1847,39 @@ export function campaignView(dataDir) {
     ...manifest,
     root: paths.root,
     reviewRequired: resumeReviewRequired(dataDir),
+    minimumPageCoveragePercent: resumePageCoverageMinimumPercent(dataDir),
     allApproved: manifest.jobs.length > 0 && manifest.jobs.every(job => job.status === 'approved'),
     jobs: manifest.jobs.map(job => {
       const dir = jobDir(dataDir, job);
       const artifacts = Object.fromEntries(
-        [...REQUIRED_EXPORT_FILES, 'match.json', 'render.log'].map(name => [name, existsSync(join(dir, name))])
+        [...REQUIRED_EXPORT_FILES, 'match.json', 'render.log', 'judge.json', 'llm-judge.json']
+          .map(name => [name, existsSync(join(dir, name))])
       );
       const match = artifacts['match.json'] ? readJson(join(dir, 'match.json')) : null;
-      return { ...job, artifacts, match };
+      const machineJudge = artifacts['judge.json']
+        ? readJson(join(dir, 'judge.json'))
+        : null;
+      const llmJudgeRecord = artifacts['llm-judge.json']
+        ? readJson(join(dir, 'llm-judge.json'))
+        : null;
+      const verdicts = llmJudgeRecord?.verdicts || [];
+      const medianTotal = Number.isFinite(Number(llmJudgeRecord?.medianTotal))
+        ? Number(llmJudgeRecord.medianTotal)
+        : null;
+      const representativeVerdict = verdicts.find(verdict =>
+        Number(verdict?.total) === medianTotal) || verdicts[0] || null;
+      const llmJudge = llmJudgeRecord ? {
+        judgedAt: llmJudgeRecord.judgedAt || null,
+        runs: Number(llmJudgeRecord.runs) || verdicts.length,
+        runTotals: verdicts
+          .map(verdict => Number(verdict?.total))
+          .filter(Number.isFinite),
+        medianTotal,
+        pass: llmJudgeRecord.pass === true,
+        jdFitNote: representativeVerdict?.jd_fit_note || null,
+        fixes: (llmJudgeRecord.fixes || []).slice(0, 3),
+      } : null;
+      return { ...job, artifacts, match, machineJudge, llmJudge };
     }),
   };
 }

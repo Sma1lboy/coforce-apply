@@ -268,6 +268,30 @@ with tempfile.TemporaryDirectory(prefix="coforce-evidence-") as temp:
     nodes = GitHubClient(runner=runner).pull_commit_nodes("example/app", 9)
     assert [node["commit"]["oid"] for node in nodes] == ["a" * 40, "b" * 40]
 
+    pull_calls = []
+
+    def pull_runner(args, **kwargs):
+        pull_calls.append(args)
+        second = any(item == "endCursor=pull-cursor-1" for item in args)
+        payload = {
+            "data": {
+                "search": {
+                    "nodes": [sample_pull(number=8 if second else 7)],
+                    "pageInfo": {
+                        "hasNextPage": not second,
+                        "endCursor": None if second else "pull-cursor-1",
+                    },
+                }
+            }
+        }
+        return subprocess.CompletedProcess(args, 0, json.dumps(payload), "")
+
+    paged_pulls = GitHubClient(runner=pull_runner).pull_requests(
+        "example/app", "candidate"
+    )
+    assert [pull["number"] for pull in paged_pulls] == [7, 8]
+    assert all("pageSize=20" in call for call in pull_calls)
+
     raw = root / "raw"
     for index, repository in enumerate(project["repositories"], start=1):
         repo_dir = raw / "repositories" / repo_slug(repository)

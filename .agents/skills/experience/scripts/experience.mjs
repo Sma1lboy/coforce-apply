@@ -1,7 +1,7 @@
 #!/usr/bin/env node
 
 import { execFileSync } from 'node:child_process';
-import { existsSync, mkdirSync } from 'node:fs';
+import { existsSync, mkdirSync, readFileSync } from 'node:fs';
 import { homedir } from 'node:os';
 import { dataHome } from '../../../lib/data-home.mjs';
 import { dirname, join, resolve } from 'node:path';
@@ -68,6 +68,10 @@ try {
     console.log(JSON.stringify({ rebuilt: true, ...experienceView(dataDir), counts: index.counts }, null, 2));
   } else if (command === 'status') {
     console.log(JSON.stringify(experienceView(dataDir), null, 2));
+  } else if (command === 'skills') {
+    if (!existsSync(paths.index)) throw new Error('Tier 0 index is missing; run $experience refresh first');
+    const index = JSON.parse(readFileSync(paths.index, 'utf8'));
+    console.log(JSON.stringify(index.skills || [], null, 2));
   } else if (command === 'source') {
     const action = argv.shift();
     if (action === 'add') {
@@ -96,7 +100,7 @@ try {
       throw new Error('usage: experience.mjs source add <github-url> [--author LOGIN] | source remove <github-url> | source list');
     }
   } else {
-    throw new Error('usage: experience.mjs refresh|build|status|source [options]');
+    throw new Error('usage: experience.mjs refresh|build|status|skills|source [options]');
   }
 } catch (error) {
   console.error(error.message || error);

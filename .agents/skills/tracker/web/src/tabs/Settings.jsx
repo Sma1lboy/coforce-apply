@@ -51,10 +51,14 @@ export default function Settings({ state, onChanged, goWizard }) {
     const next = { ...config, ...patch };
     setConfig(next);
     try {
-      await fetch('/api/config', { method: 'POST', headers: { 'content-type': 'application/json' }, body: JSON.stringify(patch) });
+      const response = await fetch('/api/config', { method: 'POST', headers: { 'content-type': 'application/json' }, body: JSON.stringify(patch) });
+      if (!response.ok) throw new Error(await response.text());
       onChanged();
       flash('Saved ✓');
-    } catch { flash('Save failed'); }
+    } catch {
+      setConfig(config);
+      flash('Save failed');
+    }
   };
 
   const dirSet = new Set(prefs.directions || []);
@@ -98,6 +102,28 @@ export default function Settings({ state, onChanged, goWizard }) {
           <label className="flex flex-col gap-1 col-span-2">
             <span className="flabel">LaTeX template path</span>
             <input className="inp" defaultValue={config.latexTemplate ?? ''} placeholder="/absolute/path/resume-template.tex" onBlur={e => e.target.value !== (config.latexTemplate ?? '') && saveConfig({ latexTemplate: e.target.value })} />
+          </label>
+          <label className="flex flex-col gap-1">
+            <span className="flabel">Minimum page coverage (%)</span>
+            <input
+              className="inp"
+              type="number"
+              min="0"
+              max="100"
+              step="0.5"
+              defaultValue={config.resumePageCoverageMinimumPercent ?? 93}
+              onBlur={e => {
+                if (!e.target.value.trim()) {
+                  e.target.value = String(config.resumePageCoverageMinimumPercent ?? 93);
+                  return;
+                }
+                const value = Number(e.target.value);
+                if (Number.isFinite(value) && value !== (config.resumePageCoverageMinimumPercent ?? 93)) {
+                  saveConfig({ resumePageCoverageMinimumPercent: value });
+                }
+              }}
+            />
+            <span className="text-[10px] text-dim">Generated resumes below this line return for more reviewed content; template spacing stays locked.</span>
           </label>
         </div>
         <Toggle
