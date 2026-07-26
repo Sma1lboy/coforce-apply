@@ -179,6 +179,7 @@ export default function Review({ state, onChanged }) {
   const jdUrl = `/campaign/files/jobs/${encodeURIComponent(selected.folder)}/job-description.md`;
   const hasPdf = !!selected.artifacts?.['resume.pdf'];
   const bullets = selected.match?.bullets || [];
+  const humanReviewReady = selected.reviewReady === true;
 
   return (
     <div className="review-shell flex-1 min-h-0 grid bg-well">
@@ -303,7 +304,6 @@ export default function Review({ state, onChanged }) {
               {machine && (
                 <div className="text-[10px] text-dim mt-2.5">
                   Machine gate · {machine.pageCount ?? '—'} page
-                  {Number.isFinite(machine.fullness) ? ` · ${Math.round(machine.fullness * 100)}% full` : ''}
                   {machine.verbatim === true && machine.skillsVerbatim === true ? ' · grounded ✓' : ''}
                 </div>
               )}
@@ -352,8 +352,14 @@ export default function Review({ state, onChanged }) {
 
         {selected.error && <div className="mt-3 text-[11px] text-bad bg-bad/10 border border-bad/30 rounded-lg p-2.5">{selected.error}</div>}
         {message && <div className="mt-3 text-[11px] text-accentsoft bg-accent/10 border border-accent/30 rounded-lg p-2.5">{message}</div>}
-        <button className="btn w-full mt-3 disabled:opacity-40 disabled:cursor-not-allowed" disabled={!hasPdf || !selected.artifacts?.['resume.tex'] || selected.status === 'approved' || busy === 'approve'} onClick={approve}>
-          {selected.status === 'approved' ? 'Approved ✓' : busy === 'approve' ? 'Approving…' : 'Approve this resume'}
+        <button className="btn w-full mt-3 disabled:opacity-40 disabled:cursor-not-allowed" disabled={!hasPdf || !selected.artifacts?.['resume.tex'] || !humanReviewReady || selected.status === 'approved' || busy === 'approve'} onClick={approve}>
+          {selected.status === 'approved'
+            ? 'Approved ✓'
+            : !humanReviewReady
+              ? 'Revision in progress'
+              : busy === 'approve'
+                ? 'Approving…'
+                : 'Approve this resume'}
         </button>
         {selected.status === 'approved' && (
           <button className="btn-ghost w-full mt-2"

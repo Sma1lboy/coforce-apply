@@ -19,7 +19,8 @@ export const api = {
   addToProfile: text => post('/api/profile/add', JSON.stringify({ text })),
   campaign: () => fetch('/api/campaign').then(j),
   syncCampaign: () => post('/api/campaign/sync', '{}'),
-  campaignFeedback: (id, text) => post(`/api/campaign/jobs/${encodeURIComponent(id)}/feedback`, JSON.stringify({ text })),
+  campaignFeedback: (id, text) =>
+    post(`/api/campaign/jobs/${encodeURIComponent(id)}/feedback`, JSON.stringify({ text })),
   approveCampaignJob: id => post(`/api/campaign/jobs/${encodeURIComponent(id)}/approve`, '{}'),
   exportCampaign: () => post('/api/campaign/export', '{}'),
 };
