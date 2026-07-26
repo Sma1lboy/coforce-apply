@@ -1,6 +1,6 @@
 ---
 name: tailor
-description: Generate a tailored resume for a specific job description from the user's local profile — reads the JD (URL, file, or pasted text), selects and reorders the most relevant experience/projects/skills, and emits the resume as LaTeX/PDF or Word (.docx), optionally following a user-provided template or reference resume. Use for "给这个 JD 出一份简历", "tailor my resume for X", or "/tailor <jd>".
+description: Generate a tailored resume for a specific job description from the user's local profile — reads the JD (URL, file, or pasted text), selects and reorders the most relevant experience/projects/skills, and emits the resume as LaTeX/PDF or Word (.docx), optionally following a user-provided template or reference resume. Works with nothing set up: with no profile on disk it takes an existing resume (PDF or pasted text) and delivers the tailored PDF before offering onboarding, so it is the right first stop for anyone trying the product. Use for "给这个 JD 出一份简历", "tailor my resume for X", "试试看", "/tailor <jd>", or any single job posting handed over with no other context.
 ---
 
 # Tailor — JD → resume
@@ -9,8 +9,17 @@ Input: a job description (URL to fetch, file path, or pasted text), optionally a
 format ("docx", "pdf", "tex") and/or a template/reference file.
 Read `~/.coforce/instructions.md` first if present — standing user preferences
 (tone, emphasis, format defaults) override this skill's defaults.
-Profile source: `~/.coforce/profile.json` (fall back to asking the user to run the
-`profile` skill if missing).
+Profile source: `~/.coforce/profile.json`.
+
+**No profile yet? Do not send the user to onboarding.** This skill is the
+product's front door: a stranger with one job posting should hold a tailored
+PDF before being asked to invest in anything. Ask for an existing resume — a
+PDF path, or text pasted straight into the conversation — parse it into
+`~/.coforce/profile.json` following the `profile` skill's schema and its
+import rules (bullets verbatim, nothing invented; a profile imported from the
+user's own resume already counts as reviewed), then continue with the JD.
+Two questions, not twenty. Mention `/setup` only AFTER delivering the PDF, and
+only as what it adds: repeat cycles, job discovery, tracking, submission.
 
 When invoked by the `campaign` skill for a campaign job ID, the campaign
 contract wins: read that job's saved JD/match/feedback, use the

@@ -30,6 +30,24 @@ sources (GitHub job lists)          ~/.coforce/ (your data, local only)
                                                        stops before submit)
 ```
 
+## Try it in two minutes
+
+Before onboarding anything: give it one job posting and your current resume,
+get a tailored PDF back.
+
+```sh
+git clone https://github.com/Sma1lboy/coforce-apply && cd coforce-apply
+claude
+```
+```
+/tailor https://job-posting-url        # then paste or point at your resume
+```
+
+That is the whole product in one command — a JD in, a one-page PDF out, every
+line lifted verbatim from what you wrote. Everything below is what you add
+when you want it to run *repeatedly*: discovery, batching, tracking, and
+submission.
+
 ## Use from a clone
 
 Clone the repository, enter the checkout, and start Claude Code there:
@@ -126,11 +144,10 @@ logged-in Chrome you already use.
 |---|---|
 | `coforce` | Entry point & router: matches vague intent ("我想找工作", "what next") to the right skill, or routes by pipeline state |
 | `setup` | One-time onboarding: profile, consents, standing instructions, job sources |
-| `experience` | Tier 0: ingest GitHub URLs, infer repo/author scope, explicitly refresh evidence, and rebuild compact profile tags offline |
+| `experience` | Module 1: ingest GitHub URLs, refresh the Tier 0 evidence index, and turn a repo's real commits into JD-free STAR bullets for you to review into the profile |
 | `start` | One discover→resume-review cycle; recurring through the host agent's scheduler |
 | `campaign` | Full JD + local Tier 0 matching + LaTeX/PDF review, feedback, approval, and multi-job ZIP export |
 | `profile` | Maintain your background (`~/.coforce/profile.json`) |
-| `repo-bullets` | Turn a git repo's real commits into STAR resume bullets |
 | `tailor` | JD → tailored one-page resume (LaTeX/PDF/docx, template or reference-guided) |
 | `apply` | Chrome-backed application: fills forms, registers ATS accounts (Workday & co., passwords in macOS Keychain), stops before submit for your confirmation |
 | `tracker` | Application tracker + kanban board + per-application file archive |

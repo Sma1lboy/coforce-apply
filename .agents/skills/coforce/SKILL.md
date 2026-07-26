@@ -21,10 +21,11 @@ hoc or improvise the workflow inline.
 | First run, onboarding, 初始化, "set me up", missing data-home files | `setup` |
 | Changing job-search preferences (level, directions, H1B/sponsorship, work mode, locations, salary) | `setup` (stage 2 only) or the console Settings tab |
 | Their background: work history, projects, education, skills, **awards/honors, certificates**, "add X to my resume/record" | `profile` (Supplement flow takes raw material — a story, a link, a PDF) |
-| Turning a GitHub URL / local repo into evidence or bullets | `experience` (index) + `repo-bullets` (STAR bullets) |
+| Turning a GitHub URL / local repo into evidence or resume bullets | `experience` (Module 1: index + STAR bullets) |
 | "Run a cycle", "find new jobs", "start hunting", recurring discovery | `start` |
 | A batch of resumes for tracked jobs; reviewing/approving generated PDFs; ZIP export | `campaign` |
 | One specific JD → one tailored resume (no tracker involvement) | `tailor` |
+| Trying the product out, "does this work for me", first taste with nothing set up | `tailor` — deliver a PDF first, offer `setup` after |
 | Submitting an application to a posting URL | `apply` |
 | "Where are my applications", board, statuses, notes, archives | `tracker` |
 | "Is this working", which bullets/resumes actually get callbacks | `campaign` (`outcomes` — counts, not evidence; pass its caveat on) |
@@ -35,10 +36,14 @@ hoc or improvise the workflow inline.
 as `$COFORCE_HOME` → `<checkout>/.coforce/` if present → `~/.coforce`) and
 pick the FIRST stage that is incomplete:
 
-1. No `profile.json`, or no `config.json` and no legacy
+0. **The user already handed over a JD (a link or pasted text) → `tailor`,
+   whatever else is missing.** One posting in, one tailored PDF out, in a
+   couple of questions. Onboarding is what you offer AFTER they hold the PDF,
+   never the toll gate in front of it.
+1. Otherwise, no `profile.json`, or no `config.json` and no legacy
    `apply-config.json`/`preferences.json` → `setup` (full onboarding).
 2. Profile has no reviewed bullets (empty pool) or no experience index →
-   `experience` + `repo-bullets`, review results into the profile.
+   `experience` (index, then bullets), review the results into the profile.
 3. No/empty `applications.json` → `start` (first discovery cycle).
 4. Campaign jobs sitting in `rendered` awaiting review → open the console
    Review tab (tracker skill) and tell the user resumes are waiting.

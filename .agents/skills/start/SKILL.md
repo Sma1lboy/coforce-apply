@@ -38,7 +38,7 @@ first in line for resume generation.
    `campaign.mjs select`), fill the user's LaTeX template, compile and visually
    check the PDF. Process revision-requested jobs before new jobs. This cycle
    must never scan GitHub and never writes new bullet text — an empty pool
-   stops the campaign and sends the user to Module 1 (repo-bullets/profile).
+   stops the campaign and sends the user to Module 1 (experience/profile).
 4. **Finish according to the review setting**: when
    `requireResumeReview !== false`, ensure the console is serving on 4517 and
    open `http://localhost:4517/#review`; report ready / needs Chrome / needs

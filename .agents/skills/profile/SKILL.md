@@ -59,7 +59,7 @@ in their own words, a URL, a PDF path — and do the digging yourself:
    approval and the bullet is user-attested.
 The console offers the same channel as Profile → "＋ Add with AI" (additive,
 review-then-save). Work that has code but no public repo needs no special
-path: `repo-bullets` reads local git history, so a private checkout goes
+path: `experience` reads local git history, so a private checkout goes
 through the normal generate→review flow.
 
 **Review**: summarize the profile compactly (one line per experience/project) and

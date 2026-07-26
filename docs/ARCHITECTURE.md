@@ -148,7 +148,7 @@ flowchart TB
 | 流程步骤 | 命令 / 入口 | 说明 |
 |---|---|---|
 | 一次性上线 | `/setup` | 数据家目录选择 → profile → 偏好 → 运行时/consents → verified 池 → 标准指令 |
-| 建 bullet 池(Module 1) | `/experience <repo url>` + `/repo-bullets` | repo 证据 → JD-free bullets → 人审入 profile;非 repo 材料走 `/profile` Supplement 或 console「＋ Add with AI」 |
+| 建 bullet 池(Module 1) | `/experience <repo url>` | repo 证据 → JD-free bullets → 人审入 profile;非 repo 材料走 `/profile` Supplement 或 console「＋ Add with AI」 |
 | ①→② 一轮循环 | `/start`(循环用 `/loop 30m /start`) | 拉源→去重→过滤→JD→匹配→渲染,产物进 Review |
 | 审批 | console Review tab(端口 4517) | 反馈重渲 ↺ 或 approve;全 approved 一键 ZIP |
 | ③ 投递 | `/apply <url>` 或 console 一键 Apply | 填完一切、停在提交前;Confirm 后 resume 同一 session 提交 |

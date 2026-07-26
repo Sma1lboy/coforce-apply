@@ -1,6 +1,6 @@
 ---
 name: setup
-description: One-time onboarding for CoForce Apply — choose the data home (local-only ~/.coforce or private-fork in-repo sync), build the user's profile, collect job-search preferences and runtime settings up front (level, directions, sponsorship/H1B, work mode, locations, salary floor → canonical config.json), build the verified bullet pool (evidence + JD-free bullets reviewed into the profile), set the LaTeX template, application consents, and job sources, write standing instructions, then show the console. Use for "帮我 set up", "初始化", "onboarding", "/setup", or when any other skill finds ~/.coforce files missing.
+description: One-time onboarding for CoForce Apply — choose the data home (local-only ~/.coforce or private-fork in-repo sync), build the user's profile, collect job-search preferences and runtime settings up front (level, directions, sponsorship/H1B, work mode, locations, salary floor → canonical config.json), build the verified bullet pool (evidence + JD-free bullets reviewed into the profile), set the LaTeX template, application consents, and job sources, write standing instructions, then show the console. Use for "帮我 set up", "初始化", "onboarding", "/setup", or when another skill finds ~/.coforce files missing AND the user is not mid-task — a user who just handed over a job posting gets a resume from /tailor first, and this offered afterwards.
 ---
 
 # Setup — one-time onboarding
@@ -133,7 +133,7 @@ Tech…) — swap/add the ones matching the user's target roles.
 The campaign selects resume lines ONLY from bullets the user has reviewed into
 `profile.json` — so build that pool now. Ask the user to paste the GitHub
 repository/PR/commit URLs that represent their experience. Feed each to
-`/experience` (evidence collection) and `/repo-bullets` (full-context, JD-free
+`/experience` (evidence collection, then full-context JD-free
 bullet generation), then walk the user through approving the generated bullets
 into the profile — each approved bullet stamped with `source` and `verifiedAt`.
 A profile imported from an existing resume already counts as reviewed. If the

@@ -58,7 +58,7 @@ Require these values in `~/.coforce/config.json`:
   ZIP is refreshed after the full batch completes.
 
 Require a non-empty **verified bullet pool**: the bullet points already
-reviewed into `~/.coforce/profile.json` (Module 1: the `repo-bullets` /
+reviewed into `~/.coforce/profile.json` (Module 1: the `experience` /
 `profile` skills generate bullets JD-free from repo contexts and the user
 approves them into the profile). If `campaign.mjs pool` reports none, stop and
 send the user to Module 1 first. A campaign must never discover repositories,
@@ -188,7 +188,7 @@ input anymore.
      resume: reselect/reorder, re-render, re-judge.
    - *generation-rule problem* (a whole class of resumes would fail the same
      way: missing project links, unevidenced skills, no demo URLs) → sediment
-     a rule change into Module 1's prompts (repo-bullets / profile SKILL.md)
+     a rule change into Module 1's prompts (experience / profile SKILL.md)
      with the user's sign-off, then regenerate downstream. Judge findings are
      how the generation prompts iterate — never edit the judge to make a
      finding go away.

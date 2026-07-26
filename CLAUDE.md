@@ -61,7 +61,7 @@ stay in sync with it:
 - onboarding / 初始化 / missing data-home files -> `setup`
 - preference changes (level, H1B, work mode, locations) -> `setup` stage 2 or console Settings
 - background, work history, awards, certificates, "add X to my record" -> `profile`
-- GitHub URL / local repo into evidence or bullets -> `experience` + `repo-bullets`
+- GitHub URL / local repo into evidence or bullets -> `experience`
 - "run a cycle" / find new jobs -> `start`
 - batch resumes, review/approve PDFs, ZIP -> `campaign`
 - one specific JD -> one resume -> `tailor`
