@@ -106,10 +106,8 @@ This is the only command that enumerates GitHub history. It:
    repository's declared `authors`, through authenticated `gh`.
 3. Merges those source-linked entries with curated
    `~/.coforce/profile.json` skills, experience, and projects.
-4. From that same in-memory evidence set, aggregates candidate skills using
-   `tech:*`/`repo-tech:*` tags, project technologies, and profile skill seeds.
-   Each candidate carries a stable ID, category, evidence count, and up to
-   eight `{id, source}` evidence references. This is not another GitHub scan.
+4. Aggregates sourced skill candidates from profile/project names and repository
+   technology tags; code contains no global skill vocabulary.
 5. Atomically writes a compact `experience-index.json` with stable evidence
    IDs, author, matching text/tags, one source URL, `skills[]`, counts, and a
    fingerprint.
@@ -120,11 +118,8 @@ Inspect the candidate skill pool without rebuilding or calling GitHub:
 node "<experience-skill>/scripts/experience.mjs" skills
 ```
 
-These candidates automatically extend the campaign skill pool because they
-come from repositories/authors the user explicitly placed in Tier 0 scope.
-`profile.json.verifiedSkills[]` may still retain selected candidates as richer
-profile-facing evidence metadata, but campaign eligibility does not depend on
-copying them there. Do not add a skill merely from a JD keyword.
+Candidates automatically extend the campaign pool. `verifiedSkills[]` may keep
+richer metadata, but copying is not required. Never source a skill from JD text.
 
 Private evidence stays local; the underlying writer guard still requires
 explicit permission before private material can be sent to an external writer.

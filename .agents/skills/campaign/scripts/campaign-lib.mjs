@@ -18,7 +18,6 @@ import { execFileSync } from 'node:child_process';
 import { basename, dirname, extname, join, resolve, sep } from 'node:path';
 import { writeJsonAtomic } from '../../../lib/fs-atomic.mjs';
 import { loadConfig } from '../../../lib/config.mjs';
-import { inferSkillCategory } from '../../../lib/skill-catalog.mjs';
 
 export const CAMPAIGN_SCHEMA = '1.0';
 export const REQUIRED_EXPORT_FILES = [
@@ -367,8 +366,6 @@ export function applyResumeReviewPolicy(dataDir) {
       judge.projectTailSpacingExact === false ||
       judge.resumeItemsUseBodyArgument === false ||
       judge.verbatim === false ||
-      judge.skillsDense === false ||
-      judge.skillGroupsDense === false ||
       judge.skillsVerbatim === false
     ) continue;
     const coverageProof = pageCoverageDeliveryProof(judge);
@@ -487,8 +484,6 @@ const skillId = name => createHash('sha256')
   .update(`skill:${String(name || '').trim().toLowerCase()}`)
   .digest('hex')
   .slice(0, 8);
-const DENSE_SKILL_MIN = 18;
-const minimumSkillSelection = poolSize => Math.min(DENSE_SKILL_MIN, poolSize);
 const normalizeSkillName = value => String(value || '').trim().toLowerCase();
 
 export function bulletPool(dataDir) {
@@ -550,7 +545,7 @@ export function skillPool(dataDir) {
       evidence.find(value => value?.source)?.source ||
       null;
     const category = String(typeof item === 'object' ? item?.category || '' : '').trim() ||
-      inferSkillCategory(name);
+      'Tools & Technologies';
     const existing = byName.get(key);
     if (existing) {
       if (existing.category === 'Tools & Technologies' && category !== existing.category) {
@@ -710,10 +705,6 @@ export function selectBullets(dataDir, id, bulletIds, selectedSkills = [], selec
   if (missingRequired.length) {
     throw new Error(`selection omits mandatory skills for baseline + ${rolePackName}: ${missingRequired.join(', ')}`);
   }
-  const minimumSkills = minimumSkillSelection(availableSkills.length);
-  if (skillIds.length < minimumSkills) {
-    throw new Error(`selection includes ${skillIds.length} skills; select at least ${minimumSkills} from the ${availableSkills.length}-skill eligible pool to preserve resume skill density`);
-  }
   const skills = skillIds.map(item => skillsById.get(item));
   const composition = {
     total: skills.length,
@@ -729,7 +720,7 @@ export function selectBullets(dataDir, id, bulletIds, selectedSkills = [], selec
     `- Verified pool: ${pool.length} bullets from profile.json`,
     `- Selected: **${bullets.length}**`,
     `- Eligible skill pool: ${availableSkills.length} skills from resume/coursework plus the local Tier 0 experience index`,
-    `- Selected skills: **${skills.length}** (minimum density: ${minimumSkills})`,
+    `- Selected skills: **${skills.length}**`,
     `- Skill policy: **${composition.baseline} baseline + ${composition.rolePack} ${rolePackName} pack + ${composition.jdExtras} JD extras**`,
     '',
     '## Selected Bullets (verbatim — the resume may reorder and cut, never rewrite)',
@@ -778,7 +769,6 @@ export function selectBullets(dataDir, id, bulletIds, selectedSkills = [], selec
     selectedAt: now(),
     poolSize: pool.length,
     skillPoolSize: availableSkills.length,
-    minimumSkillCount: minimumSkills,
     resumeSkillPolicy: {
       status: review.status,
       reviewedAt: review.reviewedAt,
@@ -876,71 +866,31 @@ const escapeSkillTex = value => String(value)
   .replace(/\\/g, '\\textbackslash{}')
   .replace(/([&%#_$])/g, '\\$1');
 
-const DISPLAY_SKILL_GROUPS = [
-  {
-    key: 'languages',
-    label: 'Languages & Frameworks',
-    categories: ['Programming Languages', 'Frameworks & Developer Tools'],
-  },
-  {
-    key: 'backend',
-    label: 'Backend, APIs & Data',
-    categories: ['Backend & APIs', 'Databases & Storage'],
-  },
-  {
-    key: 'ai',
-    label: 'AI/ML & Agent Systems',
-    categories: ['AI/ML & Agent Systems'],
-  },
-  {
-    key: 'infra',
-    label: 'Infrastructure & Distributed Systems',
-    categories: ['Infrastructure & Cloud', 'Distributed Systems & Data'],
-  },
-];
-
 const consolidatedSkillGroups = skills => {
-  const categoryToKey = new Map(DISPLAY_SKILL_GROUPS.flatMap(group =>
-    group.categories.map(category => [category.toLowerCase(), group.key])));
-  const groups = DISPLAY_SKILL_GROUPS.map(group => ({ ...group, names: [] }));
-  const byKey = new Map(groups.map(group => [group.key, group]));
+  const byLabel = new Map();
   for (const skill of skills) {
-    const category = String(skill.category || '').trim().toLowerCase();
-    const key = categoryToKey.get(category) || 'backend';
-    byKey.get(key).names.push(String(skill.name || '').trim());
+    const label = String(skill.category || 'Tools & Technologies').trim();
+    if (!byLabel.has(label)) byLabel.set(label, []);
+    byLabel.get(label).push(String(skill.name || '').trim());
   }
-  const active = groups.filter(group => group.names.length);
+  const active = [...byLabel].map(([label, names]) => ({ label, names }));
   const minimum = Math.min(5, skills.length);
-  const merge = (sourceKey, targetKey, label) => {
-    const source = active.find(group => group.key === sourceKey);
-    const target = active.find(group => group.key === targetKey);
-    if (!source || !target || source.names.length >= minimum) return false;
-    target.names = active.indexOf(source) < active.indexOf(target)
-      ? [...source.names, ...target.names]
-      : [...target.names, ...source.names];
-    target.label = label;
-    active.splice(active.indexOf(source), 1);
-    return true;
-  };
-
-  merge('ai', 'languages', 'Languages, Frameworks & AI');
-  merge('infra', 'backend', 'Backend, Data & Infrastructure');
-  merge('backend', 'infra', 'Backend, Data & Infrastructure');
-  merge('languages', 'backend', 'Languages, Frameworks, Backend & Data');
-
-  while (active.length > 1) {
-    const sparse = active.find(group => group.names.length < minimum);
-    if (!sparse) break;
-    const target = active
-      .filter(group => group !== sparse)
-      .sort((a, b) => b.names.length - a.names.length)[0];
-    target.names = active.indexOf(sparse) < active.indexOf(target)
-      ? [...sparse.names, ...target.names]
-      : [...target.names, ...sparse.names];
-    target.label = `${target.label} & Related Technologies`;
-    active.splice(active.indexOf(sparse), 1);
+  const sparse = active.filter(group => group.names.length < minimum);
+  if (sparse.length === active.length && active.length > 1) {
+    return [{ label: 'Relevant Skills', names: active.flatMap(group => group.names) }];
   }
-  return { groups: active, minimum };
+  if (sparse.length) {
+    const names = sparse.flatMap(group => group.names);
+    active.splice(0, active.length, ...active.filter(group => !sparse.includes(group)));
+    if (names.length >= minimum) {
+      active.push({ label: 'Additional Relevant Skills', names });
+    } else {
+      const target = active.sort((a, b) => a.names.length - b.names.length)[0];
+      target.names.push(...names);
+      target.label = `${target.label} & Additional Skills`;
+    }
+  }
+  return active;
 };
 
 export function syncSelectedSkillsToResume(dataDir, id) {
@@ -954,8 +904,8 @@ export function syncSelectedSkillsToResume(dataDir, id) {
   const skills = Array.isArray(match.skills) ? match.skills : [];
   if (!skills.length) return { updated: false, skills: 0 };
 
-  const display = consolidatedSkillGroups(skills);
-  const rows = display.groups.map(group =>
+  const groups = consolidatedSkillGroups(skills);
+  const rows = groups.map(group =>
     `\\resumeSubItem{${escapeSkillTex(group.label)}:}\n  {${group.names.map(escapeSkillTex).join(', ')}}`
   ).join('\n\\vspace{-1mm}\n');
 
@@ -973,8 +923,7 @@ export function syncSelectedSkillsToResume(dataDir, id) {
   return {
     updated: next !== tex,
     skills: skills.length,
-    groups: display.groups.length,
-    minimumGroupSize: display.minimum,
+    groups: groups.length,
   };
 }
 
@@ -1482,24 +1431,19 @@ export function judgeResume(dataDir, id) {
   let verbatim = null;
   const unknownLines = [];
   let skillsVerbatim = null;
-  let skillsDense = null;
-  let minimumSkillCount = null;
   const renderedSkillGroups = texSkillGroups(bodyStart === -1 ? texSource : texSource.slice(bodyStart));
   const renderedSkills = renderedSkillGroups.flatMap(group => group.names);
-  const minimumSkillGroupSize = Math.min(5, renderedSkills.length);
-  const skillGroupsDense = renderedSkillGroups.length
-    ? renderedSkillGroups.every(group => group.names.length >= minimumSkillGroupSize)
-    : null;
   const unknownSkills = [];
   const missingSkills = [];
-  if (items.length && existsSync(matchPath)) {
+  if (existsSync(matchPath)) {
     const match = readJson(matchPath);
-    const allowed = new Set((match.bullets || []).map(bullet => bullet.text.replace(/\s+/g, ' ').trim()));
-    for (const item of items) if (!allowed.has(item)) unknownLines.push(item);
-    verbatim = unknownLines.length === 0;
+    if (items.length) {
+      const allowed = new Set((match.bullets || [])
+        .map(bullet => bullet.text.replace(/\s+/g, ' ').trim()));
+      for (const item of items) if (!allowed.has(item)) unknownLines.push(item);
+      verbatim = unknownLines.length === 0;
+    }
     const selectedSkills = (match.skills || []).map(skill => skill.name.replace(/\s+/g, ' ').trim());
-    minimumSkillCount = Number(match.minimumSkillCount) ||
-      minimumSkillSelection(Number(match.skillPoolSize) || selectedSkills.length);
     const allowedSkills = new Set(selectedSkills.map(skill => skill.toLowerCase()));
     const renderedNormalized = renderedSkills.map(skill => skill.replace(/\s+/g, ' ').trim());
     for (const skill of renderedNormalized) {
@@ -1511,23 +1455,6 @@ export function judgeResume(dataDir, id) {
     }
     if (renderedSkills.length || selectedSkills.length) {
       skillsVerbatim = unknownSkills.length === 0 && missingSkills.length === 0;
-      skillsDense = renderedSkills.length >= minimumSkillCount;
-    }
-  } else if (existsSync(matchPath)) {
-    const match = readJson(matchPath);
-    const selectedSkills = (match.skills || []).map(skill => skill.name);
-    minimumSkillCount = Number(match.minimumSkillCount) ||
-      minimumSkillSelection(Number(match.skillPoolSize) || selectedSkills.length);
-    if (renderedSkills.length || selectedSkills.length) {
-      skillsVerbatim = renderedSkills.length === selectedSkills.length &&
-        renderedSkills.every(skill => selectedSkills.some(selected => selected.toLowerCase() === skill.toLowerCase()));
-      skillsDense = renderedSkills.length >= minimumSkillCount;
-      if (!skillsVerbatim) {
-        unknownSkills.push(...renderedSkills.filter(skill =>
-          !selectedSkills.some(selected => selected.toLowerCase() === skill.toLowerCase())));
-        missingSkills.push(...selectedSkills.filter(skill =>
-          !renderedSkills.some(rendered => rendered.toLowerCase() === skill.toLowerCase())));
-      }
     }
   }
   const issues = [];
@@ -1564,15 +1491,11 @@ export function judgeResume(dataDir, id) {
     verbatim,
     unknownLines,
     renderedSkillCount: renderedSkills.length,
-    minimumSkillCount,
-    skillsDense,
     renderedSkillGroupCount: renderedSkillGroups.length,
-    minimumSkillGroupSize,
     skillGroupSizes: renderedSkillGroups.map(group => ({
       label: group.label,
       count: group.names.length,
     })),
-    skillGroupsDense,
     skillsVerbatim,
     unknownSkills,
     missingSkills,

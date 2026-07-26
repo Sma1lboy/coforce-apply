@@ -77,66 +77,19 @@ point out gaps: missing dates, bullets with no results/metrics, stale `title`.
 - Never commit `~/.coforce/profile.json` anywhere or paste its contents into
   commits/PRs.
 
-## The profile skill inventory has two provenance tiers
+## Skill inventory and policy
 
-`skills[]` is the user's attested inventory imported from their resume,
-coursework, or direct edits. Every non-empty entry is campaign-eligible: skills
-do not need commit-level proof because coursework and private work are valid
-ways to acquire them.
+- `skills[]` is user-attested resume/coursework truth and needs no public proof.
+- `verifiedSkills[]` optionally adds Tier 0 category/source/evidence metadata.
+- Campaign also reads `experience-index.json.skills[]`; merging is
+  case-insensitive and never uses JD text as a source.
+- `resumeSkillPolicy.baseline` and each `rolePack` contain canonical names from
+  that merged pool. Everything else remains an optional JD extra.
 
-`verifiedSkills[]` remains as backward-compatible evidence enrichment for
-skills supported by Tier 0:
-
-```json
-{
-  "name": "TypeScript",
-  "category": "Programming Languages",
-  "source": "https://github.com/owner/repo/pull/42",
-  "evidenceIds": ["project:pr:owner/repo:42"],
-  "verifiedAt": "2026-07-25T00:00:00.000Z"
-}
-```
-
-`name` is canonical resume text; `category` controls grouping; `source` is a
-representative URL; `evidenceIds` point back to Tier 0; `verifiedAt` records
-when the evidence enrichment was accepted. This field strengthens provenance
-but is **not an eligibility gate**. Campaigns merge, case-insensitively:
-
-1. all user-attested `skills[]`;
-2. all evidence-enriched `verifiedSkills[]`;
-3. the current local Tier 0 `experience-index.json.skills[]`.
-
-The merged pool keeps `origins`, `attested`, and `evidenceBacked` metadata.
-Removing a skill from only one source does not remove it while another source
-still supports it. Never add a skill merely because one JD contains the
-keyword; additions must come from the user's resume/coursework statement or
-their experience evidence.
-
-## Skill sedimentation separates eligibility from defaults
-
-The merged inventory is not itself a finished resume strategy. Preserve a
-stable technical identity instead of letting every Skills section mirror its
-JD. `resumeSkillPolicy` adds human-reviewed defaults on top of the eligible pool:
-
-- `baseline`: a small stable set included in every tailored resume;
-- `rolePacks`: direction defaults such as `agentDev`, `backend`, or
-  `generalSWE`; a campaign selects one pack for each job;
-- every other eligible pool skill remains available as a dynamic JD extra.
-
-These defaults are human-owned. When the user explicitly asks for a proposed
-policy, an agent may generate or revise `baseline` and `rolePacks` from the
-merged pool, but the proposal must remain `status: "review_requested"` with
-`reviewedAt: null`. Only the user may approve it through the Profile console
-(or an equally explicit review instruction). Initial import, a missing/empty
-baseline, no non-empty role pack, a removed/renamed referenced skill, or any
-draft edit means the effective state is `review_requested`.
-
-New Tier 0 or resume skills enter only the eligible pool and do **not**
-invalidate an approved strategy; they become JD extras until a human promotes
-them into a default. After the user explicitly reviews the baseline and role
-packs, write them verbatim, set `status: "approved"`, and record `reviewedAt`.
-This review approves only the reusable skill policy, not any resume, job
-application, or final submission.
+An Agent may propose policy membership, but only the user may approve it.
+Draft, empty, or stale references mean `review_requested`; newly discovered
+optional skills do not invalidate an already approved policy. Policy approval
+does not approve a resume or application.
 
 ## Entries carry their links
 

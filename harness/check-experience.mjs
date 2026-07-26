@@ -83,6 +83,7 @@ execFileSync(process.execPath, [
 writeFileSync(join(dataDir, 'profile.json'), JSON.stringify({
   name: 'Candidate',
   skills: ['TypeScript', 'PostgreSQL'],
+  verifiedSkills: [{ name: 'TypeScript', category: 'Programming Languages' }],
   experience: [{
     company: 'Acme',
     title: 'Backend Engineer',

@@ -11,10 +11,6 @@ import {
 } from 'node:fs';
 import { dirname, join } from 'node:path';
 import { writeJsonAtomic } from '../../../lib/fs-atomic.mjs';
-import {
-  inferSkillCategory,
-  SKILL_CATEGORIES,
-} from '../../../lib/skill-catalog.mjs';
 
 export const EXPERIENCE_SCHEMA = '1.1';
 
@@ -207,23 +203,6 @@ function profileEntries(profile) {
   return entries;
 }
 
-const SKILL_TAG_NAMES = {
-  'c-plus-plus': 'C++',
-  'objective-c': 'Objective-C',
-  'github-actions': 'GitHub Actions',
-  'node-js': 'Node.js',
-  'postgresql': 'PostgreSQL',
-  'typescript': 'TypeScript',
-  'javascript': 'JavaScript',
-  'markdown': 'Markdown',
-  'yaml': 'YAML',
-  'html': 'HTML',
-  'css': 'CSS',
-  'rust': 'Rust',
-  'swift': 'Swift',
-  'shell': 'Shell',
-};
-
 const splitTechnologies = value =>
   String(value || '')
     .split(/[,|]/)
@@ -233,7 +212,7 @@ const splitTechnologies = value =>
 const displayNameForTag = tag => {
   const slug = String(tag || '').replace(/^(?:repo-)?tech:/, '');
   if (!slug) return null;
-  return SKILL_TAG_NAMES[slug] || slug
+  return slug
     .split('-')
     .map(part => part ? part[0].toUpperCase() + part.slice(1) : '')
     .join(' ');
@@ -241,28 +220,11 @@ const displayNameForTag = tag => {
 
 const escapeRegex = value => String(value).replace(/[.*+?^${}()|[\]\\]/g, '\\$&');
 
-const SKILL_ALIASES = {
-  'agentic loops': ['agentic loop', 'agent loop', 'tool loop', 'inspect-edit-review'],
-  'multi-agent orchestration': ['multi-agent', 'multi agent', 'fan-out', 'orchestration'],
-  'llm tool calling': ['tool calling', 'tool call', 'tool-call', 'tool use', 'tool-use'],
-  'event-driven architecture': ['event-driven', 'event driven'],
-  'fault tolerance': ['fault tolerance', 'fault-tolerant', 'partial-failure', 'partial failure'],
-  'distributed consensus': ['distributed consensus', 'leader election'],
-  'secrets manager': ['secrets manager', 'secret manager'],
-  'prompt engineering': ['prompt engineering', 'prompt template', 'system prompt'],
-  'postgresql': ['postgresql', 'postgres'],
-  'rest apis': ['rest api', 'restful api'],
-  'model context protocol (mcp)': ['model context protocol', 'mcp server', 'mcp client'],
-};
-
 const textMentionsSkill = (text, name) => {
   const raw = String(name || '').trim();
   if (!raw) return false;
-  const aliases = [raw, ...(SKILL_ALIASES[raw.toLowerCase()] || [])];
-  return aliases.some(alias =>
-    new RegExp(`(^|[^a-z0-9])${escapeRegex(alias.toLowerCase())}([^a-z0-9]|$)`, 'i')
-      .test(String(text || ''))
-  );
+  return new RegExp(`(^|[^a-z0-9])${escapeRegex(raw)}([^a-z0-9]|$)`, 'i')
+    .test(String(text || ''));
 };
 
 export function buildSkillCandidates(entries, profile = null) {
@@ -274,22 +236,23 @@ export function buildSkillCandidates(entries, profile = null) {
     const existing = seeds.get(key);
     if (!existing) seeds.set(key, {
       name: clean,
-      category: category || inferSkillCategory(clean),
+      category: category || 'Tools & Technologies',
     });
     else if (category && existing.category === 'Tools & Technologies') existing.category = category;
   };
 
-  for (const item of profile?.skills || []) addSeed(skillName(item));
+  for (const item of profile?.skills || []) {
+    addSeed(skillName(item), typeof item === 'object' ? item?.category : null);
+  }
   for (const item of profile?.verifiedSkills || []) addSeed(skillName(item), item?.category);
   for (const project of profile?.projects || []) {
     for (const name of splitTechnologies(project.technologies)) addSeed(name);
   }
-  for (const [category, names] of Object.entries(SKILL_CATEGORIES)) {
-    for (const name of names) addSeed(name, category);
-  }
   for (const entry of entries) {
     for (const tag of entry.tags || []) {
-      if (/^(?:repo-)?tech:/.test(tag)) addSeed(displayNameForTag(tag));
+      if (/^(?:repo-)?tech:/.test(tag)) {
+        addSeed(displayNameForTag(tag), 'Repository Technologies');
+      }
     }
   }
 
