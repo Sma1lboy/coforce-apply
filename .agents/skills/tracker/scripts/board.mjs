@@ -309,7 +309,7 @@ function loadApps() {
           globalFiles: listFiles(filesRoot),
           experience: experienceView(dataDir),
           campaign: humanCampaignView(dataDir),
-          agent: AGENT_LABEL,
+          agent: 'claude',
           applyMode: config.headlessApply ? 'headless' : 'manual',
           config: { logoDevToken: config.logoDevToken || null },
         })
