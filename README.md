@@ -11,7 +11,7 @@ your own Chrome, and tracks everything locally. All of your data stays on your
 machine.
 
 <p align="center">
-  <img src="docs/assets/skill-story-demo.gif" alt="A real /setup session — AskUserQuestion batches, PDF profile import, preferences, consents — captured and re-rendered by skill-story" width="880">
+  <img src="docs/assets/skill-story-demo.gif" alt="A real /setup session — AskUserQuestion batches, PDF profile import, preferences, consents" width="880">
   <br><em>A real <code>/setup</code> session end to end (7× speed).</em>
 </p>
 

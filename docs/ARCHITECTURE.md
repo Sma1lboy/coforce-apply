@@ -55,7 +55,7 @@ flowchart TB
   end
 
   subgraph CORE[★ 主体 · 数据层 —— 两个面共同的唯一真相源]
-    INTENT[意图 · preferences / profile / instructions ★]
+    INTENT[意图 · config / profile / instructions ★]
     STATE[状态与产物 · applications / campaigns / index / PDF / ZIP]
   end
 
