@@ -34,7 +34,8 @@ other's code:
     "company": "…", "role": "…", "location": "…", "source": "…", "url": "…",
     "folder": "slug of the jobs/<folder>/ dir",
     "status": "queued | needs_browser_jd | jd_ready | matched | rendered | render_failed | revision_requested | approved",
-    "matchScore": 0, "evidenceIds": [],
+    "matchScore": 0, "evidenceIds": [], "selectedSkillIds": [],
+    "selectedSkillPack": "agentDev | backend | generalSWE | null",
     "experienceIndexGeneratedAt": "ISO | null", "experienceIndexFingerprint": "sha | null",
     "approvedAt": "ISO | null", "approvalMode": "manual | automatic | null",
     "feedback": [], "error": null, "createdAt": "ISO", "updatedAt": "ISO"
@@ -57,14 +58,27 @@ Require these values in `~/.coforce/config.json`:
   a complete successfully rendered resume is automatically approved and the
   ZIP is refreshed after the full batch completes.
 
-Require a non-empty **verified bullet pool**: the bullet points already
+Require a non-empty **verified bullet pool** and skill inventory. Bullets are
 reviewed into `~/.coforce/profile.json` (Module 1: the `experience` /
 `profile` skills generate bullets JD-free from repo contexts and the user
-approves them into the profile). If `campaign.mjs pool` reports none, stop and
-send the user to Module 1 first. A campaign must never discover repositories,
-invoke `gh`, or generate new bullet text — it only *selects*. The sibling
-`experience` skill's evidence index is Module-1 raw material, not a campaign
-input anymore.
+approves them into the profile). Skills merge from all user-attested
+`profile.skills[]`, optional `profile.verifiedSkills[]` evidence enrichments,
+and the current local `experience-index.json.skills[]`. If
+`campaign.mjs pool` reports no bullets, stop and send the user to Module 1
+first. If `campaign.mjs skills` is empty, stop for profile setup. A campaign
+must never discover repositories, invoke `gh`, refresh Tier 0, or generate new
+bullet text — it only *selects* from local data.
+
+The profile skill also owns the human-reviewed `profile.resumeSkillPolicy`
+baseline and role packs. Before selecting for any JD, require:
+
+```sh
+node "<campaign-skill>/scripts/campaign.mjs" skill-review
+```
+
+It must report `status: "approved"` with a non-empty baseline, at least one
+non-empty role pack, and no stale referenced skill names. Otherwise stop at
+`review_requested`; campaign must not invent or approve defaults.
 
 ## Cycle
 
@@ -79,16 +93,30 @@ input anymore.
    and `revision_requested` jobs. Existing approved jobs are left alone; reuse
    any valid artifacts already present instead of starting over.
 
-2. **Load the verified bullet pool**:
+2. **Load the verified bullet pool and merged skill pool**:
 
    ```sh
    node "<campaign-skill>/scripts/campaign.mjs" pool
+   node "<campaign-skill>/scripts/campaign.mjs" skills
+   node "<campaign-skill>/scripts/campaign.mjs" skill-review
    ```
 
    Every bullet the user has reviewed into profile.json, with a stable 8-char
    content id, its origin (which experience/project it belongs to) and
-   provenance (`source`, `verifiedAt` when present). The pool is small — read
-   it whole; there is no tag index and no relevance pre-filter.
+   provenance (`source`, `verifiedAt` when present) and nullable Chinese
+   translation (`textZh`). IDs are derived only from canonical English `text`,
+   so translating a bullet does not invalidate saved selections. The pool is
+   small — read it whole; there is no tag index and no relevance pre-filter.
+
+   Every skill has a stable id and canonical `name`. The merged record preserves
+   its resume `category`, `origins` (`resume` and/or `experience`),
+   `attested`, `evidenceBacked`, and any Tier 0 `source` / `evidenceIds`.
+   Resume/coursework skills are eligible without GitHub proof; experience
+   evidence strengthens provenance and adds new candidates. JD keywords alone
+   never add to this pool. Each item also reports whether it belongs to the
+   human-reviewed `baseline` and which `rolePacks` reference it. Skills in
+   neither remain valid JD extras; new optional skills do not invalidate an
+   approved strategy.
 
 3. **Hydrate the full JD** for each queued job:
 
@@ -106,18 +134,23 @@ input anymore.
 
    Do not substitute a search snippet, company careers index, or guessed JD.
 
-4. **Select bullets for this JD — strictly from the pool.** Read the full JD
-   and the full pool, pick the bullets that genuinely fit (typically 6–14),
-   then record the selection:
+4. **Select bullets and skills for this JD — strictly from their pools.** Read
+   the full JD and both pools, pick the bullets that genuinely fit (typically
+   6–14), then select only the skills supported by those entries and the JD:
 
    ```sh
-   node "<campaign-skill>/scripts/campaign.mjs" select --id <job-id> --bullets <id1,id2,…>
+   node "<campaign-skill>/scripts/campaign.mjs" select --id <job-id> \
+     --bullets <bullet-id1,bullet-id2,…> \
+     --skills <skill-id1,skill-id2,…> \
+     --skill-pack <approved-role-pack>
    ```
 
-   The command **rejects any id outside the pool** — fabrication is
+   The command **rejects any bullet or skill id outside its pool** — fabrication is
    structurally impossible, not just discouraged. It writes `match-report.md`
    (human-readable selection) and `match.json` (`mode: "selection"`, verbatim
-   bullets with provenance) and sets the job to `matched`.
+   bullets plus verbatim skills with provenance) and sets the job to `matched`.
+   Any new selection or render invalidates the prior machine and LLM verdicts;
+   judges must evaluate the exact current artifact.
 
    **Best-fit selection prompt** — run the choice with this rubric, not vibes:
 
@@ -136,6 +169,24 @@ input anymore.
    > ONLY pool ids in display order — you cannot edit text, and ids outside
    > the pool will be rejected.
 
+   Skill selection is three-layered: always include the full human-reviewed
+   `baseline`; choose and include one complete human-reviewed role pack for the
+   job direction; then fill the remaining capacity from the eligible pool by
+   JD relevance. If the job direction does not clearly map to one approved
+   pack, stop at `review_requested` and ask the human instead of guessing.
+   There is no percentage gate: baseline and role-pack membership define
+   defaults; the pool defines what may be selected dynamically.
+
+   For JD extras, prioritize exact requirements, then skills supported by
+   the user's attested inventory or experience; choose and order only, never
+   rename or synthesize. Preserve the template's intentionally
+   dense skill inventory: when the eligible merged pool contains at least 18 skills,
+   select **18–26** across roughly 5–6 useful categories (and more when the JD
+   genuinely supports them). "Avoid keyword stuffing" means omit unrelated or
+   undefendable terms — it does not mean collapsing a strong sourced inventory
+   to 9–12 keywords. The CLI rejects a selection below
+   `min(18, mergedSkillPoolSize)` so this cannot silently regress.
+
    Alongside the selection, check the JD against `~/.coforce/config.json`
    (canonical user intent — `needsSponsorship`, `workMode`, `locations`,
    `salaryFloor`; schema in the setup skill): a posting that violates a hard
@@ -146,11 +197,36 @@ input anymore.
 5. **Assemble the job-specific resume from the selection — verbatim.** Copy
    the template into the job folder as `resume.tex`; preserve its packages,
    macros, typography, spacing, and section order. Every resume bullet must be
-   one of the selected bullets, **word for word** (LaTeX escaping aside);
-   tailoring means choosing, ordering, and cutting — never rewriting. If a
+   one of the selected English `text` bullets, **word for word** (LaTeX
+   escaping aside); `textZh` is review/localization metadata and is not mixed
+   into an English resume. Tailoring means choosing, ordering, and cutting —
+   never rewriting. If a
    bullet should be phrased better, that is Module 1 work: regenerate →
    user review → profile, then reselect. The one-page cut drops the
    least-relevant selected bullets first, never edits them.
+
+   Replace the template's Skills **contents** with the selected skills while
+   preserving the template's section wrapper, `\resumeSubItem` scaffolding,
+   and spacing. Saved `category` remains provenance in `match.json`; the resume
+   display consolidates related source categories into dense groups such as
+   **Languages & Frameworks**, **Backend, APIs & Data**, and
+   **Infrastructure & Distributed Systems**. No displayed group may contain
+   fewer than `min(5, selectedSkillCount)` skills: a sparse AI or infrastructure
+   group is merged into its closest related group instead of consuming a whole
+   line. Render each selected `name` verbatim exactly once. Do not retain static
+   template skills that were not selected, and do not add a JD keyword outside
+   `match.json.skills`. The
+   renderer performs this replacement from `match.json` immediately before
+   compilation, preventing a valid selection from leaving stale sparse Skills
+   text in `resume.tex`.
+
+   Template spacing is data, not a hint. Preserve the template's entry
+   scaffolding byte-for-byte, including each `itemize` boundary, `\vspace`
+   value, and section-adjacent spacer. Replace only semantic fields (entry
+   heading, metadata, link, and selected bullet bodies). When another entry is
+   needed, clone the nearest same-kind experience/project block and retain its
+   exact wrapper and spacing tokens; do not rebuild wrappers from generic
+   defaults or normalize values such as `-9mm` to `-8mm`.
 
    For a revision-requested job, read every open feedback item first and
    regenerate the existing `resume.tex`; do not create parallel drafts.
@@ -165,8 +241,13 @@ input anymore.
    (content reaches ≥88% down the page — a half-empty page is as much a failed
    product as a second page; fix by selecting MORE pool bullets, never by
    inflating text), and `verbatim: true` (every `\resumeItem` is one of the
-   selected bullets, word for word). A failed metric blocks automatic approval
-   in code; fix and re-render, don't argue.
+   selected bullets, word for word), `skillsDense: true` (at least
+   `min(18, skillPoolSize)` rendered skills), `skillGroupsDense: true` (every
+   displayed group has at least `min(5, selectedSkillCount)` entries), and
+   `skillsVerbatim: true` whenever a
+   Skills section or skill selection exists (every rendered skill is selected
+   and every selected skill is rendered). A failed metric blocks automatic
+   approval in code; fix and re-render, don't argue.
 
    Then the LLM judge — **one spec, run context-free**: spawn a fresh
    subagent (Task tool) whose entire context is the resume text, the JD,
@@ -255,8 +336,13 @@ never as proof a bullet works. Do not compute rates or rank "best bullets".
 
 ## State rules
 
-- `profile.json` remains curated user truth. Tier 0 experience tags and per-JD
-  matches are separate, reviewable data.
+- `profile.json` remains curated user truth for bullets and attested skills.
+  Tier 0 experience-derived skills, optional evidence enrichments, and per-JD
+  matches remain separate, reviewable data.
+- `profile.resumeSkillPolicy` is a human-owned reusable review gate. Missing or
+  stale baseline/role-pack defaults are effectively `review_requested`;
+  neither campaign nor Tier 0 may promote skills into defaults or approve the
+  strategy. New optional pool skills remain JD extras without invalidating it.
 - Only the `experience` skill may scan GitHub. Campaign work is a local index
   read, no matter how many jobs are matched.
 - Re-running is idempotent by job URL. Do not rebuild approved jobs unless the

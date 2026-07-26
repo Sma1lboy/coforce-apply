@@ -10,6 +10,7 @@ import {
   readFileSync,
   rmdirSync,
   statSync,
+  unlinkSync,
   writeFileSync,
 } from 'node:fs';
 import { createHash } from 'node:crypto';
@@ -17,6 +18,7 @@ import { execFileSync } from 'node:child_process';
 import { basename, dirname, extname, join, resolve, sep } from 'node:path';
 import { writeJsonAtomic } from '../../../lib/fs-atomic.mjs';
 import { loadConfig } from '../../../lib/config.mjs';
+import { inferSkillCategory } from '../../../lib/skill-catalog.mjs';
 
 export const CAMPAIGN_SCHEMA = '1.0';
 export const REQUIRED_EXPORT_FILES = [
@@ -45,6 +47,10 @@ const ensureDir = path => {
 };
 
 const readJson = path => JSON.parse(readFileSync(path, 'utf8'));
+
+const removeIfExists = path => {
+  if (existsSync(path)) unlinkSync(path);
+};
 
 // Fails safe to human review: an unreadable or absent config means review.
 export const resumeReviewRequired = dataDir =>
@@ -143,6 +149,8 @@ const snapshotFor = job => ({
   status: job.status,
   matchScore: job.matchScore ?? null,
   evidenceIds: job.evidenceIds || [],
+  selectedSkillIds: job.selectedSkillIds || [],
+  selectedSkillPack: job.selectedSkillPack || null,
   experienceIndexGeneratedAt: job.experienceIndexGeneratedAt || null,
   experienceIndexFingerprint: job.experienceIndexFingerprint || null,
   approvedAt: job.approvedAt || null,
@@ -187,6 +195,8 @@ export function syncJobs(dataDir, incoming) {
       status: 'queued',
       matchScore: null,
       evidenceIds: [],
+      selectedSkillIds: [],
+      selectedSkillPack: null,
       feedback: [],
       approvedAt: null,
       approvalMode: null,
@@ -243,7 +253,14 @@ export function applyResumeReviewPolicy(dataDir) {
     }
     // null = unverifiable (no pdfinfo / template without \resumeItem); only a
     // FAILED metric blocks auto-approval — humans can still approve manually
-    if (judge.onePage === false || judge.fullPage === false || judge.verbatim === false) continue;
+    if (
+      judge.onePage === false ||
+      judge.fullPage === false ||
+      judge.verbatim === false ||
+      judge.skillsDense === false ||
+      judge.skillGroupsDense === false ||
+      judge.skillsVerbatim === false
+    ) continue;
     // the LLM review is mandatory: no recorded passing verdict, no automatic
     // approval — the playbook records llm-judge.json after the context-free
     // judge run (see references/resume-judge.md)
@@ -349,6 +366,13 @@ const STOP = new Set([
 // impossible, not prompt-discouraged.
 
 const bulletId = text => createHash('sha256').update(text).digest('hex').slice(0, 8);
+const skillId = name => createHash('sha256')
+  .update(`skill:${String(name || '').trim().toLowerCase()}`)
+  .digest('hex')
+  .slice(0, 8);
+const DENSE_SKILL_MIN = 18;
+const minimumSkillSelection = poolSize => Math.min(DENSE_SKILL_MIN, poolSize);
+const normalizeSkillName = value => String(value || '').trim().toLowerCase();
 
 export function bulletPool(dataDir) {
   const profilePath = join(dataDir, 'profile.json');
@@ -358,9 +382,13 @@ export function bulletPool(dataDir) {
   const push = (bullet, origin) => {
     const text = String(typeof bullet === 'string' ? bullet : bullet?.text || '').trim();
     if (!text) return;
+    const textZh = typeof bullet === 'object' && typeof bullet?.textZh === 'string'
+      ? bullet.textZh.trim() || null
+      : null;
     pool.push({
       id: bulletId(text),
       text,
+      textZh,
       origin,
       source: (typeof bullet === 'object' && bullet?.source) || null,
       verifiedAt: (typeof bullet === 'object' && bullet?.verifiedAt) || null,
@@ -383,7 +411,149 @@ export function bulletPool(dataDir) {
   return pool;
 }
 
-export function selectBullets(dataDir, id, bulletIds) {
+export function skillPool(dataDir) {
+  const profilePath = join(dataDir, 'profile.json');
+  if (!existsSync(profilePath)) throw new Error('profile.json is missing — run the profile skill first');
+  const profile = readJson(profilePath);
+  const experienceIndexPath = join(dataDir, 'experience', 'experience-index.json');
+  const experienceIndex = existsSync(experienceIndexPath) ? readJson(experienceIndexPath) : null;
+  const byName = new Map();
+  const add = (item, origin) => {
+    const name = String(typeof item === 'string' ? item : item?.name || '').trim();
+    if (!name) return;
+    const key = name.toLowerCase();
+    const evidence = typeof item === 'object' && Array.isArray(item?.evidence)
+      ? item.evidence
+      : [];
+    const evidenceIds = [
+      ...(typeof item === 'object' && Array.isArray(item?.evidenceIds) ? item.evidenceIds : []),
+      ...evidence.map(value => value?.id),
+    ].map(value => String(value || '').trim()).filter(Boolean);
+    const source = (typeof item === 'object' && item?.source) ||
+      evidence.find(value => value?.source)?.source ||
+      null;
+    const category = String(typeof item === 'object' ? item?.category || '' : '').trim() ||
+      inferSkillCategory(name);
+    const existing = byName.get(key);
+    if (existing) {
+      if (existing.category === 'Tools & Technologies' && category !== existing.category) {
+        existing.category = category;
+      }
+      if (!existing.source && source) existing.source = source;
+      existing.evidenceIds = [...new Set([...existing.evidenceIds, ...evidenceIds])];
+      existing.origins = [...new Set([...existing.origins, origin])];
+      existing.attested ||= origin === 'resume';
+      existing.evidenceBacked ||= evidenceIds.length > 0 || origin === 'experience';
+      if (!existing.verifiedAt && typeof item === 'object' && item?.verifiedAt) {
+        existing.verifiedAt = item.verifiedAt;
+      }
+      return;
+    }
+    byName.set(key, {
+      id: skillId(name),
+      name,
+      category,
+      source,
+      evidenceIds: [...new Set(evidenceIds)],
+      verifiedAt: (typeof item === 'object' && item?.verifiedAt) || null,
+      origins: [origin],
+      attested: origin === 'resume',
+      evidenceBacked: evidenceIds.length > 0 || origin === 'experience',
+      legacy: false,
+    });
+  };
+  for (const item of profile.skills || []) add(item, 'resume');
+  for (const item of profile.verifiedSkills || []) add(item, 'experience');
+  for (const item of experienceIndex?.skills || []) add(item, 'experience');
+  const strategy = profile.resumeSkillPolicy && typeof profile.resumeSkillPolicy === 'object'
+    ? profile.resumeSkillPolicy
+    : {};
+  const baseline = new Set((strategy.baseline || []).map(normalizeSkillName).filter(Boolean));
+  const rolePacks = strategy.rolePacks && typeof strategy.rolePacks === 'object' &&
+    !Array.isArray(strategy.rolePacks)
+    ? strategy.rolePacks
+    : {};
+  return [...byName.values()].map(skill => {
+    const key = normalizeSkillName(skill.name);
+    return {
+      ...skill,
+      source: skill.source || (skill.attested ? 'resume-attested' : null),
+      baseline: baseline.has(key),
+      rolePacks: Object.entries(rolePacks)
+        .filter(([, names]) => Array.isArray(names) &&
+          names.some(name => normalizeSkillName(name) === key))
+        .map(([name]) => name),
+    };
+  });
+}
+
+export function skillReview(dataDir) {
+  const profilePath = join(dataDir, 'profile.json');
+  if (!existsSync(profilePath)) throw new Error('profile.json is missing — run the profile skill first');
+  const profile = readJson(profilePath);
+  const strategy = profile.resumeSkillPolicy && typeof profile.resumeSkillPolicy === 'object'
+    ? profile.resumeSkillPolicy
+    : {};
+  const skills = skillPool(dataDir);
+  const namesByKey = new Map(skills.map(skill => [normalizeSkillName(skill.name), skill.name]));
+  const baseline = [...new Set((strategy.baseline || [])
+    .map(value => String(value || '').trim()).filter(Boolean))];
+  const rawRolePacks = strategy.rolePacks && typeof strategy.rolePacks === 'object' &&
+    !Array.isArray(strategy.rolePacks)
+    ? strategy.rolePacks
+    : {};
+  const rolePacks = Object.fromEntries(Object.entries(rawRolePacks)
+    .map(([name, values]) => [
+      String(name || '').trim(),
+      [...new Set((Array.isArray(values) ? values : [])
+        .map(value => String(value || '').trim()).filter(Boolean))],
+    ])
+    .filter(([name, values]) => name && values.length));
+  const referenced = [...baseline, ...Object.values(rolePacks).flat()];
+  const unknown = [...new Set(referenced
+    .filter(name => !namesByKey.has(normalizeSkillName(name))))];
+  const declaredStatus = strategy.status === 'approved' ? 'approved' : 'review_requested';
+  const reviewedAt = typeof strategy.reviewedAt === 'string' && strategy.reviewedAt.trim()
+    ? strategy.reviewedAt
+    : null;
+  const complete = baseline.length > 0 && Object.keys(rolePacks).length > 0 && unknown.length === 0;
+  const status = declaredStatus === 'approved' && reviewedAt && complete ? 'approved' : 'review_requested';
+  const reasons = [];
+  if (declaredStatus !== 'approved') reasons.push('human approval has not been recorded');
+  if (declaredStatus === 'approved' && !reviewedAt) reasons.push('human approval timestamp is missing');
+  if (!baseline.length) reasons.push('the mandatory baseline is empty');
+  if (!Object.keys(rolePacks).length) reasons.push('no non-empty role packs are defined');
+  if (unknown.length) reasons.push(`${unknown.length} baseline or role-pack skills are no longer in the merged pool`);
+  const jdOnly = skills
+    .filter(skill => !skill.baseline && skill.rolePacks.length === 0)
+    .map(skill => skill.name);
+  return {
+    schemaVersion: '1.0',
+    status,
+    declaredStatus,
+    reviewedAt,
+    policy: {
+      baseline: 'mandatory',
+      rolePack: 'mandatory-selected-pack',
+      jdExtras: 'dynamic-from-eligible-pool',
+      classifier: 'human',
+    },
+    counts: {
+      total: skills.length,
+      baseline: skills.filter(skill => skill.baseline).length,
+      rolePacks: Object.keys(rolePacks).length,
+      rolePackMemberships: Object.values(rolePacks).flat().length,
+      jdOnly: jdOnly.length,
+    },
+    baseline,
+    rolePacks,
+    jdOnly,
+    unknown,
+    reasons,
+  };
+}
+
+export function selectBullets(dataDir, id, bulletIds, selectedSkills = [], selectedRolePack = '') {
   const ids = [...new Set((bulletIds || []).map(value => String(value).trim()).filter(Boolean))];
   if (!ids.length) throw new Error('no bullet ids given');
   const pool = bulletPool(dataDir);
@@ -396,6 +566,44 @@ export function selectBullets(dataDir, id, bulletIds) {
   const jdPath = join(jobDir(dataDir, job), 'job-description.md');
   if (!existsSync(jdPath)) throw new Error('job-description.md is missing');
   const bullets = ids.map(item => byId.get(item));
+  const skillIds = [...new Set((selectedSkills || []).map(value => String(value).trim()).filter(Boolean))];
+  const availableSkills = skillPool(dataDir);
+  const skillsById = new Map(availableSkills.map(skill => [skill.id, skill]));
+  const unknownSkills = skillIds.filter(item => !skillsById.has(item));
+  if (unknownSkills.length) {
+    throw new Error(`selection includes skills outside the eligible pool: ${unknownSkills.join(', ')} — skills must come from the user's resume/coursework inventory or local Tier 0 experience index`);
+  }
+  const review = skillReview(dataDir);
+  if (review.status !== 'approved') {
+    throw new Error(`skill policy is review_requested: ${review.reasons.join('; ')} — a human must approve the mandatory baseline and role packs before campaign selection`);
+  }
+  const requestedPack = String(selectedRolePack || '').trim();
+  const rolePackName = Object.keys(review.rolePacks)
+    .find(name => name.toLowerCase() === requestedPack.toLowerCase());
+  if (!rolePackName) {
+    throw new Error(`role pack is review_requested: choose one approved pack for this job (${Object.keys(review.rolePacks).join(', ')})`);
+  }
+  const requiredNames = [...new Set([...review.baseline, ...review.rolePacks[rolePackName]])];
+  const selectedNameKeys = new Set(skillIds
+    .map(skillIdValue => skillsById.get(skillIdValue)?.name)
+    .filter(Boolean)
+    .map(normalizeSkillName));
+  const missingRequired = requiredNames
+    .filter(name => !selectedNameKeys.has(normalizeSkillName(name)));
+  if (missingRequired.length) {
+    throw new Error(`selection omits mandatory skills for baseline + ${rolePackName}: ${missingRequired.join(', ')}`);
+  }
+  const minimumSkills = minimumSkillSelection(availableSkills.length);
+  if (skillIds.length < minimumSkills) {
+    throw new Error(`selection includes ${skillIds.length} skills; select at least ${minimumSkills} from the ${availableSkills.length}-skill eligible pool to preserve resume skill density`);
+  }
+  const skills = skillIds.map(item => skillsById.get(item));
+  const composition = {
+    total: skills.length,
+    baseline: skills.filter(skill => skill.baseline).length,
+    rolePack: skills.filter(skill => !skill.baseline && skill.rolePacks.includes(rolePackName)).length,
+    jdExtras: skills.filter(skill => !skill.baseline && !skill.rolePacks.includes(rolePackName)).length,
+  };
 
   const report = [
     `# Selection Report — ${job.role} at ${job.company}`,
@@ -403,13 +611,30 @@ export function selectBullets(dataDir, id, bulletIds) {
     `- Job: ${job.url}`,
     `- Verified pool: ${pool.length} bullets from profile.json`,
     `- Selected: **${bullets.length}**`,
+    `- Eligible skill pool: ${availableSkills.length} skills from resume/coursework plus the local Tier 0 experience index`,
+    `- Selected skills: **${skills.length}** (minimum density: ${minimumSkills})`,
+    `- Skill policy: **${composition.baseline} baseline + ${composition.rolePack} ${rolePackName} pack + ${composition.jdExtras} JD extras**`,
     '',
     '## Selected Bullets (verbatim — the resume may reorder and cut, never rewrite)',
     '',
     ...bullets.flatMap(bullet => [
       `- \`${bullet.id}\` — ${bullet.text}`,
+      ...(bullet.textZh ? [`  - 中文：${bullet.textZh}`] : []),
       `  - ${bullet.origin}${bullet.source ? ` · ${bullet.source}` : ''}`,
     ]),
+    '',
+    '## Selected Skills (verbatim — group and reorder only)',
+    '',
+    ...(skills.length ? skills.flatMap(skill => [
+      `- \`${skill.id}\` — **${skill.name}** · ${skill.category} · ${
+        skill.baseline
+          ? 'baseline'
+          : skill.rolePacks.includes(rolePackName)
+            ? `role-pack:${rolePackName}`
+            : 'jd-extra'
+      }`,
+      `  - ${skill.source || 'profile-attested'}${skill.evidenceIds.length ? ` · evidence: ${skill.evidenceIds.join(', ')}` : ''}`,
+    ]) : ['_No skills selected._']),
     '',
     '## Iron Law',
     '',
@@ -420,18 +645,32 @@ export function selectBullets(dataDir, id, bulletIds) {
     current.status = 'matched';
     current.matchScore = bullets.length;
     current.evidenceIds = ids;
+    current.selectedSkillIds = skillIds;
+    current.selectedSkillPack = rolePackName;
     current.error = null;
     current.approvedAt = null;
     current.approvalMode = null;
   });
   const dir = jobDir(dataDir, updated);
+  removeIfExists(join(dir, 'judge.json'));
+  removeIfExists(join(dir, 'llm-judge.json'));
   writeFileSync(join(dir, 'match-report.md'), `${report.trim()}\n`);
   writeJsonAtomic(join(dir, 'match.json'), {
     schemaVersion: CAMPAIGN_SCHEMA,
     mode: 'selection',
     selectedAt: now(),
     poolSize: pool.length,
+    skillPoolSize: availableSkills.length,
+    minimumSkillCount: minimumSkills,
+    resumeSkillPolicy: {
+      status: review.status,
+      reviewedAt: review.reviewedAt,
+      policy: review.policy,
+    },
+    selectedRolePack: rolePackName,
+    skillComposition: composition,
     bullets,
+    skills,
   });
   return updated;
 }
@@ -446,6 +685,8 @@ const safeCopy = (source, target) => {
 export function stageArtifacts(dataDir, id, artifacts) {
   const { job } = findJob(dataDir, id);
   const dir = ensureDir(jobDir(dataDir, job));
+  removeIfExists(join(dir, 'judge.json'));
+  removeIfExists(join(dir, 'llm-judge.json'));
   const mapping = {
     jd: 'job-description.md',
     tex: 'resume.tex',
@@ -477,12 +718,121 @@ const findBinary = names => {
   return null;
 };
 
+const escapeSkillTex = value => String(value)
+  .replace(/\\/g, '\\textbackslash{}')
+  .replace(/([&%#_$])/g, '\\$1');
+
+const DISPLAY_SKILL_GROUPS = [
+  {
+    key: 'languages',
+    label: 'Languages & Frameworks',
+    categories: ['Programming Languages', 'Frameworks & Developer Tools'],
+  },
+  {
+    key: 'backend',
+    label: 'Backend, APIs & Data',
+    categories: ['Backend & APIs', 'Databases & Storage'],
+  },
+  {
+    key: 'ai',
+    label: 'AI/ML & Agent Systems',
+    categories: ['AI/ML & Agent Systems'],
+  },
+  {
+    key: 'infra',
+    label: 'Infrastructure & Distributed Systems',
+    categories: ['Infrastructure & Cloud', 'Distributed Systems & Data'],
+  },
+];
+
+const consolidatedSkillGroups = skills => {
+  const categoryToKey = new Map(DISPLAY_SKILL_GROUPS.flatMap(group =>
+    group.categories.map(category => [category.toLowerCase(), group.key])));
+  const groups = DISPLAY_SKILL_GROUPS.map(group => ({ ...group, names: [] }));
+  const byKey = new Map(groups.map(group => [group.key, group]));
+  for (const skill of skills) {
+    const category = String(skill.category || '').trim().toLowerCase();
+    const key = categoryToKey.get(category) || 'backend';
+    byKey.get(key).names.push(String(skill.name || '').trim());
+  }
+  const active = groups.filter(group => group.names.length);
+  const minimum = Math.min(5, skills.length);
+  const merge = (sourceKey, targetKey, label) => {
+    const source = active.find(group => group.key === sourceKey);
+    const target = active.find(group => group.key === targetKey);
+    if (!source || !target || source.names.length >= minimum) return false;
+    target.names = active.indexOf(source) < active.indexOf(target)
+      ? [...source.names, ...target.names]
+      : [...target.names, ...source.names];
+    target.label = label;
+    active.splice(active.indexOf(source), 1);
+    return true;
+  };
+
+  merge('ai', 'languages', 'Languages, Frameworks & AI');
+  merge('infra', 'backend', 'Backend, Data & Infrastructure');
+  merge('backend', 'infra', 'Backend, Data & Infrastructure');
+  merge('languages', 'backend', 'Languages, Frameworks, Backend & Data');
+
+  while (active.length > 1) {
+    const sparse = active.find(group => group.names.length < minimum);
+    if (!sparse) break;
+    const target = active
+      .filter(group => group !== sparse)
+      .sort((a, b) => b.names.length - a.names.length)[0];
+    target.names = active.indexOf(sparse) < active.indexOf(target)
+      ? [...sparse.names, ...target.names]
+      : [...target.names, ...sparse.names];
+    target.label = `${target.label} & Related Technologies`;
+    active.splice(active.indexOf(sparse), 1);
+  }
+  return { groups: active, minimum };
+};
+
+export function syncSelectedSkillsToResume(dataDir, id) {
+  const { job } = findJob(dataDir, id);
+  const dir = jobDir(dataDir, job);
+  const texPath = join(dir, 'resume.tex');
+  const matchPath = join(dir, 'match.json');
+  if (!existsSync(texPath)) throw new Error('resume.tex is missing');
+  if (!existsSync(matchPath)) return { updated: false, skills: 0 };
+  const match = readJson(matchPath);
+  const skills = Array.isArray(match.skills) ? match.skills : [];
+  if (!skills.length) return { updated: false, skills: 0 };
+
+  const display = consolidatedSkillGroups(skills);
+  const rows = display.groups.map(group =>
+    `\\resumeSubItem{${escapeSkillTex(group.label)}:}\n  {${group.names.map(escapeSkillTex).join(', ')}}`
+  ).join('\n\\vspace{-1mm}\n');
+
+  const tex = readFileSync(texPath, 'utf8');
+  const section = tex.match(/\\section\s*\{\s*(?:\\textbf\s*\{\s*)?Skills\s*\}?\s*\}/i);
+  if (!section || section.index === undefined) throw new Error('resume.tex has no Skills section');
+  const startAt = tex.indexOf('\\resumeHeadingSkillStart', section.index + section[0].length);
+  const endAt = tex.indexOf('\\resumeHeadingSkillEnd', startAt);
+  if (startAt === -1 || endAt === -1) {
+    throw new Error('Skills section must use resumeHeadingSkillStart/resumeHeadingSkillEnd');
+  }
+  const bodyStart = startAt + '\\resumeHeadingSkillStart'.length;
+  const next = `${tex.slice(0, bodyStart)}\n${rows}\n${tex.slice(endAt)}`;
+  if (next !== tex) writeFileSync(texPath, next);
+  return {
+    updated: next !== tex,
+    skills: skills.length,
+    groups: display.groups.length,
+    minimumGroupSize: display.minimum,
+  };
+}
+
 export function renderResume(dataDir, id, texSource = null) {
   const { job } = findJob(dataDir, id);
   const dir = ensureDir(jobDir(dataDir, job));
   const tex = join(dir, 'resume.tex');
+  removeIfExists(join(dir, 'judge.json'));
+  removeIfExists(join(dir, 'llm-judge.json'));
   safeCopy(texSource, tex);
   if (!existsSync(tex)) throw new Error('resume.tex is missing');
+  syncSelectedSkillsToResume(dataDir, id);
   const latexmk = findBinary(['latexmk']);
   const pdflatex = findBinary(['pdflatex']);
   const tectonic = findBinary(['tectonic']);
@@ -560,6 +910,50 @@ const texResumeItems = tex => {
   return items;
 };
 
+const texCommandArguments = (tex, command, count) => {
+  const rows = [];
+  let cursor = 0;
+  for (;;) {
+    const at = tex.indexOf(command, cursor);
+    if (at === -1) break;
+    let index = at + command.length;
+    const args = [];
+    while (args.length < count) {
+      while (/\s/.test(tex[index] || '')) index += 1;
+      if (tex[index] !== '{') break;
+      let depth = 1;
+      const start = ++index;
+      while (index < tex.length && depth > 0) {
+        if (tex[index] === '{') depth += 1;
+        else if (tex[index] === '}') depth -= 1;
+        index += 1;
+      }
+      args.push(tex.slice(start, index - 1));
+    }
+    if (args.length === count) rows.push(args);
+    cursor = Math.max(index, at + command.length);
+  }
+  return rows;
+};
+
+const texSkillGroups = tex => {
+  const section = tex.match(/\\section\s*\{\s*(?:\\textbf\s*\{\s*)?Skills\s*\}?\s*\}/i);
+  if (!section || section.index === undefined) return [];
+  const start = section.index + section[0].length;
+  const nextSection = tex.indexOf('\\section', start);
+  const block = tex.slice(start, nextSection === -1 ? tex.length : nextSection);
+  return texCommandArguments(block, '\\resumeSubItem', 2)
+    .map(([label, value]) => ({
+      label: unescapeTex(label).replace(/[{}]/g, '').replace(/:\s*$/, ''),
+      names: unescapeTex(value)
+        .replace(/\\(?:textbf|textit|emph)\{([^{}]*)\}/g, '$1')
+        .replace(/[{}]/g, '')
+        .split(',')
+        .map(item => item.trim())
+        .filter(Boolean),
+    }));
+};
+
 export function judgeResume(dataDir, id) {
   const { job } = findJob(dataDir, id);
   const dir = jobDir(dataDir, job);
@@ -596,10 +990,54 @@ export function judgeResume(dataDir, id) {
   const matchPath = join(dir, 'match.json');
   let verbatim = null;
   const unknownLines = [];
+  let skillsVerbatim = null;
+  let skillsDense = null;
+  let minimumSkillCount = null;
+  const renderedSkillGroups = texSkillGroups(bodyStart === -1 ? texSource : texSource.slice(bodyStart));
+  const renderedSkills = renderedSkillGroups.flatMap(group => group.names);
+  const minimumSkillGroupSize = Math.min(5, renderedSkills.length);
+  const skillGroupsDense = renderedSkillGroups.length
+    ? renderedSkillGroups.every(group => group.names.length >= minimumSkillGroupSize)
+    : null;
+  const unknownSkills = [];
+  const missingSkills = [];
   if (items.length && existsSync(matchPath)) {
-    const allowed = new Set((readJson(matchPath).bullets || []).map(bullet => bullet.text.replace(/\s+/g, ' ').trim()));
+    const match = readJson(matchPath);
+    const allowed = new Set((match.bullets || []).map(bullet => bullet.text.replace(/\s+/g, ' ').trim()));
     for (const item of items) if (!allowed.has(item)) unknownLines.push(item);
     verbatim = unknownLines.length === 0;
+    const selectedSkills = (match.skills || []).map(skill => skill.name.replace(/\s+/g, ' ').trim());
+    minimumSkillCount = Number(match.minimumSkillCount) ||
+      minimumSkillSelection(Number(match.skillPoolSize) || selectedSkills.length);
+    const allowedSkills = new Set(selectedSkills.map(skill => skill.toLowerCase()));
+    const renderedNormalized = renderedSkills.map(skill => skill.replace(/\s+/g, ' ').trim());
+    for (const skill of renderedNormalized) {
+      if (!allowedSkills.has(skill.toLowerCase())) unknownSkills.push(skill);
+    }
+    const renderedSet = new Set(renderedNormalized.map(skill => skill.toLowerCase()));
+    for (const skill of selectedSkills) {
+      if (!renderedSet.has(skill.toLowerCase())) missingSkills.push(skill);
+    }
+    if (renderedSkills.length || selectedSkills.length) {
+      skillsVerbatim = unknownSkills.length === 0 && missingSkills.length === 0;
+      skillsDense = renderedSkills.length >= minimumSkillCount;
+    }
+  } else if (existsSync(matchPath)) {
+    const match = readJson(matchPath);
+    const selectedSkills = (match.skills || []).map(skill => skill.name);
+    minimumSkillCount = Number(match.minimumSkillCount) ||
+      minimumSkillSelection(Number(match.skillPoolSize) || selectedSkills.length);
+    if (renderedSkills.length || selectedSkills.length) {
+      skillsVerbatim = renderedSkills.length === selectedSkills.length &&
+        renderedSkills.every(skill => selectedSkills.some(selected => selected.toLowerCase() === skill.toLowerCase()));
+      skillsDense = renderedSkills.length >= minimumSkillCount;
+      if (!skillsVerbatim) {
+        unknownSkills.push(...renderedSkills.filter(skill =>
+          !selectedSkills.some(selected => selected.toLowerCase() === skill.toLowerCase())));
+        missingSkills.push(...selectedSkills.filter(skill =>
+          !renderedSkills.some(rendered => rendered.toLowerCase() === skill.toLowerCase())));
+      }
+    }
   }
   const judge = {
     schemaVersion: CAMPAIGN_SCHEMA,
@@ -611,6 +1049,19 @@ export function judgeResume(dataDir, id) {
     itemCount: items.length,
     verbatim,
     unknownLines,
+    renderedSkillCount: renderedSkills.length,
+    minimumSkillCount,
+    skillsDense,
+    renderedSkillGroupCount: renderedSkillGroups.length,
+    minimumSkillGroupSize,
+    skillGroupSizes: renderedSkillGroups.map(group => ({
+      label: group.label,
+      count: group.names.length,
+    })),
+    skillGroupsDense,
+    skillsVerbatim,
+    unknownSkills,
+    missingSkills,
   };
   writeJsonAtomic(join(dir, 'judge.json'), judge);
   return judge;
@@ -852,10 +1303,29 @@ export function campaignView(dataDir) {
     jobs: manifest.jobs.map(job => {
       const dir = jobDir(dataDir, job);
       const artifacts = Object.fromEntries(
-        [...REQUIRED_EXPORT_FILES, 'match.json', 'render.log'].map(name => [name, existsSync(join(dir, name))])
+        [...REQUIRED_EXPORT_FILES, 'match.json', 'render.log', 'judge.json', 'llm-judge.json']
+          .map(name => [name, existsSync(join(dir, name))])
       );
       const match = artifacts['match.json'] ? readJson(join(dir, 'match.json')) : null;
-      return { ...job, artifacts, match };
+      const machineJudge = artifacts['judge.json']
+        ? readJson(join(dir, 'judge.json'))
+        : null;
+      const llmJudgeRecord = artifacts['llm-judge.json']
+        ? readJson(join(dir, 'llm-judge.json'))
+        : null;
+      const llmJudge = llmJudgeRecord ? {
+        judgedAt: llmJudgeRecord.judgedAt || null,
+        runs: Number(llmJudgeRecord.runs) || (llmJudgeRecord.verdicts || []).length,
+        runTotals: (llmJudgeRecord.verdicts || [])
+          .map(verdict => Number(verdict?.total))
+          .filter(Number.isFinite),
+        medianTotal: Number.isFinite(Number(llmJudgeRecord.medianTotal))
+          ? Number(llmJudgeRecord.medianTotal)
+          : null,
+        pass: llmJudgeRecord.pass === true,
+        fixes: (llmJudgeRecord.fixes || []).slice(0, 3),
+      } : null;
+      return { ...job, artifacts, match, machineJudge, llmJudge };
     }),
   };
 }

@@ -12,6 +12,8 @@ import {
   exportCampaign,
   bulletPool,
   bulletOutcomes,
+  skillPool,
+  skillReview,
   hydrateJob,
   judgeResume,
   renderResume,
@@ -55,8 +57,22 @@ async function main() {
     console.log(JSON.stringify(bulletPool(dataDir), null, 2));
     return;
   }
+  if (command === 'skills') {
+    console.log(JSON.stringify(skillPool(dataDir), null, 2));
+    return;
+  }
+  if (command === 'skill-review') {
+    console.log(JSON.stringify(skillReview(dataDir), null, 2));
+    return;
+  }
   if (command === 'select') {
-    console.log(JSON.stringify(selectBullets(dataDir, need('--id'), need('--bullets').split(',')), null, 2));
+    console.log(JSON.stringify(selectBullets(
+      dataDir,
+      need('--id'),
+      need('--bullets').split(','),
+      option('--skills', '').split(',').filter(Boolean),
+      option('--skill-pack', ''),
+    ), null, 2));
     return;
   }
   if (command === 'stage') {
@@ -97,7 +113,7 @@ async function main() {
     console.log(JSON.stringify(campaignView(dataDir), null, 2));
     return;
   }
-  throw new Error('usage: campaign.mjs sync|hydrate|pool|select|stage|render|judge|feedback|approve|reconcile|export|outcomes|show [options]');
+  throw new Error('usage: campaign.mjs sync|hydrate|pool|skills|skill-review|select|stage|render|judge|feedback|approve|reconcile|export|outcomes|show [options]');
 }
 
 main().catch(error => {

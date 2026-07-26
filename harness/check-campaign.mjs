@@ -18,7 +18,10 @@ import {
   hydrateJob,
   resolveCampaignFile,
   resumeReviewRequired,
+  skillPool,
+  skillReview,
   stageArtifacts,
+  syncSelectedSkillsToResume,
   syncJobs,
 } from '../.agents/skills/campaign/scripts/campaign-lib.mjs';
 import {
@@ -80,12 +83,36 @@ mkdirSync(dirname(libraryPath), { recursive: true });
 upsertSource(dataDir, { repo: 'example/product', authors: ['candidate'], project: 'Product' });
 writeFileSync(join(dataDir, 'profile.json'), JSON.stringify({
   name: 'Candidate',
-  skills: ['TypeScript', 'Node.js'],
+  skills: ['TypeScript', 'Node.js', 'Python'],
+  resumeSkillPolicy: {
+    status: 'approved',
+    baseline: ['TypeScript'],
+    rolePacks: {
+      backend: ['Node.js'],
+    },
+    reviewedAt: '2026-07-01T00:00:00.000Z',
+  },
+  verifiedSkills: [
+    {
+      name: 'TypeScript',
+      category: 'Programming Languages',
+      source: 'https://github.com/example/product/pull/42',
+      evidenceIds: ['product:pr:repo:42'],
+      verifiedAt: '2026-07-01',
+    },
+    {
+      name: 'Node.js',
+      category: 'Backend & APIs',
+      source: 'https://github.com/example/product/pull/42',
+      evidenceIds: ['product:pr:repo:42'],
+      verifiedAt: '2026-07-01',
+    },
+  ],
   experience: [{
     company: 'Product Inc', title: 'Backend Engineer',
     description: [
-      { text: 'Built reliable TypeScript agent API retries with observability and regression tests', source: 'https://github.com/example/product/pull/42', verifiedAt: '2026-07-01' },
-      { text: 'Migrated data storage schema with zero-downtime migration tooling', source: 'https://github.com/example/product/commit/abc', verifiedAt: '2026-07-01' },
+      { text: 'Built reliable TypeScript agent API retries with observability and regression tests', textZh: '构建具备可观测性和回归测试的可靠 TypeScript Agent API 重试机制', source: 'https://github.com/example/product/pull/42', verifiedAt: '2026-07-01' },
+      { text: 'Migrated data storage schema with zero-downtime migration tooling', textZh: null, source: 'https://github.com/example/product/commit/abc', verifiedAt: '2026-07-01' },
     ],
   }],
   projects: [{
@@ -121,7 +148,16 @@ assert.equal(index.tier, 0);
 
 const tex = join(dataDir, 'fixture.tex');
 const pdf = join(dataDir, 'fixture.pdf');
-writeFileSync(tex, '\\documentclass{article}\\begin{document}Grounded fixture\\end{document}\n');
+writeFileSync(tex, [
+  '\\documentclass{article}',
+  '\\newcommand{\\resumeSubItem}[2]{#1 #2}',
+  '\\begin{document}',
+  '\\section{\\textbf{Skills}}',
+  '\\resumeSubItem{Languages, Frameworks, Backend \\& Data:}{TypeScript, Node.js, Python}',
+  'Grounded fixture',
+  '\\end{document}',
+  '',
+].join('\n'));
 writeFileSync(pdf, onePagePdf('CoForce campaign fixture'));
 
 const stubBin = join(dataDir, 'stub-bin');
@@ -139,25 +175,162 @@ const pool = JSON.parse(poolOut);
 assert.equal(pool.length, 3, 'pool = every bullet already reviewed into profile.json');
 assert.ok(pool.every(bullet => bullet.id.length === 8 && bullet.text && bullet.origin));
 assert.equal(pool.filter(bullet => bullet.verifiedAt).length, 2, 'provenance fields survive into the pool');
+assert.equal(pool[0].textZh, '构建具备可观测性和回归测试的可靠 TypeScript Agent API 重试机制', 'Chinese translation survives into the pool');
+assert.equal(pool[1].textZh, null, 'nullable Chinese translation remains null');
+const skillsOut = execFileSync(process.execPath, [campaignCli, 'skills', '--data-dir', dataDir], {
+  env: { ...process.env, PATH: `${stubBin}:${process.env.PATH}`, COFORCE_GH_LOG: ghLog },
+  encoding: 'utf8',
+});
+const skills = JSON.parse(skillsOut);
+assert.equal(skills.length, 3, 'campaign merges all resume-attested skills with evidence enrichments');
+assert.ok(skills.slice(0, 2).every(skill =>
+  skill.id.length === 8 &&
+  skill.name &&
+  skill.category &&
+  skill.source &&
+  skill.evidenceIds.length
+), 'verified skills preserve category and Tier 0 provenance');
+assert.deepEqual(skills.find(skill => skill.name === 'Python').origins, ['resume']);
+assert.equal(skills.find(skill => skill.name === 'Python').attested, true);
+assert.equal(skills.find(skill => skill.name === 'Python').evidenceBacked, false);
+assert.deepEqual(skills.find(skill => skill.name === 'TypeScript').origins, ['resume', 'experience']);
+assert.equal(skills.find(skill => skill.name === 'TypeScript').baseline, true);
+assert.deepEqual(skills.find(skill => skill.name === 'Node.js').rolePacks, ['backend']);
+assert.equal(skills.find(skill => skill.name === 'Python').baseline, false);
+assert.deepEqual(skills.find(skill => skill.name === 'Python').rolePacks, []);
+const approvedSkillReview = skillReview(dataDir);
+assert.equal(approvedSkillReview.status, 'approved');
+assert.deepEqual(approvedSkillReview.counts, {
+  total: 3,
+  baseline: 1,
+  rolePacks: 1,
+  rolePackMemberships: 1,
+  jdOnly: 1,
+});
+{
+  const profilePath = join(dataDir, 'profile.json');
+  const approvedProfile = JSON.parse(readFileSync(profilePath, 'utf8'));
+  writeFileSync(profilePath, JSON.stringify({
+    ...approvedProfile,
+    resumeSkillPolicy: { ...approvedProfile.resumeSkillPolicy, status: 'review_requested' },
+  }, null, 2));
+  assert.equal(skillReview(dataDir).status, 'review_requested');
+  assert.throws(
+    () => selectBullets(
+      dataDir,
+      synced.added[0].id,
+      [pool[0].id],
+      skills.map(skill => skill.id),
+      'backend',
+    ),
+    /skill policy is review_requested/,
+    'campaign selection waits for explicit human approval of baseline and role packs'
+  );
+  writeFileSync(profilePath, JSON.stringify({
+    ...approvedProfile,
+    skills: [...approvedProfile.skills, 'Redis'],
+  }, null, 2));
+  const driftedReview = skillReview(dataDir);
+  assert.equal(driftedReview.status, 'approved', 'new optional pool skills do not invalidate reviewed defaults');
+  assert.ok(driftedReview.jdOnly.includes('Redis'));
+  writeFileSync(profilePath, JSON.stringify({
+    ...approvedProfile,
+    resumeSkillPolicy: {
+      ...approvedProfile.resumeSkillPolicy,
+      baseline: [...approvedProfile.resumeSkillPolicy.baseline, 'RemovedSkill'],
+    },
+  }, null, 2));
+  const staleReview = skillReview(dataDir);
+  assert.equal(staleReview.status, 'review_requested');
+  assert.deepEqual(staleReview.unknown, ['RemovedSkill']);
+  writeFileSync(profilePath, JSON.stringify(approvedProfile, null, 2));
+}
 for (const job of synced.added) {
   execFileSync(process.execPath, [campaignCli, 'select', '--data-dir', dataDir, '--id', job.id,
-    '--bullets', `${pool[0].id},${pool[2].id}`], {
+    '--bullets', `${pool[0].id},${pool[2].id}`,
+    '--skills', skills.map(skill => skill.id).join(','),
+    '--skill-pack', 'backend'], {
     env: { ...process.env, PATH: `${stubBin}:${process.env.PATH}`, COFORCE_GH_LOG: ghLog },
     stdio: 'pipe',
   });
   const matched = campaignView(dataDir).jobs.find(item => item.id === job.id);
   assert.equal(matched.status, 'matched');
   assert.deepEqual(matched.evidenceIds, [pool[0].id, pool[2].id], 'selection recorded as bullet ids');
+  assert.deepEqual(matched.selectedSkillIds, skills.map(skill => skill.id), 'selection records eligible skill ids');
   assert.equal(matched.match.mode, 'selection');
   assert.equal(matched.match.bullets[0].text, pool[0].text, 'selected bullets are verbatim pool text');
+  assert.equal(matched.match.bullets[0].textZh, pool[0].textZh, 'selected bullets preserve Chinese translations');
+  assert.deepEqual(matched.match.skills.map(skill => skill.name), ['TypeScript', 'Node.js', 'Python']);
+  assert.equal(matched.match.minimumSkillCount, 3);
+  assert.equal(matched.match.skills[0].source, 'https://github.com/example/product/pull/42');
+  assert.equal(matched.selectedSkillPack, 'backend');
+  assert.equal(matched.match.selectedRolePack, 'backend');
+  assert.deepEqual(matched.match.skillComposition, {
+    total: 3,
+    baseline: 1,
+    rolePack: 1,
+    jdExtras: 1,
+  });
   const staged = stageArtifacts(dataDir, job.id, { tex, pdf });
   assert.equal(staged.status, 'rendered', 'default mode waits for manual review');
   assert.equal(staged.approvalMode, null);
+}
+{
+  const selected = campaignView(dataDir).jobs.find(item => item.id === synced.added[0].id);
+  const selectedDir = join(dataDir, 'campaigns', 'current', 'jobs', selected.folder);
+  writeFileSync(join(selectedDir, 'llm-judge.json'), JSON.stringify({ pass: true, medianTotal: 99 }));
+  selectBullets(
+    dataDir,
+    selected.id,
+    [pool[0].id, pool[2].id],
+    skills.map(skill => skill.id),
+    'backend',
+  );
+  assert.equal(existsSync(join(selectedDir, 'llm-judge.json')), false, 'a new bullet/skill selection invalidates the stale LLM verdict');
 }
 assert.throws(
   () => selectBullets(dataDir, synced.added[0].id, [pool[0].id, 'deadbeef']),
   /outside the verified pool/,
   'out-of-pool bullet ids must be rejected — fabrication is structurally impossible'
+);
+assert.throws(
+  () => selectBullets(dataDir, synced.added[0].id, [pool[0].id], [skills[0].id, 'deadbeef']),
+  /skills outside the eligible pool/,
+  'out-of-pool skill ids must be rejected — keyword fabrication is structurally impossible'
+);
+assert.throws(
+  () => selectBullets(
+    dataDir,
+    synced.added[0].id,
+    [pool[0].id],
+    [skills.find(skill => skill.name === 'TypeScript').id,
+      skills.find(skill => skill.name === 'Node.js').id],
+    'backend',
+  ),
+  /select at least 3/,
+  'a sourced but sparse skill selection must be rejected'
+);
+assert.throws(
+  () => selectBullets(
+    dataDir,
+    synced.added[0].id,
+    [pool[0].id],
+    skills.map(skill => skill.id),
+  ),
+  /role pack is review_requested/,
+  'a job must record one approved direction pack instead of inferring defaults from the pool'
+);
+assert.throws(
+  () => selectBullets(
+    dataDir,
+    synced.added[0].id,
+    [pool[0].id],
+    [skills.find(skill => skill.name === 'TypeScript').id,
+      skills.find(skill => skill.name === 'Python').id],
+    'backend',
+  ),
+  /omits mandatory skills/,
+  'baseline and the selected role pack are mandatory before JD extras'
 );
 assert.equal(existsSync(ghLog), false, 'selection must never invoke gh');
 assert.equal(statSync(libraryPath).mtimeMs, libraryBefore.mtimeMs, 'campaign must not rewrite experience sources');
@@ -167,9 +340,16 @@ assert.equal(statSync(libraryPath).mtimeMs, libraryBefore.mtimeMs, 'campaign mus
   const jobView = campaignView(dataDir).jobs.find(item => item.id === synced.added[0].id);
   const jobTexDir = join(dataDir, 'campaigns', 'current', 'jobs', jobView.folder);
   writeFileSync(join(jobTexDir, 'resume.tex'),
-    `\\documentclass{article}\\begin{document}\\newcommand{\\resumeItem}[1]{#1}\n\\resumeItem{${pool[0].text}}\n\\end{document}\n`);
+    `\\documentclass{article}\\begin{document}\\newcommand{\\resumeItem}[1]{#1}\n` +
+    `\\section{\\textbf{Skills}}\\resumeSubItem{Languages, Frameworks, Backend \\& Data:}{TypeScript, Node.js, Python}\n` +
+    `\\resumeItem{${pool[0].text}}\n\\end{document}\n`);
   const good = judgeResume(dataDir, synced.added[0].id);
   assert.equal(good.verbatim, true, 'pool bullet verbatim passes the judge');
+  assert.equal(good.skillsVerbatim, true, 'selected skills rendered verbatim pass the judge');
+  assert.equal(good.skillsDense, true, 'selected skills preserve the verified-pool density floor');
+  assert.equal(good.skillGroupsDense, true, 'consolidated display groups satisfy the per-group density floor');
+  assert.equal(good.renderedSkillGroupCount, 1);
+  assert.equal(good.renderedSkillCount, 3);
   assert.equal(good.itemCount, 1);
   if (good.pageCount !== null) assert.equal(good.onePage, true, 'fixture pdf is one page');
   if (good.fullness !== null) assert.equal(good.fullPage, true, 'fixture pdf fills the page');
@@ -181,12 +361,44 @@ assert.equal(statSync(libraryPath).mtimeMs, libraryBefore.mtimeMs, 'campaign mus
   }
   writeFileSync(join(jobTexDir, 'resume.pdf'), onePagePdf('CoForce campaign fixture'));
   writeFileSync(join(jobTexDir, 'resume.tex'),
-    '\\documentclass{article}\\begin{document}\\newcommand{\\resumeItem}[1]{#1}\n\\resumeItem{Invented a claim that is not in the pool}\n\\end{document}\n');
+    '\\documentclass{article}\\begin{document}\\newcommand{\\resumeItem}[1]{#1}\n' +
+    '\\section{\\textbf{Skills}}\\resumeSubItem{Programming Languages:}{TypeScript, InventedDB}\\resumeSubItem{Backend \\& APIs:}{Node.js}\n' +
+    '\\resumeItem{Invented a claim that is not in the pool}\n\\end{document}\n');
   const bad = judgeResume(dataDir, synced.added[0].id);
   assert.equal(bad.verbatim, false, 'out-of-pool resume line fails the judge');
+  assert.equal(bad.skillsVerbatim, false, 'out-of-pool resume skill fails the judge');
+  assert.equal(bad.skillGroupsDense, false, 'sparse display groups fail the machine judge');
+  assert.deepEqual(bad.unknownSkills, ['InventedDB']);
   assert.equal(bad.unknownLines.length, 1);
   stageArtifacts(dataDir, synced.added[0].id, { tex, pdf });
   judgeResume(dataDir, synced.added[0].id); // restore a clean judge for the flow below
+}
+
+// Saved skill selections replace stale sparse template keywords while the
+// surrounding template body remains intact.
+{
+  const jobView = campaignView(dataDir).jobs.find(item => item.id === synced.added[0].id);
+  const jobTexDir = join(dataDir, 'campaigns', 'current', 'jobs', jobView.folder);
+  const resumeTex = join(jobTexDir, 'resume.tex');
+  writeFileSync(resumeTex, [
+    '\\documentclass{article}',
+    '\\begin{document}',
+    '\\section{\\textbf{Skills}}',
+    '\\resumeHeadingSkillStart',
+    '\\resumeSubItem{Old:}{SparseSkill}',
+    '\\resumeHeadingSkillEnd',
+    '\\section{Projects}',
+    'Keep this body',
+    '\\end{document}',
+    '',
+  ].join('\n'));
+  const syncedSkills = syncSelectedSkillsToResume(dataDir, jobView.id);
+  const syncedTex = readFileSync(resumeTex, 'utf8');
+  assert.equal(syncedSkills.skills, 3);
+  assert.equal(syncedSkills.groups, 1);
+  assert.match(syncedTex, /Languages, Frameworks, Backend \\& Data:.*TypeScript, Python, Node\.js/s);
+  assert.doesNotMatch(syncedTex, /SparseSkill/);
+  assert.match(syncedTex, /\\section\{Projects\}\nKeep this body/);
 }
 
 const first = synced.added[0];

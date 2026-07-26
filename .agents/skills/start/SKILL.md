@@ -1,6 +1,6 @@
 ---
 name: start
-description: Run one discover→resume-campaign cycle — fetch job sources, diff against the tracker, hydrate full JDs, select verbatim bullets from the verified pool in profile.json, render tailored PDFs, and refresh the Review console. Use for "开始", "跑一轮", or "/start"; use `/loop 30m /start` for recurring runs.
+description: Run one discover→resume-campaign cycle — fetch job sources, diff against the tracker, hydrate full JDs, select verbatim reviewed bullets plus eligible resume/experience skills, render tailored PDFs, and refresh the Review console. Use for "开始", "跑一轮", or "/start"; use `/loop 30m /start` for recurring runs.
 ---
 
 # Start — one discover→resume-review cycle
@@ -33,12 +33,13 @@ first in line for resume generation.
    when `workMode` is remote, excluded location) — mark those `rejected` with
    a history note "filtered: <reason>" so they don't resurface.
 3. **Build the resume campaign**: invoke the sibling `campaign` skill. Sync
-   pending jobs, load the verified bullet pool from profile.json, fetch every
-   full JD, select bullets strictly from the pool (verbatim, recorded via
-   `campaign.mjs select`), fill the user's LaTeX template, compile and visually
-   check the PDF. Process revision-requested jobs before new jobs. This cycle
-   must never scan GitHub and never writes new bullet text — an empty pool
-   stops the campaign and sends the user to Module 1 (experience/profile).
+   pending jobs, load verified bullets plus the merged resume/experience skill pool,
+   fetch every full JD, select both strictly from their pools (verbatim,
+   recorded via `campaign.mjs select`), fill the user's LaTeX template, compile
+   and visually check the PDF. Process revision-requested jobs before new jobs.
+   This cycle must never scan GitHub and never writes new bullet or skill text —
+   an empty pool stops the campaign and sends the user to Module 1
+   (experience/profile).
 4. **Finish according to the review setting**: when
    `requireResumeReview !== false`, ensure the console is serving on 4517 and
    open `http://localhost:4517/#review`; report ready / needs Chrome / needs
