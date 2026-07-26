@@ -170,6 +170,46 @@ try {
   const badProf = await fetch(`${base}/api/profile`, { method: 'POST', body: '[1,2]' });
   assert.equal(badProf.status, 400, 'non-object profile rejected');
 
+  // skill-policy review: merged inventory → draft → explicit human approval
+  const skillPolicy = await (await fetch(`${base}/api/skills/policy`)).json();
+  assert.ok(skillPolicy.skills.some(skill => skill.name === 'JavaScript'), 'resume skill enters merged inventory');
+  assert.equal(skillPolicy.review.status, 'review_requested', 'missing policy starts behind review gate');
+  const skillDraft = await fetch(`${base}/api/skills/policy`, {
+    method: 'POST',
+    headers: { 'content-type': 'application/json' },
+    body: JSON.stringify({
+      baseline: ['JavaScript', 'TypeScript'],
+      rolePacks: { frontend: ['React'] },
+      approve: false,
+    }),
+  });
+  assert.equal(skillDraft.status, 200, 'skill-policy draft accepted');
+  assert.equal((await skillDraft.json()).review.status, 'review_requested', 'draft does not unlock selection');
+  const badSkillPolicy = await fetch(`${base}/api/skills/policy`, {
+    method: 'POST',
+    headers: { 'content-type': 'application/json' },
+    body: JSON.stringify({
+      baseline: ['Invented Framework'],
+      rolePacks: { frontend: ['React'] },
+      approve: true,
+    }),
+  });
+  assert.equal(badSkillPolicy.status, 400, 'policy cannot reference skills outside merged pool');
+  const approvedSkillPolicy = await fetch(`${base}/api/skills/policy`, {
+    method: 'POST',
+    headers: { 'content-type': 'application/json' },
+    body: JSON.stringify({
+      baseline: ['JavaScript', 'TypeScript'],
+      rolePacks: { frontend: ['React'] },
+      approve: true,
+    }),
+  });
+  assert.equal(approvedSkillPolicy.status, 200, 'complete skill policy approved');
+  const approvedSkillPolicyJson = await approvedSkillPolicy.json();
+  assert.equal(approvedSkillPolicyJson.review.status, 'approved', 'approval unlocks skill selection');
+  assert.ok(approvedSkillPolicyJson.policy.reviewedAt, 'approval timestamp persisted');
+  console.log('board: skill-policy draft + approval API ✓');
+
   // discovery preferences round-trip (first-run wizard persistence);
   // idempotent — asserts save/overwrite, not initial absence, since
   // harness/out keeps files between runs
@@ -372,7 +412,29 @@ try {
     'job-description.md': '# Fixture JD\n',
     'job.json': JSON.stringify({ id: campaignJob.id }),
     'match-report.md': '# Grounded match\n',
+    'judge.json': JSON.stringify({
+      pageCount: 1,
+      fullness: 0.94,
+      onePage: true,
+      fullPage: true,
+      verbatim: true,
+      skillsVerbatim: true,
+    }),
+    'llm-judge.json': JSON.stringify({
+      judgedAt: '2026-07-26T00:00:00.000Z',
+      runs: 3,
+      medianTotal: 87,
+      pass: true,
+      fixes: ['Add one stronger result metric.'],
+      verdicts: [{ total: 84 }, { total: 87 }, { total: 90 }],
+    }),
   })) writeFileSync(join(campaignDir, name), content);
+  const judgedCampaign = await (await fetch(`${base}/api/campaign`)).json();
+  const judgedJob = judgedCampaign.jobs.find(item => item.id === campaignJob.id);
+  assert.equal(judgedJob.machineJudge.pageCount, 1, 'campaign API exposes the machine gate summary');
+  assert.equal(judgedJob.llmJudge.medianTotal, 87, 'campaign API exposes the LLM judge median');
+  assert.deepEqual(judgedJob.llmJudge.runTotals, [84, 87, 90], 'campaign API exposes all run totals');
+  assert.deepEqual(judgedJob.llmJudge.fixes, ['Add one stronger result metric.']);
   const approved = await fetch(`${base}/api/campaign/jobs/${campaignJob.id}/approve`, { method: 'POST' });
   assert.equal(approved.status, 200, 'campaign approval accepted with complete artifacts');
   assert.equal((await approved.json()).status, 'approved');

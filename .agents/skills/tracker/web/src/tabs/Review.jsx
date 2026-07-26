@@ -31,6 +31,13 @@ const experienceLabel = experience => {
   return 'missing · run /experience refresh';
 };
 
+const qaStatus = judge => {
+  if (!judge) return ['Not scored', 'text-faint border-rule2'];
+  return judge.pass
+    ? ['Pass', 'text-ok border-ok/50']
+    : ['Needs review', 'text-warn border-warn/50'];
+};
+
 function PdfPreview({ url, zoom }) {
   const canvasRef = useRef(null);
   const [error, setError] = useState('');
@@ -191,6 +198,7 @@ export default function Review({ state, onChanged }) {
         <div className="flex-1 min-h-0 overflow-y-auto p-2.5">
           {campaign.jobs.map((job, index) => {
             const [label, klass] = statusFor(job.status, job.approvalMode);
+            const [qaLabel, qaClass] = qaStatus(job.llmJudge);
             return (
               <button
                 key={job.id}
@@ -204,7 +212,14 @@ export default function Review({ state, onChanged }) {
                   <span className="min-w-0">
                     <span className="font-display text-[12.5px] text-ink block truncate">{job.company}</span>
                     <span className="text-[11px] text-muted block mt-0.5 line-clamp-2">{job.role}</span>
-                    <span className={`inline-block mt-2 border rounded-full px-2 py-0.5 text-[9px] uppercase tracking-wide ${klass}`}>{label}</span>
+                    <span className="flex flex-wrap gap-1.5 mt-2">
+                      <span className={`inline-block border rounded-full px-2 py-0.5 text-[9px] uppercase tracking-wide ${klass}`}>{label}</span>
+                      {job.llmJudge && (
+                        <span className={`inline-block border rounded-full px-2 py-0.5 text-[9px] uppercase tracking-wide ${qaClass}`}>
+                          QA {job.llmJudge.medianTotal ?? '—'} · {qaLabel}
+                        </span>
+                      )}
+                    </span>
                   </span>
                 </div>
               </button>
@@ -261,6 +276,50 @@ export default function Review({ state, onChanged }) {
           {selected.artifacts?.['job-description.md'] && <a className="mini" href={jdUrl} target="_blank" rel="noreferrer">JD</a>}
           {selected.artifacts?.['match-report.md'] && <a className="mini" href={matchUrl} target="_blank" rel="noreferrer">Full report</a>}
         </div>
+
+        <div className="h3 flex items-center justify-between">
+          <span>Internal QA</span>
+          <span className="text-[9px] font-normal normal-case tracking-normal text-dim">not ATS / hiring probability</span>
+        </div>
+        {selected.llmJudge ? (() => {
+          const [qaLabel, qaClass] = qaStatus(selected.llmJudge);
+          const machine = selected.machineJudge;
+          return (
+            <div className="rounded-lg border border-rule bg-well p-3">
+              <div className="flex items-end justify-between gap-3">
+                <div>
+                  <span className="font-display text-3xl text-accentsoft">{selected.llmJudge.medianTotal ?? '—'}</span>
+                  <span className="text-[10px] text-dim ml-1">/ 130 median</span>
+                </div>
+                <span className={`border rounded-full px-2 py-1 text-[9px] uppercase tracking-wide ${qaClass}`}>{qaLabel}</span>
+              </div>
+              {!!selected.llmJudge.runTotals?.length && (
+                <div className="flex gap-1.5 mt-2">
+                  {selected.llmJudge.runTotals.map((total, index) => (
+                    <span key={`${total}-${index}`} className="mini">run {index + 1}: {total}</span>
+                  ))}
+                </div>
+              )}
+              {machine && (
+                <div className="text-[10px] text-dim mt-2.5">
+                  Machine gate · {machine.pageCount ?? '—'} page
+                  {Number.isFinite(machine.fullness) ? ` · ${Math.round(machine.fullness * 100)}% full` : ''}
+                  {machine.verbatim === true && machine.skillsVerbatim === true ? ' · grounded ✓' : ''}
+                </div>
+              )}
+              {!!selected.llmJudge.fixes?.length && (
+                <div className="mt-2.5 border-t border-rule pt-2">
+                  <div className="text-[9px] uppercase tracking-wide text-faint mb-1">Judge suggestions</div>
+                  {selected.llmJudge.fixes.map((fix, index) => (
+                    <div key={index} className="text-[10px] leading-4 text-muted mt-1">• {String(fix)}</div>
+                  ))}
+                </div>
+              )}
+            </div>
+          );
+        })() : (
+          <div className="text-[11px] text-dim">No context-isolated judge result for this render yet.</div>
+        )}
 
         <div className="h3">Selected bullets (verbatim)</div>
         {bullets.length ? bullets.slice(0, 8).map(item => (
