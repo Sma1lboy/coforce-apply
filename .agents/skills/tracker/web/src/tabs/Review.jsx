@@ -267,7 +267,7 @@ export default function Review({ state, onChanged }) {
         </div>
         <a href={selected.url} target="_blank" rel="noreferrer" className="block text-[11px] text-accentsoft hover:underline break-all mt-3">View job posting ↗</a>
 
-        <div className="h3">Match signal</div>
+        <div className="h3">Selected evidence</div>
         <div className="flex items-end gap-2">
           <span className="font-display text-3xl text-accentsoft">{selected.matchScore ?? '—'}</span>
           <span className="text-[10px] text-dim mb-1">bullets selected from your verified pool</span>
@@ -305,6 +305,12 @@ export default function Review({ state, onChanged }) {
                   Machine gate · {machine.pageCount ?? '—'} page
                   {Number.isFinite(machine.fullness) ? ` · ${Math.round(machine.fullness * 100)}% full` : ''}
                   {machine.verbatim === true && machine.skillsVerbatim === true ? ' · grounded ✓' : ''}
+                </div>
+              )}
+              {selected.llmJudge.jdFitNote && (
+                <div className="mt-2.5 border-t border-rule pt-2">
+                  <div className="text-[9px] uppercase tracking-wide text-faint mb-1">JD fit note</div>
+                  <div className="text-[10px] leading-4 text-muted">{selected.llmJudge.jdFitNote}</div>
                 </div>
               )}
               {!!selected.llmJudge.fixes?.length && (

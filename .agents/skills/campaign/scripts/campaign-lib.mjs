@@ -360,7 +360,7 @@ const STOP = new Set([
 ]);
 
 // ---- Module 2: JD → strict selection from the verified bullet pool ---------
-// Module 1 (repo-bullets / profile skills) generates bullets JD-free and the
+// Module 1 (experience / profile skills) generates bullets JD-free and the
 // user reviews them INTO profile.json — so the profile IS the verified pool.
 // Selection can only reference pool ids; fabrication is structurally
 // impossible, not prompt-discouraged.
@@ -406,7 +406,7 @@ export function bulletPool(dataDir) {
     }
   }
   if (!pool.length) {
-    throw new Error('profile.json has no bullet points — build the verified pool first (repo-bullets or profile skill), then retry');
+    throw new Error('profile.json has no bullet points — build the verified pool first (experience or profile skill), then retry');
   }
   return pool;
 }
@@ -1313,16 +1313,21 @@ export function campaignView(dataDir) {
       const llmJudgeRecord = artifacts['llm-judge.json']
         ? readJson(join(dir, 'llm-judge.json'))
         : null;
+      const verdicts = llmJudgeRecord?.verdicts || [];
+      const medianTotal = Number.isFinite(Number(llmJudgeRecord?.medianTotal))
+        ? Number(llmJudgeRecord.medianTotal)
+        : null;
+      const representativeVerdict = verdicts.find(verdict =>
+        Number(verdict?.total) === medianTotal) || verdicts[0] || null;
       const llmJudge = llmJudgeRecord ? {
         judgedAt: llmJudgeRecord.judgedAt || null,
-        runs: Number(llmJudgeRecord.runs) || (llmJudgeRecord.verdicts || []).length,
-        runTotals: (llmJudgeRecord.verdicts || [])
+        runs: Number(llmJudgeRecord.runs) || verdicts.length,
+        runTotals: verdicts
           .map(verdict => Number(verdict?.total))
           .filter(Number.isFinite),
-        medianTotal: Number.isFinite(Number(llmJudgeRecord.medianTotal))
-          ? Number(llmJudgeRecord.medianTotal)
-          : null,
+        medianTotal,
         pass: llmJudgeRecord.pass === true,
+        jdFitNote: representativeVerdict?.jd_fit_note || null,
         fixes: (llmJudgeRecord.fixes || []).slice(0, 3),
       } : null;
       return { ...job, artifacts, match, machineJudge, llmJudge };

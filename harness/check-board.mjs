@@ -426,7 +426,11 @@ try {
       medianTotal: 87,
       pass: true,
       fixes: ['Add one stronger result metric.'],
-      verdicts: [{ total: 84 }, { total: 87 }, { total: 90 }],
+      verdicts: [
+        { total: 84, jd_fit_note: 'Good adjacent fit.' },
+        { total: 87, jd_fit_note: 'Strong direct fit; improve proof of impact.' },
+        { total: 90, jd_fit_note: 'Strong direct fit.' },
+      ],
     }),
   })) writeFileSync(join(campaignDir, name), content);
   const judgedCampaign = await (await fetch(`${base}/api/campaign`)).json();
@@ -434,6 +438,11 @@ try {
   assert.equal(judgedJob.machineJudge.pageCount, 1, 'campaign API exposes the machine gate summary');
   assert.equal(judgedJob.llmJudge.medianTotal, 87, 'campaign API exposes the LLM judge median');
   assert.deepEqual(judgedJob.llmJudge.runTotals, [84, 87, 90], 'campaign API exposes all run totals');
+  assert.equal(
+    judgedJob.llmJudge.jdFitNote,
+    'Strong direct fit; improve proof of impact.',
+    'campaign API keeps JD fit distinct from absolute resume QA'
+  );
   assert.deepEqual(judgedJob.llmJudge.fixes, ['Add one stronger result metric.']);
   const approved = await fetch(`${base}/api/campaign/jobs/${campaignJob.id}/approve`, { method: 'POST' });
   assert.equal(approved.status, 200, 'campaign approval accepted with complete artifacts');
