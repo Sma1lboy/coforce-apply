@@ -32,7 +32,7 @@ board.mjs 起 agent),执行仍在 skill 面完成。
 flowchart TB
   subgraph SK[skill 层 · agent 驱动 —— 并行面 A]
     SETUP[setup · 收意图]
-    EXP[experience · 索引]
+    EXP[experience · 证据索引+bullets]
     START[start · 发现入库]
     CAMP[campaign · 匹配+简历]
     APPLY[apply · 浏览器投递]
