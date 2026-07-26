@@ -27,7 +27,7 @@ names, no drift.
   repo-relative references from skill instructions (only `harness` is
   repo-dev-only and exempt).
 - Data files are the contract BETWEEN skills: each schema is canonical in its
-  owning SKILL.md (profile → profile skill, preferences → setup,
+  owning SKILL.md (profile → profile skill, config → setup,
   applications.json → tracker, campaign manifest → campaign, experience index
   → experience) and carries a schema version. Skill playbooks program against
   schemas, never against another skill's code; `.agents/lib/` holds shared

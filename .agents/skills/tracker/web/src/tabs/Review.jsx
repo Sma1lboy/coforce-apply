@@ -148,7 +148,7 @@ export default function Review({ state, onChanged }) {
     const result = await run('feedback', () => api.campaignFeedback(selected.id, feedback));
     if (result) {
       setFeedback('');
-      setMessage('Revision request saved. The next $start cycle will rebuild this resume.');
+      setMessage('Revision request saved. The next /start cycle will rebuild this resume.');
     }
   };
 

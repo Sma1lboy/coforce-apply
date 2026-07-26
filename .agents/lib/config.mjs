@@ -10,7 +10,7 @@
 // on disk, inert. Preferences win on overlap — that was already the documented
 // tie-break. Nothing is written when BOTH old files are absent, because the
 // absence of settings is how the skills detect "setup never ran".
-import { existsSync, readFileSync } from 'node:fs';
+import { readFileSync } from 'node:fs';
 import { join } from 'node:path';
 import { writeJsonAtomic } from './fs-atomic.mjs';
 
@@ -34,11 +34,21 @@ export const INTENT_KEYS = [
 //   agent     — Codex/Claude runtime selector; Claude is now the only runtime
 const DEAD_KEYS = ['workDays', 'agent'];
 
-const readJsonSafe = path => {
+// Absent and corrupt are NOT the same thing. An absent file means "never set
+// up"; a corrupt one means the user has settings we cannot read, and returning
+// {} for it would let the next save overwrite them. Same rule the tracker
+// already applies to applications.json: missing is empty, corrupt throws.
+const readJsonOrThrow = path => {
+  let raw;
   try {
-    return JSON.parse(readFileSync(path, 'utf8'));
+    raw = readFileSync(path, 'utf8');
   } catch {
-    return null;
+    return null; // absent
+  }
+  try {
+    return JSON.parse(raw);
+  } catch (err) {
+    throw new Error(`${path} is not valid JSON (${err.message}). Fix or move it aside — refusing to overwrite settings that might still be recoverable.`);
   }
 };
 
@@ -52,11 +62,11 @@ export const configPath = dataDir => join(dataDir, 'config.json');
  */
 export function loadConfig(dataDir) {
   const path = configPath(dataDir);
-  const current = readJsonSafe(path);
+  const current = readJsonOrThrow(path);
   if (isPlainObject(current)) return current;
 
-  const legacyApply = readJsonSafe(join(dataDir, 'apply-config.json'));
-  const legacyPrefs = readJsonSafe(join(dataDir, 'preferences.json'));
+  const legacyApply = readJsonOrThrow(join(dataDir, 'apply-config.json'));
+  const legacyPrefs = readJsonOrThrow(join(dataDir, 'preferences.json'));
   if (!isPlainObject(legacyApply) && !isPlainObject(legacyPrefs)) return {};
 
   const merged = {
@@ -92,7 +102,7 @@ export function saveConfig(dataDir, patch) {
  * migration the file always exists and the wizard would silently never open.
  */
 export function intentOf(config) {
-  if (!isPlainObject(config) || config.level === undefined) return null;
+  if (!isPlainObject(config) || config.level == null) return null;
   const intent = {};
   for (const key of INTENT_KEYS) {
     if (config[key] !== undefined) intent[key] = config[key];

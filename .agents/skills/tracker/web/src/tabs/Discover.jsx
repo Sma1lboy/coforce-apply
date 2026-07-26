@@ -53,7 +53,7 @@ function PrefsWizard({ onSave }) {
           ))}
         </div>
         <div className="flex items-center justify-between mt-6 gap-4">
-          <span className="text-[11px] text-dim">Saved locally to ~/.coforce/preferences.json — change anytime in the filter panel</span>
+          <span className="text-[11px] text-dim">Saved locally to ~/.coforce/config.json — change anytime in the filter panel</span>
           <button className="btn" onClick={() => onSave({ level, directions: dirs.length ? [...dirs, 'general'] : [] })}>
             Start discovering →
           </button>

@@ -3,7 +3,7 @@
 // no filesystem reads or config sniffing in here.
 import { join } from 'node:path';
 
-// Pipeline stages only — delivery mishaps (tier-1 failure, agent fallback)
+// Pipeline stages only — delivery mishaps (the operator giving up)
 // are history events + a needsFallback flag, not statuses.
 const COLUMNS = [
   ['pending', 'To Apply', 'oklch(75.5% 0.104 79)'],
@@ -484,7 +484,7 @@ export function renderBoard(apps, ctx) {
     <h4>Directions — pick any that fit</h4>
     <div class="choice-row wrap" id="pref-dirs"></div>
     <div class="editor-bar" style="margin-top:16px">
-      <span class="hint">Saved locally to ~/.coforce/preferences.json — change anytime in the filter panel</span>
+      <span class="hint">Saved locally to ~/.coforce/config.json — change anytime in the filter panel</span>
       <button id="prefs-save" type="button">Start discovering →</button>
     </div>
   </div>
@@ -1008,7 +1008,7 @@ function openDetail(app) {
     '<div class="dlg-head" style="--chip-accent:' + color + '">' +
       '<h3>' + escHtml(app.title) + '</h3>' +
       (app.needsFallback && app.status === 'pending'
-        ? '<span class="chip" style="--chip-accent:var(--accent)">agent fallback</span>'
+        ? '<span class="chip" style="--chip-accent:var(--accent)">needs you</span>'
         : '') +
       '<span class="chip">' + escHtml(app.status) + '</span>' +
       '<button class="close" type="button" aria-label="Close">✕</button>' +

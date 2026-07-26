@@ -88,6 +88,39 @@ assert.equal(merged.email, 'ats@example.com', 'runtime config untouched by an in
 assert.equal(merged.version, CONFIG_VERSION, 're-stamped on every save');
 assert.throws(() => saveConfig(home, [1, 2]), 'a non-object patch is rejected');
 
+// --- a corrupt settings file must THROW, never read as "never set up" ---
+// (returning {} there would let the next save overwrite recoverable settings)
+{
+  const broken = join(here, 'out', 'config-broken');
+  rmSync(broken, { recursive: true, force: true });
+  mkdirSync(broken, { recursive: true });
+  writeFileSync(join(broken, 'config.json'), '{"level": "internship"');
+  assert.throws(() => loadConfig(broken), /not valid JSON/, 'truncated config.json throws');
+  assert.throws(() => saveConfig(broken, { level: 'any' }), /not valid JSON/, 'a save cannot clobber it');
+  assert.equal(
+    readFileSync(join(broken, 'config.json'), 'utf8'),
+    '{"level": "internship"',
+    'the damaged file is left exactly as it was'
+  );
+
+  // same rule on the migration path: one corrupt legacy file must not produce
+  // a silently partial config.json
+  const halfBroken = join(here, 'out', 'config-half-broken');
+  rmSync(halfBroken, { recursive: true, force: true });
+  mkdirSync(halfBroken, { recursive: true });
+  writeFileSync(join(halfBroken, 'preferences.json'), '{"level": "newgrad"}');
+  writeFileSync(join(halfBroken, 'apply-config.json'), 'not json at all');
+  assert.throws(() => loadConfig(halfBroken), /not valid JSON/, 'corrupt legacy file throws');
+  assert.equal(
+    existsSync(join(halfBroken, 'config.json')),
+    false,
+    'no partial config.json is written when a legacy file cannot be read'
+  );
+}
+
+// --- a null level still reads as "not onboarded" (wizard must open) ---
+assert.equal(intentOf({ version: 2, level: null }), null, 'explicit null level → wizard');
+
 // --- the intent slice is exactly the intent keys ---
 const intent = intentOf(merged);
 assert.deepEqual(

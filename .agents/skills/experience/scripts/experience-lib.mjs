@@ -93,7 +93,7 @@ export function loadSourceManifest(dataDir, sourceFile = experiencePaths(dataDir
     const suffix = existsSync(legacy)
       ? ` The old auto-discovered file still exists at ${legacy}, but it will not be imported implicitly.`
       : '';
-    throw new Error(`Tier 0 source manifest is missing: ${sourceFile}. Add repositories with $experience source add.${suffix}`);
+    throw new Error(`Tier 0 source manifest is missing: ${sourceFile}. Add repositories with /experience source add.${suffix}`);
   }
   return normalizeSourceManifest(readJson(sourceFile));
 }
@@ -210,13 +210,13 @@ export function buildExperienceIndex(dataDir, options = {}) {
   const profilePath = options.profile || join(dataDir, 'profile.json');
   const sourcePath = options.sources || paths.sources;
   if (!existsSync(libraryPath)) {
-    throw new Error(`Tier 0 GitHub evidence is missing: ${libraryPath}. Run $experience refresh.`);
+    throw new Error(`Tier 0 GitHub evidence is missing: ${libraryPath}. Run /experience refresh.`);
   }
   const library = readJson(libraryPath);
   const sources = loadSourceManifest(dataDir, sourcePath);
   const librarySources = normalizeSourceManifest({ repositories: library.sources || [] });
   if (JSON.stringify(librarySources) !== JSON.stringify(sources)) {
-    throw new Error('Cached GitHub evidence does not match sources.json. Run $experience refresh.');
+    throw new Error('Cached GitHub evidence does not match sources.json. Run /experience refresh.');
   }
   const githubEntries = (Array.isArray(library.entries) ? library.entries : []).map(compactGithubEntry);
   const profile = existsSync(profilePath) ? readJson(profilePath) : null;
@@ -271,8 +271,8 @@ export function experienceView(dataDir) {
         path: paths.index,
         sources,
         message: sources.length
-          ? 'Run $experience refresh once before matching jobs.'
-          : 'Add at least one maintained repo/author source, then run $experience refresh.',
+          ? 'Run /experience refresh once before matching jobs.'
+          : 'Add at least one maintained repo/author source, then run /experience refresh.',
       };
     }
     const index = readJson(paths.index);
@@ -295,11 +295,11 @@ export function experienceView(dataDir) {
       sourcesChanged,
       evidenceChanged,
       message: sourcesChanged
-        ? 'Tier 0 sources changed; run $experience refresh to fetch the maintained repo/author scope.'
+        ? 'Tier 0 sources changed; run /experience refresh to fetch the maintained repo/author scope.'
         : evidenceChanged
-        ? 'Cached GitHub evidence changed after Tier 0 build; run $experience build (no GitHub scan).'
+        ? 'Cached GitHub evidence changed after Tier 0 build; run /experience build (no GitHub scan).'
         : profileChanged
-        ? 'Profile changed after Tier 0 build; run $experience build (no GitHub scan).'
+        ? 'Profile changed after Tier 0 build; run /experience build (no GitHub scan).'
         : 'Campaign matching reads this local index and never scans GitHub.',
     };
   } catch (error) {

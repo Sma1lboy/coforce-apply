@@ -192,8 +192,8 @@ plan in [docs/MIGRATION.md](docs/MIGRATION.md).
 
 ## Privacy
 
-Everything personal lives in `~/.coforce/` and `browser.storage.local` —
-nothing leaves your machine except the applications you approve. ATS passwords go to macOS Keychain, never to files. See
+Everything personal lives in `~/.coforce/` — nothing leaves your machine
+except the applications you approve. ATS passwords go to macOS Keychain, never to files. See
 [PRIVACY.md](PRIVACY.md).
 
 ## License

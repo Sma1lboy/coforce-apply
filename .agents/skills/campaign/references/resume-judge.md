@@ -7,7 +7,7 @@ enrichment pipeline deliberately dropped) folded into ONE prompt, ONE output.
 
 ## How to run — context isolation is the point
 
-Spawn a **fresh subagent** (Claude Code: Task tool; Codex: a new `codex exec`)
+Spawn a **fresh subagent** (the Task tool)
 whose entire context is exactly three things:
 
 1. the resume text (extract from the rendered PDF, not the .tex),

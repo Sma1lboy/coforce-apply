@@ -71,7 +71,7 @@ export default function Settings({ state, onChanged, goWizard }) {
         </div>
 
         <div className="h3">Discovery preferences</div>
-        <div className="text-[11px] text-dim mb-2">What the Discover tab filters by default (~/.coforce/preferences.json)</div>
+        <div className="text-[11px] text-dim mb-2">What the Discover tab filters by default (~/.coforce/config.json)</div>
         <div className="flex gap-2 mb-3">
           {LEVELS.map(([k, label]) => (
             <Chip key={k} sel={prefs.level === k} onClick={() => savePrefs({ ...prefs, level: k })}>{label}</Chip>

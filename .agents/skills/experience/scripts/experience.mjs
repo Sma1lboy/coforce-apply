@@ -51,7 +51,7 @@ const runPython = (script, args) => {
 function refresh() {
   mkdirSync(paths.root, { recursive: true });
   const sources = paths.sources;
-  if (!existsSync(sources)) throw new Error(`Tier 0 source manifest is missing: ${sources}. Add one with $experience source add.`);
+  if (!existsSync(sources)) throw new Error(`Tier 0 source manifest is missing: ${sources}. Add one with /experience source add.`);
   const evidenceArgs = ['sync', '--config', sources, '--out', paths.evidence];
   const ghBinary = option('--gh-binary');
   if (ghBinary) evidenceArgs.push('--gh-binary', ghBinary);

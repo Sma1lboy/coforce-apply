@@ -1,6 +1,6 @@
 # Migration: jd-resume-fitter → CoForce
 
-In-repo rebrand (name, logo, manifest, README) is done. The two remaining
+In-repo rebrand (name, logo, README) is done. The two remaining
 steps touch GitHub / another repo, so they are run by the owner, not
 automated:
 

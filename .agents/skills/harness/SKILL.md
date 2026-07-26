@@ -6,7 +6,7 @@ description: End-to-end mock-environment test of the whole pipeline — fixture 
 # Harness — mock E2E
 
 **Repo-development skill** — it needs the coforce-apply repo checkout
-(`harness/` fixtures, `yarn`), so installers skip it; end users don't need it.
+(`harness/` fixtures), so installers skip it; end users don't need it.
 
 Everything runs against fixtures; the user's real `~/.coforce/profile.json` is
 never touched. Mock environment lives in `harness/`:
@@ -18,8 +18,10 @@ never touched. Mock environment lives in `harness/`:
   (`COFORCE_CLAUDE_BIN`), so apply/import flows run without a real agent
 - `harness/mock/jd.html` — mock job posting (Nimbus Analytics, Senior Full-Stack)
 - `harness/check-formats.sh` / `check-github-evidence.py` /
-  `check-experience.mjs` / `check-campaign.mjs` / `check-board.mjs` /
-  `check-hunt.mjs` — deterministic checks (all six run via `yarn harness`)
+  `check-config.mjs` / `check-experience.mjs` / `check-campaign.mjs` /
+  `check-board.mjs` / `check-hunt.mjs` — deterministic checks (all seven run
+  in order via `npm run harness`; the repo has no npm dependencies, so a bare
+  checkout can run them)
 - `harness/out/` — run artifacts (gitignored)
 
 ## Stages (run all, report per-stage pass/fail)
@@ -38,15 +40,18 @@ Also exercise the alternate output/reference paths: regenerate the docx leg
 `harness/fixtures/reference.docx` back as a reference (mimic check: extraction
 succeeds and output honors its section order).
 
-**2. Deterministic checks (formats, evidence, campaign, board, hunt).**
+**2. Deterministic checks (formats, evidence, config, experience, campaign, board, hunt).**
 ```sh
-yarn harness
+npm run harness
 ```
 Asserts: docx reference extraction and md→docx round-trip work; the vendored
 GitHub evidence layer holds its attribution/pagination/writer guardrails and
-the experience index rebuilds offline; the campaign pipeline selects verbatim
-pool bullets and exports the approved ZIP; the board generator renders all 7
-status columns and fixture cards from `harness/fixtures/applications.json`,
+the experience index rebuilds offline; config.json migrates off the legacy
+settings pair without losing keys and refuses to overwrite a corrupt file;
+the campaign pipeline selects verbatim pool bullets and exports the approved
+ZIP; the board generator renders all 5 status columns and fixture cards from
+`harness/fixtures/applications.json`, rejects a never-apply company at
+`/api/queue`,
 and the console's Chrome-backed apply lifecycle runs consent gate → fill
 (`READY_TO_SUBMIT`) → confirm → `SUBMITTED` against the agent stub; hunt
 parses, dedups against the tracker, and honors the never-apply list.

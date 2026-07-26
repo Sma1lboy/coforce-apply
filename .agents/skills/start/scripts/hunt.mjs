@@ -3,8 +3,10 @@
 //
 // Ships inside the start skill; user data lives in ~/.coforce/.
 //
-//   node hunt.mjs [--track] [--config ~/.coforce/apply-config.json]
+//   node hunt.mjs [--track] [--config ~/.coforce/config.json]
 //     [--source-file path.md ...]   # local files instead of config URLs (harness)
+//   NOTE: only --config's DIRECTORY is used; settings always load from
+//   <dir>/config.json via the shared loader.
 //     [--apps path] [--instructions path]
 //
 // Prints a JSON summary: {new, skipped: {tracked, blocked}, sources}.

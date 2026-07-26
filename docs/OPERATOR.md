@@ -61,7 +61,7 @@ segment, so a retry is never judged by a previous run's sentinels.
    application without an explicit user confirmation for that submission.
    `requireResumeReview: false` and `headlessApply: true` never waive this.
 2. **Never fabricate.** Screening answers (visa, sponsorship, years of
-   experience) come from preferences/profile or stop the run — an unanswerable
+   experience) come from config.json/profile or stop the run — an unanswerable
    required question is `FAILED` (future: `NEEDS_INFO`), not a guess.
 3. **`instructions.md` overrides everything**, including a job already queued:
    a never-apply company means stop and report, at every tier.
