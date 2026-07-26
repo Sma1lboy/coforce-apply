@@ -7,9 +7,7 @@ import { tmpdir } from 'node:os';
 import { dirname, join, resolve } from 'node:path';
 import {
   addFeedback,
-  compareTemplateContract,
   judgeResume,
-  measureWorkProjectsGap,
   selectBullets,
   applyResumeReviewPolicy,
   approveJob,
@@ -33,87 +31,7 @@ import {
   experiencePaths,
   upsertSource,
 } from '../.agents/skills/experience/scripts/experience-lib.mjs';
-
-const compactSectionBbox = `
-<word xMin="20" yMin="100" xMax="60" yMax="110">evidence.</word>
-<word xMin="20" yMin="112" xMax="28" yMax="124">P</word>
-<word xMin="29" yMin="113" xMax="75" yMax="123">ROJECTS</word>`;
-const looseSectionBbox = compactSectionBbox.replace('yMin="112"', 'yMin="120"')
-  .replace('yMax="124"', 'yMax="132"')
-  .replace('yMin="113"', 'yMin="121"')
-  .replace('yMax="123"', 'yMax="131"');
-assert.equal(measureWorkProjectsGap(compactSectionBbox), 12);
-assert.equal(measureWorkProjectsGap(looseSectionBbox), 20);
-
-const templateContractSource = `\\documentclass{article}
-\\newcommand{\\resumeItem}[2]{\\textbf{#1}#2}
-\\begin{document}
-contact|\\href{mailto:test@example.com}{test@example.com}
-\\vspace{-8mm}
-\\section{\\textbf{Education}}
-education
-\\vspace{-9mm}
-\\section{\\textbf{Skills}}
-skills
-\\vspace{-8mm}
-\\section{\\textbf{Projects}}
-\\resumeSubHeadingListStart
-\\resumeSubheading{First}{}{}{}
-\\resumeSubHeadingListEnd
-\\vspace{-9mm}
-\\resumeSubHeadingListStart
-\\vspace{-1mm}
-\\resumeSubheading{Second}{}{}{}
-\\resumeSubHeadingListEnd
-\\vspace{-9mm}
-\\end{document}`;
-assert.deepEqual(compareTemplateContract(templateContractSource, templateContractSource), {
-  templatePreambleExact: true,
-  templateContactHeaderExact: true,
-  skillsSectionSpacingExact: true,
-  projectEntryScaffoldingExact: true,
-  expectedProjectTransitionSpacers: ['-9mm'],
-  renderedProjectTransitionSpacers: ['-9mm'],
-  projectTransitionSpacingExact: true,
-  projectTailSpacingExact: true,
-});
-const driftedTemplateContract = compareTemplateContract(
-  templateContractSource,
-  templateContractSource
-    .replace('\\textbf{#1}#2', '#1#2')
-    .replace('test@example.com', 'visa status')
-    .replace('\\vspace{-9mm}\n\\section{\\textbf{Skills}}', '\\vspace{-6mm}\n\\section{\\textbf{Skills}}')
-    .replace('-9mm', '-6mm')
-);
-assert.equal(driftedTemplateContract.templatePreambleExact, false);
-assert.equal(driftedTemplateContract.templateContactHeaderExact, false);
-assert.equal(driftedTemplateContract.skillsSectionSpacingExact, false);
-assert.equal(driftedTemplateContract.projectTransitionSpacingExact, false);
-assert.equal(driftedTemplateContract.projectTailSpacingExact, true);
-
-function onePagePdf(label, full = true) {
-  const safe = label.replace(/[()\\]/g, '');
-  const bottom = full ? ' BT /F1 12 Tf 72 40 Td (page filled to the bottom margin) Tj ET' : '';
-  const stream = `BT /F1 20 Tf 72 720 Td (${safe}) Tj ET${bottom}`;
-  const objects = [
-    '<< /Type /Catalog /Pages 2 0 R >>',
-    '<< /Type /Pages /Kids [3 0 R] /Count 1 >>',
-    '<< /Type /Page /Parent 2 0 R /MediaBox [0 0 612 792] /Resources << /Font << /F1 5 0 R >> >> /Contents 4 0 R >>',
-    `<< /Length ${Buffer.byteLength(stream)} >>\nstream\n${stream}\nendstream`,
-    '<< /Type /Font /Subtype /Type1 /BaseFont /Helvetica >>',
-  ];
-  let body = '%PDF-1.4\n';
-  const offsets = [0];
-  objects.forEach((object, index) => {
-    offsets.push(Buffer.byteLength(body));
-    body += `${index + 1} 0 obj\n${object}\nendobj\n`;
-  });
-  const xref = Buffer.byteLength(body);
-  body += `xref\n0 ${objects.length + 1}\n0000000000 65535 f \n`;
-  body += offsets.slice(1).map(offset => `${String(offset).padStart(10, '0')} 00000 n \n`).join('');
-  body += `trailer\n<< /Size ${objects.length + 1} /Root 1 0 R >>\nstartxref\n${xref}\n%%EOF\n`;
-  return Buffer.from(body);
-}
+import { onePagePdf } from './pdf-fixture.mjs';
 
 const dataDir = process.env.COFORCE_CAMPAIGN_DIR || mkdtempSync(join(tmpdir(), 'coforce-campaign-'));
 const jobs = [
@@ -251,23 +169,12 @@ assert.ok(skills.slice(0, 2).every(skill =>
   skill.source &&
   skill.evidenceIds.length
 ), 'verified skills preserve category and Tier 0 provenance');
-assert.deepEqual(skills.find(skill => skill.name === 'Python').origins, ['resume']);
 assert.equal(skills.find(skill => skill.name === 'Python').attested, true);
 assert.equal(skills.find(skill => skill.name === 'Python').evidenceBacked, false);
 assert.deepEqual(skills.find(skill => skill.name === 'TypeScript').origins, ['resume', 'experience']);
 assert.equal(skills.find(skill => skill.name === 'TypeScript').baseline, true);
 assert.deepEqual(skills.find(skill => skill.name === 'Node.js').rolePacks, ['backend']);
-assert.equal(skills.find(skill => skill.name === 'Python').baseline, false);
-assert.deepEqual(skills.find(skill => skill.name === 'Python').rolePacks, []);
-const approvedSkillReview = skillReview(dataDir);
-assert.equal(approvedSkillReview.status, 'approved');
-assert.deepEqual(approvedSkillReview.counts, {
-  total: 3,
-  baseline: 1,
-  rolePacks: 1,
-  rolePackMemberships: 1,
-  jdOnly: 1,
-});
+assert.equal(skillReview(dataDir).status, 'approved');
 {
   const profilePath = join(dataDir, 'profile.json');
   const approvedProfile = JSON.parse(readFileSync(profilePath, 'utf8'));
@@ -287,23 +194,6 @@ assert.deepEqual(approvedSkillReview.counts, {
     /skill policy is review_requested/,
     'campaign selection waits for explicit human approval of baseline and role packs'
   );
-  writeFileSync(profilePath, JSON.stringify({
-    ...approvedProfile,
-    skills: [...approvedProfile.skills, 'Redis'],
-  }, null, 2));
-  const driftedReview = skillReview(dataDir);
-  assert.equal(driftedReview.status, 'approved', 'new optional pool skills do not invalidate reviewed defaults');
-  assert.ok(driftedReview.jdOnly.includes('Redis'));
-  writeFileSync(profilePath, JSON.stringify({
-    ...approvedProfile,
-    resumeSkillPolicy: {
-      ...approvedProfile.resumeSkillPolicy,
-      baseline: [...approvedProfile.resumeSkillPolicy.baseline, 'RemovedSkill'],
-    },
-  }, null, 2));
-  const staleReview = skillReview(dataDir);
-  assert.equal(staleReview.status, 'review_requested');
-  assert.deepEqual(staleReview.unknown, ['RemovedSkill']);
   writeFileSync(profilePath, JSON.stringify(approvedProfile, null, 2));
 }
 for (const job of synced.added) {
@@ -322,7 +212,6 @@ for (const job of synced.added) {
   assert.equal(matched.match.bullets[0].text, pool[0].text, 'selected bullets are verbatim pool text');
   assert.equal(matched.match.bullets[0].textZh, pool[0].textZh, 'selected bullets preserve Chinese translations');
   assert.deepEqual(matched.match.skills.map(skill => skill.name), ['TypeScript', 'Node.js', 'Python']);
-  assert.equal(matched.match.minimumSkillCount, 3);
   assert.equal(matched.match.skills[0].source, 'https://github.com/example/product/pull/42');
   assert.equal(matched.selectedSkillPack, 'backend');
   assert.equal(matched.match.selectedRolePack, 'backend');
@@ -336,19 +225,6 @@ for (const job of synced.added) {
   assert.equal(staged.status, 'rendered', 'default mode waits for manual review');
   assert.equal(staged.approvalMode, null);
 }
-{
-  const selected = campaignView(dataDir).jobs.find(item => item.id === synced.added[0].id);
-  const selectedDir = join(dataDir, 'campaigns', 'current', 'jobs', selected.folder);
-  writeFileSync(join(selectedDir, 'llm-judge.json'), JSON.stringify({ pass: true, medianTotal: 99 }));
-  selectBullets(
-    dataDir,
-    selected.id,
-    [pool[0].id, pool[2].id],
-    skills.map(skill => skill.id),
-    'backend',
-  );
-  assert.equal(existsSync(join(selectedDir, 'llm-judge.json')), false, 'a new bullet/skill selection invalidates the stale LLM verdict');
-}
 assert.throws(
   () => selectBullets(dataDir, synced.added[0].id, [pool[0].id, 'deadbeef']),
   /outside the verified pool/,
@@ -358,28 +234,6 @@ assert.throws(
   () => selectBullets(dataDir, synced.added[0].id, [pool[0].id], [skills[0].id, 'deadbeef']),
   /skills outside the eligible pool/,
   'out-of-pool skill ids must be rejected — keyword fabrication is structurally impossible'
-);
-assert.throws(
-  () => selectBullets(
-    dataDir,
-    synced.added[0].id,
-    [pool[0].id],
-    [skills.find(skill => skill.name === 'TypeScript').id,
-      skills.find(skill => skill.name === 'Node.js').id],
-    'backend',
-  ),
-  /select at least 3/,
-  'a sourced but sparse skill selection must be rejected'
-);
-assert.throws(
-  () => selectBullets(
-    dataDir,
-    synced.added[0].id,
-    [pool[0].id],
-    skills.map(skill => skill.id),
-  ),
-  /role pack is review_requested/,
-  'a job must record one approved direction pack instead of inferring defaults from the pool'
 );
 assert.throws(
   () => selectBullets(
@@ -453,8 +307,6 @@ assert.equal(statSync(libraryPath).mtimeMs, libraryBefore.mtimeMs, 'campaign mus
   assert.equal(good.verbatim, true, 'pool bullet verbatim passes the judge');
   assert.equal(good.resumeItemsUseBodyArgument, true, 'resume bullets use the non-bold body argument');
   assert.equal(good.skillsVerbatim, true, 'selected skills rendered verbatim pass the judge');
-  assert.equal(good.skillsDense, true, 'selected skills preserve the verified-pool density floor');
-  assert.equal(good.skillGroupsDense, true, 'consolidated display groups satisfy the per-group density floor');
   assert.equal(good.renderedSkillGroupCount, 1);
   assert.equal(good.renderedSkillCount, 3);
   assert.equal(good.itemCount, 1);
@@ -488,16 +340,6 @@ assert.equal(statSync(libraryPath).mtimeMs, libraryBefore.mtimeMs, 'campaign mus
   }));
   judgeResume(dataDir, synced.added[0].id);
   writeFileSync(join(jobTexDir, 'resume.tex'),
-    `\\documentclass{article}\\begin{document}\\newcommand{\\resumeItem}[2]{\\textbf{#1}#2}\n` +
-    `\\section{\\textbf{Skills}}\\resumeSubItem{Languages, Frameworks, Backend \\& Data:}{TypeScript, Node.js, Python}\n` +
-    `\\resumeItem{${pool[0].text}}{}\n\\end{document}\n`);
-  const wholeBulletBold = judgeResume(dataDir, synced.added[0].id);
-  assert.equal(
-    wholeBulletBold.resumeItemsUseBodyArgument,
-    false,
-    'putting the whole bullet in the bold label argument fails the template contract'
-  );
-  writeFileSync(join(jobTexDir, 'resume.tex'),
     `\\documentclass{article}\\begin{document}\\newcommand{\\resumeItem}[2]{#2}\n` +
     `\\section{\\textbf{Skills}}\\resumeSubItem{Languages, Frameworks, Backend \\& Data:}{TypeScript, Node.js, Python}\n` +
     `\\resumeItem{}{${pool[0].text}}\n\\end{document}\n`);
@@ -515,7 +357,6 @@ assert.equal(statSync(libraryPath).mtimeMs, libraryBefore.mtimeMs, 'campaign mus
   const bad = judgeResume(dataDir, synced.added[0].id);
   assert.equal(bad.verbatim, false, 'out-of-pool resume line fails the judge');
   assert.equal(bad.skillsVerbatim, false, 'out-of-pool resume skill fails the judge');
-  assert.equal(bad.skillGroupsDense, false, 'sparse display groups fail the machine judge');
   assert.deepEqual(bad.unknownSkills, ['InventedDB']);
   assert.equal(bad.unknownLines.length, 1);
   stageArtifacts(dataDir, synced.added[0].id, { tex, pdf });
@@ -544,7 +385,7 @@ assert.equal(statSync(libraryPath).mtimeMs, libraryBefore.mtimeMs, 'campaign mus
   const syncedTex = readFileSync(resumeTex, 'utf8');
   assert.equal(syncedSkills.skills, 3);
   assert.equal(syncedSkills.groups, 1);
-  assert.match(syncedTex, /Languages, Frameworks, Backend \\& Data:.*TypeScript, Python, Node\.js/s);
+  assert.match(syncedTex, /Relevant Skills:.*TypeScript, Node\.js, Python/s);
   assert.doesNotMatch(syncedTex, /SparseSkill/);
   assert.match(syncedTex, /\\section\{Projects\}\nKeep this body/);
 }

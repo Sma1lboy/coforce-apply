@@ -1,4 +1,4 @@
-import React, { useEffect, useMemo, useState } from 'react';
+import React, { useEffect, useState } from 'react';
 import { AnimatePresence, motion } from 'framer-motion';
 import { api } from '../lib/api.js';
 
@@ -146,8 +146,6 @@ const policyShape = review => ({
 function SkillPolicyReview({ setProfile, onChanged }) {
   const [payload, setPayload] = useState(null);
   const [draft, setDraft] = useState(policyShape());
-  const [query, setQuery] = useState('');
-  const [scope, setScope] = useState('all');
   const [newPack, setNewPack] = useState('');
   const [message, setMessage] = useState('');
   const [busy, setBusy] = useState(false);
@@ -165,18 +163,7 @@ function SkillPolicyReview({ setProfile, onChanged }) {
   }, []);
 
   const packNames = Object.keys(draft.rolePacks);
-  const assigned = useMemo(() => new Set([
-    ...draft.baseline,
-    ...Object.values(draft.rolePacks).flat(),
-  ].map(name => name.toLowerCase())), [draft]);
-  const visibleSkills = useMemo(() => (payload?.skills || []).filter(skill => {
-    const haystack = `${skill.name} ${skill.category} ${skill.origins?.join(' ')}`.toLowerCase();
-    if (query && !haystack.includes(query.toLowerCase())) return false;
-    const isAssigned = assigned.has(skill.name.toLowerCase());
-    if (scope === 'assigned') return isAssigned;
-    if (scope === 'extras') return !isAssigned;
-    return true;
-  }), [payload, query, scope, assigned]);
+  const skills = payload?.skills || [];
 
   const toggleBaseline = name => setDraft(previous => {
     const present = previous.baseline.includes(name);
@@ -246,12 +233,6 @@ function SkillPolicyReview({ setProfile, onChanged }) {
 
   const persisted = policyShape(payload?.review);
   const dirty = JSON.stringify(draft) !== JSON.stringify(persisted);
-  const draftCounts = {
-    baseline: draft.baseline.length,
-    packs: packNames.length,
-    memberships: Object.values(draft.rolePacks).flat().length,
-    extras: (payload?.skills || []).filter(skill => !assigned.has(skill.name.toLowerCase())).length,
-  };
   const canApprove = draft.baseline.length > 0 && packNames.length > 0 &&
     packNames.every(pack => draft.rolePacks[pack].length > 0);
   const displayedStatus = dirty ? 'unsaved draft' : payload?.review?.status;
@@ -271,22 +252,8 @@ function SkillPolicyReview({ setProfile, onChanged }) {
       <div className="bg-paper3 border border-rule rounded-xl overflow-hidden">
         <div className="p-3 border-b border-rule">
           <div className="text-[11px] text-dim leading-relaxed">
-            Every tailored resume keeps the baseline, selects one complete role pack,
-            then fills remaining space from JD-matched extras. Saving a draft never
-            unlocks campaign selection; approval does.
-          </div>
-          <div className="grid grid-cols-4 gap-1.5 mt-3">
-            {[
-              ['Baseline', draftCounts.baseline],
-              ['Role packs', draftCounts.packs],
-              ['Pack slots', draftCounts.memberships],
-              ['JD extras', draftCounts.extras],
-            ].map(([label, value]) => (
-              <div key={label} className="bg-paper2 border border-rule rounded-lg px-2 py-1.5">
-                <div className="text-[9px] uppercase tracking-wider text-faint">{label}</div>
-                <div className="font-display text-base text-ink mt-0.5">{value}</div>
-              </div>
-            ))}
+            Baseline + one role pack are required. Other pool skills remain
+            available for the Agent to select by JD relevance.
           </div>
         </div>
 
@@ -319,25 +286,10 @@ function SkillPolicyReview({ setProfile, onChanged }) {
           </div>
         </div>
 
-        <div className="p-2.5 flex gap-1.5 border-b border-rule">
-          <input className="inp !py-1.5 flex-1" placeholder="Filter by skill, category, or source…"
-            value={query} onChange={event => setQuery(event.target.value)} />
-          {[
-            ['all', 'All'],
-            ['assigned', 'Policy'],
-            ['extras', 'Extras'],
-          ].map(([value, label]) => (
-            <button key={value}
-              className={`mini ${scope === value ? '!border-accent !text-ink !bg-accent/10' : ''}`}
-              aria-pressed={scope === value}
-              onClick={() => setScope(value)}>{label}</button>
-          ))}
-        </div>
-
-        <div className="max-h-[390px] overflow-y-auto">
-          {!payload && <div className="p-4 text-[11px] text-dim">Loading merged skill inventory…</div>}
-          {payload && !visibleSkills.length && <div className="p-4 text-[11px] text-dim">No skills match this filter.</div>}
-          {visibleSkills.map(skill => {
+      <div className="max-h-[390px] overflow-y-auto">
+        {!payload && <div className="p-4 text-[11px] text-dim">Loading merged skill inventory…</div>}
+        {payload && !skills.length && <div className="p-4 text-[11px] text-dim">No skills available.</div>}
+        {skills.map(skill => {
             const inBaseline = draft.baseline.includes(skill.name);
             return (
               <div key={skill.id} className="px-3 py-2 border-b border-rule last:border-b-0">
