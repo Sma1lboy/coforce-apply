@@ -5,9 +5,8 @@ description: Build and review a batch of job-specific resumes from local reviewe
 
 # Campaign — JD → grounded resume → review → ZIP
 
-Campaign owns resume generation and review, never application submission.
-Read `~/.coforce/instructions.md` first. Keep all personal and generated data
-under `~/.coforce/`.
+Campaign owns resume generation and review, never application submission. Read
+`~/.coforce/instructions.md` first. Keep personal data under `~/.coforce/`.
 
 ```sh
 node "<campaign-skill>/scripts/campaign.mjs" <command>
@@ -15,25 +14,16 @@ node "<campaign-skill>/scripts/campaign.mjs" <command>
 
 ## Inputs and ownership
 
-- `~/.coforce/config.json` is the only runtime config.
-- `latexTemplate` points to one managed file under `<dataHome>/templates/`.
-  External templates are import-only; setup copies them into that location.
-- `requireResumeReview` defaults to `true`.
-- `resumePageCoverageMinimumPercent` defaults to `93`.
+- `~/.coforce/config.json` is the only runtime config. Its managed
+  `latexTemplate` is under `<dataHome>/templates/`; external files are
+  import-only. Review defaults on and page coverage defaults to 93%.
 - `profile.json` owns reviewed bullets, attested skills, and
   `resumeSkillPolicy`.
 - `experience/experience-index.json` may add sourced skill candidates.
-- Campaign never calls GitHub, refreshes Tier 0, invents a bullet, or creates a
-  skill from JD text.
+- Campaign never calls GitHub, refreshes Tier 0, or invents resume content.
 
-The manifest is `campaigns/current/manifest.json` (`schemaVersion: "1.0"`).
-Each job records identity, folder, status, selected bullet/skill IDs, selected
-role pack, approval metadata, feedback, and error. Valid statuses are:
-
-`queued`, `needs_browser_jd`, `jd_ready`, `matched`, `rendered`,
-`render_failed`, `revision_requested`, `approved`.
-
-Writes are locked and atomic. Each job also has `jobs/<folder>/job.json`.
+`campaigns/current/manifest.json` is atomic state; each job also has
+`jobs/<folder>/job.json`.
 
 ## Cycle
 
@@ -45,8 +35,7 @@ node "<campaign-skill>/scripts/campaign.mjs" show
 node "<campaign-skill>/scripts/campaign.mjs" hydrate --id <job-id>
 ```
 
-If hydration returns `needs_browser_jd`, capture the actual visible JD with the
-runtime browser and provide it as a file:
+If hydration returns `needs_browser_jd`, capture the visible JD and provide it:
 
 ```sh
 node "<campaign-skill>/scripts/campaign.mjs" hydrate --id <job-id> --file <jd.txt>
@@ -62,25 +51,18 @@ node "<campaign-skill>/scripts/campaign.mjs" skills
 node "<campaign-skill>/scripts/campaign.mjs" skill-review
 ```
 
-Bullet IDs derive from canonical English text; nullable `textZh` is metadata.
-Skill records preserve source-owned category and provenance. Profile skills are
-eligible without GitHub proof; Tier 0 can enrich or add candidates.
+Bullet IDs derive from English text; nullable `textZh` is metadata. Skill
+records preserve source category and provenance. Profile skills need no public
+proof; Tier 0 can enrich or add candidates.
 
 `skill-review` must be approved with a non-empty baseline and role packs. An
 Agent may propose policy membership, but only the user approves it.
 
 ### 3. Select for one JD
 
-Read the full JD and both complete pools, then choose:
-
-- the strongest reviewed bullets covering the role's important requirements;
-- the reviewed baseline;
-- one complete approved role pack;
-- any genuinely useful JD-relevant extras from the pool.
-
-Use judgment for quantity and ordering. Prefer evidence and diversity; do not
-dump the pool or chase a fixed keyword count. Every included entry must start
-with its reviewed introductory bullet.
+Read the full JD and pools. Choose strong, diverse bullets plus the baseline,
+one complete role pack, and useful JD extras. Use judgment for quantity and
+ordering; never dump the pool or omit an entry's reviewed introductory bullet.
 
 ```sh
 node "<campaign-skill>/scripts/campaign.mjs" select --id <job-id> \
@@ -89,9 +71,8 @@ node "<campaign-skill>/scripts/campaign.mjs" select --id <job-id> \
   --skill-pack <approved-pack>
 ```
 
-The command rejects IDs outside either pool and rejects missing baseline/pack
-members. It writes `match.json` and `match-report.md`; a new selection
-invalidates prior judges.
+The command rejects pool violations and missing policy members, writes
+`match.json` plus `match-report.md`, and invalidates prior judges.
 
 Also flag hard preference conflicts from config (sponsorship, location,
 work-mode, salary) in the match report.
@@ -123,19 +104,16 @@ Machine review must pass:
   scaffolding/transitions/tail, and resume-item argument placement match the
   managed template.
 
-Coverage failure uses internal reason `page_coverage_insufficient`, keeps the
-job in `revision_requested`, and is hidden from the Human Review API. A passing
-newer judge records `reviewDeliveryProof.pageCoverage` and resolves that
-internal feedback. Fix low coverage with better reviewed content, never by
-changing typography or spacing.
+Coverage failure uses internal reason `page_coverage_insufficient` and remains
+hidden from Human Review. A newer pass records delivery proof and resolves it.
+Fix coverage with reviewed content, never typography or spacing.
 
 Render the latest PDF to PNG and inspect it for collisions, clipping, awkward
 wraps, and inconsistent spacing. Machine checks do not replace visual review.
 
-Then run the context-free LLM judge from `references/resume-judge.md` in a
-fresh agent using only the JD and resume. Run three times, save the median in
-`llm-judge.json`, and use its fixes to reselect or return upstream for reviewed
-source improvements. The generator must not read the judge rubric.
+Run the context-free LLM judge from `references/resume-judge.md` three times in
+a fresh agent using only the JD and resume. Save the median in `llm-judge.json`;
+the generator must not read the rubric.
 
 ### 5. Review and export
 
@@ -154,10 +132,8 @@ folder per job with the PDF, TeX, JD, job snapshot, and match report.
 
 ## Invariants
 
-- Profile is curated truth; campaign only selects from it and the local Tier 0
-  skill index.
-- Policy approval, resume approval, and final application submission are three
-  different gates.
+- Profile and the local Tier 0 skill index are the only selection sources.
+- Policy, resume, and final submission are separate approval gates.
 - Only the experience skill may scan GitHub.
 - Re-running is idempotent by job URL; do not reopen approved jobs without an
   explicit request.
