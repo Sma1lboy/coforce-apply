@@ -231,6 +231,28 @@ input anymore.
    with `resume.pdf`, `resume.tex`, `job-description.md`, `job.json`, and
    `match-report.md`.
 
+## Closing the loop (outcomes)
+
+The pipeline optimises for producing resumes; nothing else looks back at which
+ones worked. `outcomes` joins the bullets selected per job (`evidenceIds` in
+the manifest) with where that application ended up in the tracker:
+
+```sh
+node "<campaign-skill>/scripts/campaign.mjs" outcomes
+```
+
+Returns each bullet with `advanced` (interviewing/offer) and `rejected`
+counts, the jobs it rode on, a `neverUsed` list of pool bullets that have
+never made it onto a resume, and `detached` — ids that were used but no longer
+match any pool bullet, which means the profile text was edited afterwards
+(bullet ids are content hashes).
+
+**Report the `caveat` field verbatim whenever you show this.** A person applies
+to tens of jobs, and the same bullets ride along on nearly every resume, so
+these counts cannot separate cause from correlation. Use it as a reading aid
+when selecting for the next batch, or to spot pool bullets nobody ever picks —
+never as proof a bullet works. Do not compute rates or rank "best bullets".
+
 ## State rules
 
 - `profile.json` remains curated user truth. Tier 0 experience tags and per-JD

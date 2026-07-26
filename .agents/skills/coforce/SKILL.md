@@ -27,6 +27,7 @@ hoc or improvise the workflow inline.
 | One specific JD → one tailored resume (no tracker involvement) | `tailor` |
 | Submitting an application to a posting URL | `apply` |
 | "Where are my applications", board, statuses, notes, archives | `tracker` |
+| "Is this working", which bullets/resumes actually get callbacks | `campaign` (`outcomes` — counts, not evidence; pass its caveat on) |
 
 ## Route by state (when the intent is vague)
 

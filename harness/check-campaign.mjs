@@ -11,6 +11,7 @@ import {
   selectBullets,
   applyResumeReviewPolicy,
   approveJob,
+  bulletOutcomes,
   campaignView,
   exportCampaign,
   htmlToText,
@@ -263,4 +264,40 @@ assert.equal(autoSecondDone.status, 'approved', 'verdict recorded → reconcile 
 assert.equal(autoSecondDone.approvalMode, 'automatic');
 assert.equal(campaignView(autoDir).lastExport.jobCount, 2, 'the final auto-approved job refreshes the ZIP');
 
-console.log('campaign: two JD matches + zero GitHub scans + optional HITL + ZIP ✓');
+// --- outcome feedback: which bullets rode on resumes that got somewhere ---
+// The two synced jobs already carry evidenceIds from the selections above.
+// Give them tracker outcomes and check the join.
+const outcomeJobs = campaignView(dataDir).jobs;
+const [advancedJob, rejectedJob] = outcomeJobs;
+writeFileSync(join(dataDir, 'applications.json'), JSON.stringify([
+  { id: advancedJob.applicationId, url: advancedJob.url, status: 'interviewing' },
+  { id: rejectedJob.applicationId, url: rejectedJob.url, status: 'rejected' },
+], null, 2));
+
+const outcomes = bulletOutcomes(dataDir);
+assert.equal(outcomes.judgedApplications, 2, 'both applications have an outcome');
+assert.ok(/reading aid, not evidence/.test(outcomes.caveat), 'a tiny sample says so out loud');
+const advancedIds = new Set(advancedJob.evidenceIds);
+const rejectedIds = new Set(rejectedJob.evidenceIds);
+for (const row of outcomes.bullets) {
+  assert.equal(row.advanced, advancedIds.has(row.id) ? 1 : 0, `advanced tally for ${row.id}`);
+  assert.equal(row.rejected, rejectedIds.has(row.id) ? 1 : 0, `rejected tally for ${row.id}`);
+  assert.ok(row.text, 'every counted bullet resolves back to its pool text');
+}
+assert.ok(
+  outcomes.bullets[0].advanced >= outcomes.bullets.at(-1).advanced,
+  'sorted by what advanced'
+);
+assert.ok(
+  outcomes.neverUsed.every(b => !advancedIds.has(b.id) && !rejectedIds.has(b.id)),
+  'never-used list excludes everything that shipped'
+);
+assert.deepEqual(outcomes.detached, [], 'no counted bullet has drifted out of the pool');
+
+// a job whose application never left `pending` contributes nothing
+writeFileSync(join(dataDir, 'applications.json'), JSON.stringify([
+  { id: advancedJob.applicationId, url: advancedJob.url, status: 'pending' },
+], null, 2));
+assert.equal(bulletOutcomes(dataDir).judgedApplications, 0, 'unsent applications are not signal');
+
+console.log('campaign: two JD matches + zero GitHub scans + optional HITL + ZIP + outcomes ✓');

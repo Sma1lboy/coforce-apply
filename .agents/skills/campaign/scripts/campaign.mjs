@@ -11,6 +11,7 @@ import {
   campaignView,
   exportCampaign,
   bulletPool,
+  bulletOutcomes,
   hydrateJob,
   judgeResume,
   renderResume,
@@ -88,11 +89,15 @@ async function main() {
     console.log(JSON.stringify(applyResumeReviewPolicy(dataDir), null, 2));
     return;
   }
+  if (command === 'outcomes') {
+    console.log(JSON.stringify(bulletOutcomes(dataDir), null, 2));
+    return;
+  }
   if (command === 'show') {
     console.log(JSON.stringify(campaignView(dataDir), null, 2));
     return;
   }
-  throw new Error('usage: campaign.mjs sync|hydrate|pool|select|stage|render|judge|feedback|approve|reconcile|export|show [options]');
+  throw new Error('usage: campaign.mjs sync|hydrate|pool|select|stage|render|judge|feedback|approve|reconcile|export|outcomes|show [options]');
 }
 
 main().catch(error => {

@@ -761,6 +761,86 @@ export function exportCampaign(dataDir, output = null) {
   });
 }
 
+// Which verified bullets show up in resumes that got somewhere.
+//
+// The pipeline optimises for producing resumes and never looks back at which
+// ones worked. This closes that loop with data both files already carry: the
+// campaign manifest records the bullets selected per job (evidenceIds), the
+// tracker records where each application ended up. Join on applicationId.
+//
+// ponytail: counting, not statistics. A person applies to tens of jobs, not
+// thousands, and the same bullets ride along on almost every resume — read it
+// as "worth a look", never as "this bullet causes interviews". The caveat
+// travels with the data so a summarising agent cannot drop it.
+const OUTCOME_OF = {
+  interviewing: 'advanced',
+  offer: 'advanced',
+  rejected: 'rejected',
+  applied: 'pending',
+  pending: 'not sent',
+};
+
+export function bulletOutcomes(dataDir) {
+  const manifest = loadCampaign(dataDir);
+  const appsPath = join(dataDir, 'applications.json');
+  const apps = existsSync(appsPath) ? readJson(appsPath) : [];
+  const byId = new Map(apps.map(app => [String(app.id), app]));
+  const byUrl = new Map(apps.map(app => [app.url, app]));
+
+  const stats = new Map(); // bullet id → tallies
+  const bump = (id, outcome, job) => {
+    const row = stats.get(id) || { id, advanced: 0, rejected: 0, pending: 0, jobs: [] };
+    if (outcome in row) row[outcome] += 1;
+    row.jobs.push({ company: job.company, role: job.role, outcome });
+    stats.set(id, row);
+  };
+
+  let judged = 0;
+  for (const job of manifest.jobs) {
+    if (!job.evidenceIds?.length) continue;
+    const app = byId.get(String(job.applicationId)) || byUrl.get(job.url);
+    const outcome = OUTCOME_OF[app?.status] ?? 'not sent';
+    if (outcome === 'not sent') continue; // never left the building; no signal
+    judged += 1;
+    for (const id of job.evidenceIds) bump(id, outcome, job);
+  }
+
+  // the pool gives text + origin, and tells us which bullets NEVER got picked
+  let pool = [];
+  try {
+    pool = bulletPool(dataDir);
+  } catch {
+    // no profile yet: report the tallies we have, without text
+  }
+  const poolById = new Map(pool.map(b => [b.id, b]));
+
+  const used = [...stats.values()]
+    .map(row => ({
+      ...row,
+      text: poolById.get(row.id)?.text ?? null,
+      origin: poolById.get(row.id)?.origin ?? null,
+      inPool: poolById.has(row.id),
+    }))
+    .sort((a, b) => b.advanced - a.advanced || b.rejected - a.rejected);
+
+  const neverUsed = pool
+    .filter(b => !stats.has(b.id))
+    .map(b => ({ id: b.id, text: b.text, origin: b.origin }));
+
+  return {
+    judgedApplications: judged,
+    caveat:
+      judged < 10
+        ? `Only ${judged} application(s) have an outcome — this is far too little to mean anything. Treat it as a reading aid, not evidence.`
+        : `Counts over ${judged} applications with an outcome. Directional only: the same bullets ride along on most resumes, so this cannot separate cause from correlation.`,
+    bullets: used,
+    neverUsed,
+    // a bullet no longer in the pool was edited or deleted after being used —
+    // its id is a content hash, so the text moved out from under the record
+    detached: used.filter(b => !b.inPool).map(b => b.id),
+  };
+}
+
 export function campaignView(dataDir) {
   const manifest = loadCampaign(dataDir);
   const paths = campaignPaths(dataDir);
