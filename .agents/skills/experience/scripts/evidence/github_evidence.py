@@ -13,10 +13,11 @@ from .common import ensure_dir, load_json, write_json, write_text
 
 
 SCHEMA_VERSION = "1.0"
+PULL_REQUEST_PAGE_SIZE = 20
 
 PULL_REQUEST_QUERY = """
-query($searchQuery: String!, $endCursor: String) {
-  search(query: $searchQuery, type: ISSUE, first: 100, after: $endCursor) {
+query($searchQuery: String!, $endCursor: String, $pageSize: Int!) {
+  search(query: $searchQuery, type: ISSUE, first: $pageSize, after: $endCursor) {
     issueCount
     pageInfo { hasNextPage endCursor }
     nodes {
@@ -386,6 +387,8 @@ class GitHubClient:
                 f"query={PULL_REQUEST_QUERY}",
                 "-F",
                 f"searchQuery=repo:{repository} is:pr author:{login}",
+                "-F",
+                f"pageSize={PULL_REQUEST_PAGE_SIZE}",
             ]
             if cursor:
                 args.extend(["-F", f"endCursor={cursor}"])
