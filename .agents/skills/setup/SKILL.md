@@ -138,7 +138,12 @@ Tech…) — swap/add the ones matching the user's target roles.
 ## 3. Verified bullets and merged skills (Module 1)
 
 The campaign selects resume lines ONLY from bullets the user has reviewed into
-`profile.json` — so build that pool now. Ask the user to paste the GitHub
+`profile.json` — so build that pool now. If stage 1 imported an existing resume,
+its intake review (`~/.coforce/intake-judge.json`) already says what the material
+is missing — ask for exactly those repos ("your resume lists Go and Kubernetes
+but nothing evidences either — which repo shows that work?") instead of a blank
+"paste your repos", which is a question most people answer with their two most
+recent instead of their two strongest. Otherwise ask the user to paste the GitHub
 repository/PR/commit URLs that represent their experience. Feed each to
 `/experience` (evidence collection, then full-context JD-free
 bullet generation), then walk the user through approving the generated bullets

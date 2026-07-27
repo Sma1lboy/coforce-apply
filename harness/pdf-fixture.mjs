@@ -1,7 +1,10 @@
-export function onePagePdf(label, full = true) {
+// `size` exists so a caller can draw a full bullet sentence as the page's text
+// layer (20pt runs off the media box); the extraction gate needs that layer to
+// carry the real bullet, not a short label.
+export function onePagePdf(label, full = true, size = 20) {
   const safe = label.replace(/[()\\]/g, '');
   const bottom = full ? ' BT /F1 12 Tf 72 40 Td (page filled to the bottom margin) Tj ET' : '';
-  const stream = `BT /F1 20 Tf 72 720 Td (${safe}) Tj ET${bottom}`;
+  const stream = `BT /F1 ${size} Tf 72 720 Td (${safe}) Tj ET${bottom}`;
   const objects = [
     '<< /Type /Catalog /Pages 2 0 R >>',
     '<< /Type /Pages /Kids [3 0 R] /Count 1 >>',

@@ -63,6 +63,14 @@ Agent may propose policy membership, but only the user approves it.
 Read the full JD and pools. Choose strong, diverse bullets plus the baseline,
 one complete role pack, and useful JD extras. Use judgment for quantity and
 ordering; never dump the pool or omit an entry's reviewed introductory bullet.
+Avoid two bullets in one entry opening with the same verb when the pool offers
+an alternative.
+
+**Name what the pool cannot cover.** List the JD's headline requirements that no
+pool bullet can serve. That list is the gap report: give it to the user with the
+selection, and keep it for the judge loop, which otherwise spends three
+regenerate rounds rediscovering it. A gap is Module 1 work (one more repo through
+`/experience`), never a reason to reword or stretch a bullet here.
 
 ```sh
 node "<campaign-skill>/scripts/campaign.mjs" select --id <job-id> \
@@ -99,6 +107,10 @@ Machine review must pass:
 
 - exactly one page and configured page coverage;
 - selected bullets and skills are verbatim and complete;
+- every bullet survives `pdftotext`, in order (`extractable`). Every ATS starts
+  from that text layer, so a bullet that does not extract is a bullet no
+  screener sees. A failure here is almost always the configured
+  `latexTemplate` — report it as a template problem, not a resume problem;
 - compact section transitions;
 - template preamble, contact header, Skills leading spacing, Project entry
   scaffolding/transitions/tail, and resume-item argument placement match the
@@ -111,9 +123,29 @@ Fix coverage with reviewed content, never typography or spacing.
 Render the latest PDF to PNG and inspect it for collisions, clipping, awkward
 wraps, and inconsistent spacing. Machine checks do not replace visual review.
 
-Run the context-free LLM judge from `references/resume-judge.md` three times in
-a fresh agent using only the JD and resume. Save the median in `llm-judge.json`;
-the generator must not read the rubric.
+Run the context-free LLM judge from `references/resume-judge.md` in a fresh
+agent using only the JD and resume. Save the verdict in `llm-judge.json`; the
+generator must not read the rubric. Run it once — median-of-3 only before acting
+on a fail or an automatic approval.
+
+The gate is only what a re-render can change (presentation, JD fit, deductions,
+critical fixes); the rubric's `total` measures the candidate's evidence, so it
+is reported to the user as advice and never blocks a resume. Exact thresholds
+live in the spec.
+
+Classify a failure before spending a second round:
+
+- *selection problem* (wrong bullets, ordering, sparse page) → reselect,
+  re-render, re-judge.
+- *pool gap* (the JD needs a capability no pool bullet carries) → stop looping.
+  Reselecting cannot conjure material. Name the missing capability and the repo
+  or experience that would evidence it, and send that through Module 1.
+- *generation-rule problem* (a whole class of resumes fails the same way) →
+  sediment the rule into Module 1 (`experience` / `profile`), never into the
+  judge spec.
+
+A fix that reappears unchanged after a reselection is a gap or a rule problem,
+not a selection problem.
 
 ### 5. Review and export
 

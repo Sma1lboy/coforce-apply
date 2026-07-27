@@ -19,7 +19,10 @@ PDF path, or text pasted straight into the conversation — parse it into
 import rules (bullets verbatim, nothing invented; a profile imported from the
 user's own resume already counts as reviewed), then continue with the JD.
 Two questions, not twenty. Mention `/setup` only AFTER delivering the PDF, and
-only as what it adds: repeat cycles, job discovery, tracking, submission.
+only as what it adds: repeat cycles, job discovery, tracking, submission. The
+profile skill's intake review of the resume they handed over belongs in that
+same "after" — three lines on what a screener sees, once the PDF is in hand.
+Nothing goes in front of the PDF.
 
 When invoked by the `campaign` skill for a campaign job ID, the campaign
 contract wins: read that job's saved JD/match/feedback, use the

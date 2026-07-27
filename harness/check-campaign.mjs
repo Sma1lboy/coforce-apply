@@ -359,6 +359,25 @@ assert.equal(statSync(libraryPath).mtimeMs, libraryBefore.mtimeMs, 'campaign mus
   assert.equal(bad.skillsVerbatim, false, 'out-of-pool resume skill fails the judge');
   assert.deepEqual(bad.unknownSkills, ['InventedDB']);
   assert.equal(bad.unknownLines.length, 1);
+  // ATS parseability: every ATS starts from the PDF text layer, so a bullet
+  // that does not survive extraction, in order, is a bullet no screener sees.
+  writeFileSync(join(jobTexDir, 'resume.tex'),
+    '\\documentclass{article}\\begin{document}\\newcommand{\\resumeItem}[2]{#2}\n' +
+    `\\resumeItem{}{${pool[0].text}}\n\\end{document}\n`);
+  writeFileSync(join(jobTexDir, 'resume.pdf'), onePagePdf(pool[0].text, true, 12));
+  const extracted = judgeResume(dataDir, synced.added[0].id);
+  if (extracted.extractable !== null) {
+    assert.equal(extracted.extractable, true, 'a bullet present in the PDF text layer extracts');
+    assert.deepEqual(extracted.unextractedLines, []);
+  }
+  // an ATS-hostile render: the page reads fine to a human, the text layer does
+  // not carry the bullet at all (outlined glyphs, scrambled columns)
+  writeFileSync(join(jobTexDir, 'resume.pdf'), onePagePdf('glyphs without a text layer'));
+  const opaque = judgeResume(dataDir, synced.added[0].id);
+  if (opaque.extractable !== null) {
+    assert.equal(opaque.extractable, false, 'a bullet missing from the text layer fails the judge');
+    assert.equal(opaque.unextractedLines.length, 1);
+  }
   stageArtifacts(dataDir, synced.added[0].id, { tex, pdf });
   judgeResume(dataDir, synced.added[0].id); // restore a clean judge for the flow below
 }
