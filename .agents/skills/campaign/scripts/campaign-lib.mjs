@@ -366,7 +366,8 @@ export function applyResumeReviewPolicy(dataDir) {
       judge.projectTailSpacingExact === false ||
       judge.resumeItemsUseBodyArgument === false ||
       judge.verbatim === false ||
-      judge.skillsVerbatim === false
+      judge.skillsVerbatim === false ||
+      judge.extractable === false
     ) continue;
     const coverageProof = pageCoverageDeliveryProof(judge);
     if (!coverageProof) continue;
@@ -1090,6 +1091,15 @@ const unescapeTex = value => String(value)
   .replace(/\s+/g, ' ')
   .trim();
 
+// Compare resume text against extracted PDF text on letters+digits only: line
+// wrapping, hyphenation at a break, punctuation and ligature differences are
+// extraction noise, not ATS failures. What is left detects the real ones.
+const LIGATURES = { 'ﬁ': 'fi', 'ﬂ': 'fl', 'ﬀ': 'ff', 'ﬃ': 'ffi', 'ﬄ': 'ffl' };
+const flattenForExtraction = value => String(value)
+  .replace(/[ﬁﬂﬀﬃﬄ]/g, ch => LIGATURES[ch])
+  .toLowerCase()
+  .replace(/[^\p{L}\p{N}]+/gu, '');
+
 const texResumeItems = tex => {
   const items = [];
   const needle = '\\resumeItem';
@@ -1403,6 +1413,30 @@ export function judgeResume(dataDir, id) {
   const resumeItemsUseBodyArgument = resumeItemArguments.length
     ? resumeItemArguments.every(([label, body]) => !label.trim() && body.trim())
     : null;
+  // ATS parseability. A PDF a human reads fine can still extract as garbage —
+  // two-column templates interleave lines, glyphs with no ToUnicode map extract
+  // as nothing — and every ATS starts from this same text layer, so a bullet
+  // that does not survive extraction, in order, is a bullet no screener ever
+  // sees. Owning the managed template does not settle it: config's
+  // `latexTemplate` can import any .tex the user points at.
+  let extractable = null;
+  const unextractedLines = [];
+  if (items.length && pdftotext) {
+    const flat = flattenForExtraction(
+      execFileSync(pdftotext, [pdfPath, '-'], { encoding: 'utf8' })
+    );
+    let cursor = 0;
+    for (const item of items) {
+      const needle = flattenForExtraction(item);
+      if (needle.length < 8) continue; // too short to locate without false hits
+      const at = flat.indexOf(needle, cursor);
+      // searching from `cursor` also catches reading-order scrambles: a bullet
+      // present but out of sequence reads as missing, which is what an ATS sees
+      if (at === -1) unextractedLines.push(item);
+      else cursor = at + needle.length;
+    }
+    extractable = unextractedLines.length === 0;
+  }
   let templatePreambleExact = null;
   let templateContactHeaderExact = null;
   let skillsSectionSpacingExact = null;
@@ -1490,6 +1524,8 @@ export function judgeResume(dataDir, id) {
     itemCount: items.length,
     verbatim,
     unknownLines,
+    extractable,
+    unextractedLines,
     renderedSkillCount: renderedSkills.length,
     renderedSkillGroupCount: renderedSkillGroups.length,
     skillGroupSizes: renderedSkillGroups.map(group => ({
@@ -1876,7 +1912,15 @@ export function campaignView(dataDir) {
           .filter(Number.isFinite),
         medianTotal,
         pass: llmJudgeRecord.pass === true,
-        jdFitNote: representativeVerdict?.jd_fit_note || null,
+        // the spec's JD fit became a scored dimension; verdicts recorded under
+        // the older free-text `jd_fit_note` must keep rendering in Review
+        jdFitNote: representativeVerdict?.jd_fit?.note
+          || representativeVerdict?.jd_fit_note
+          || null,
+        jdFitScore: Number.isFinite(Number(representativeVerdict?.jd_fit?.score))
+          ? Number(representativeVerdict.jd_fit.score)
+          : null,
+        gate: llmJudgeRecord.gate || null,
         fixes: (llmJudgeRecord.fixes || []).slice(0, 3),
       } : null;
       return { ...job, artifacts, match, machineJudge, llmJudge };

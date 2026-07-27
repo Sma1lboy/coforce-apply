@@ -170,6 +170,46 @@ the README's marketing copy.
      (users, %, latency); with none, write a qualitative outcome rather than
      inventing one.
    - ≤ ~28 words per bullet.
+
+   Then four rules about *what to say*. The pool is the ceiling of every resume
+   this product will ever produce — Module 2 can only choose among these lines —
+   so a fact left out here is a fact no selection can put back:
+
+   - **Name the real thing.** The entry's name is the product's actual name.
+     "Web App", "ML Project", "Full-Stack Platform" tell a reader nothing and
+     read as a placeholder nobody filled in.
+   - **Complexity and scale are facts you dig up, not adjectives.** Go to the
+     diffs for them: service boundaries, concurrency, queues and caches, data
+     volume, real users, deploy/CI. If the bullets you wrote would equally
+     describe a tutorial project, the evidence pass stopped too early — go back
+     to the commits before writing.
+   - **An external contribution must say it is external.** A PR merged into
+     someone else's project is a categorically different fact from a personal
+     repo: name the upstream project, say it merged, give its scale (stars,
+     downloads, who runs it). It is the strongest thing many people have and it
+     is routinely written as if it were a side project — the evidence index
+     already fetched the PR, so this is a writing failure, not a data one.
+   - **Every skill the profile claims needs a bullet behind it.** After merging,
+     check `skills[]` against the bullet texts; a skill nothing evidences is
+     either a missing bullet or a skill that should come off the list. Ask the
+     user which — do not decide silently.
+
+   And two hygiene rules every mainstream resume grader weights heavily
+   (VMock's Impact, Resume Worded's Impact/Style, Rezi's Content) — cheap here,
+   impossible to fix downstream, because Module 2 selects verbatim:
+
+   - **Aim for roughly half the entry's bullets carrying a number.** That is the
+     industry norm, and it does NOT loosen the no-fabrication rule — it is an
+     instruction to go *find* the number in the repo before settling for a
+     qualitative outcome: files/LOC touched, commit or release count, test
+     count, CI minutes, payload size, latency, dataset rows, concurrent users,
+     dependents. Ask the user once for what only they know (real users,
+     adoption). If a number genuinely does not exist, write the qualitative
+     outcome and move on — an invented metric is worse than none.
+   - **Verb and voice hygiene.** Active voice, no personal pronouns, no
+     "responsible for" / "helped with" / "worked on", and no two bullets in one
+     entry opening with the same verb. Graders check all four mechanically and a
+     reader feels them instantly.
 5. **Merge on confirmation**: append to `~/.coforce/profile.json` `projects[]`
    as `{name, url, description: [{text, source, verifiedAt}...], technologies,
    dateRange}` (dateRange from first/last commit dates). Schema rules live in
