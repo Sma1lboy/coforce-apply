@@ -243,7 +243,8 @@ export function applyResumeReviewPolicy(dataDir) {
     }
     // null = unverifiable (no pdfinfo / template without \resumeItem); only a
     // FAILED metric blocks auto-approval — humans can still approve manually
-    if (judge.onePage === false || judge.fullPage === false || judge.verbatim === false) continue;
+    if (judge.onePage === false || judge.fullPage === false || judge.verbatim === false
+      || judge.extractable === false) continue;
     // the LLM review is mandatory: no recorded passing verdict, no automatic
     // approval — the playbook records llm-judge.json after the context-free
     // judge run (see references/resume-judge.md)
@@ -539,6 +540,15 @@ const unescapeTex = value => String(value)
   .replace(/\s+/g, ' ')
   .trim();
 
+// Compare resume text against extracted PDF text on letters+digits only: line
+// wrapping, hyphenation at a break, punctuation and ligature differences are
+// extraction noise, not ATS failures. What is left detects the real ones.
+const LIGATURES = { 'ﬁ': 'fi', 'ﬂ': 'fl', 'ﬀ': 'ff', 'ﬃ': 'ffi', 'ﬄ': 'ffl' };
+const flattenForExtraction = value => String(value)
+  .replace(/[ﬁﬂﬀﬃﬄ]/g, ch => LIGATURES[ch])
+  .toLowerCase()
+  .replace(/[^\p{L}\p{N}]+/gu, '');
+
 const texResumeItems = tex => {
   const items = [];
   const needle = '\\resumeItem{';
@@ -601,6 +611,28 @@ export function judgeResume(dataDir, id) {
     for (const item of items) if (!allowed.has(item)) unknownLines.push(item);
     verbatim = unknownLines.length === 0;
   }
+  // ATS parseability. A PDF a human reads fine can still extract as garbage —
+  // two-column templates interleave lines, glyphs with no ToUnicode map
+  // extract as nothing — and every ATS starts from this same text layer, so a
+  // bullet that does not survive extraction, in order, is a bullet no screener
+  // ever sees. This cannot be assumed away by owning the template: config's
+  // `latexTemplate` lets the user point at any .tex they like.
+  let extractable = null;
+  const unextractedLines = [];
+  if (items.length && pdftotext) {
+    const flat = flattenForExtraction(execFileSync(pdftotext, [pdfPath, '-'], { encoding: 'utf8' }));
+    let cursor = 0;
+    for (const item of items) {
+      const needle = flattenForExtraction(item);
+      if (needle.length < 8) continue; // too short to locate without false hits
+      const at = flat.indexOf(needle, cursor);
+      // searching from `cursor` also catches reading-order scrambles: a bullet
+      // present but out of sequence reads as missing, which is what an ATS sees
+      if (at === -1) unextractedLines.push(item);
+      else cursor = at + needle.length;
+    }
+    extractable = unextractedLines.length === 0;
+  }
   const judge = {
     schemaVersion: CAMPAIGN_SCHEMA,
     judgedAt: now(),
@@ -611,6 +643,8 @@ export function judgeResume(dataDir, id) {
     itemCount: items.length,
     verbatim,
     unknownLines,
+    extractable,
+    unextractedLines,
   };
   writeJsonAtomic(join(dir, 'judge.json'), judge);
   return judge;

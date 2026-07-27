@@ -27,10 +27,10 @@ import {
   upsertSource,
 } from '../.agents/skills/experience/scripts/experience-lib.mjs';
 
-function onePagePdf(label, full = true) {
+function onePagePdf(label, full = true, size = 20) {
   const safe = label.replace(/[()\\]/g, '');
   const bottom = full ? ' BT /F1 12 Tf 72 40 Td (page filled to the bottom margin) Tj ET' : '';
-  const stream = `BT /F1 20 Tf 72 720 Td (${safe}) Tj ET${bottom}`;
+  const stream = `BT /F1 ${size} Tf 72 720 Td (${safe}) Tj ET${bottom}`;
   const objects = [
     '<< /Type /Catalog /Pages 2 0 R >>',
     '<< /Type /Pages /Kids [3 0 R] /Count 1 >>',
@@ -168,11 +168,25 @@ assert.equal(statSync(libraryPath).mtimeMs, libraryBefore.mtimeMs, 'campaign mus
   const jobTexDir = join(dataDir, 'campaigns', 'current', 'jobs', jobView.folder);
   writeFileSync(join(jobTexDir, 'resume.tex'),
     `\\documentclass{article}\\begin{document}\\newcommand{\\resumeItem}[1]{#1}\n\\resumeItem{${pool[0].text}}\n\\end{document}\n`);
+  // the PDF's text layer carries the same bullet — an ATS can read it
+  writeFileSync(join(jobTexDir, 'resume.pdf'), onePagePdf(pool[0].text, true, 12));
   const good = judgeResume(dataDir, synced.added[0].id);
   assert.equal(good.verbatim, true, 'pool bullet verbatim passes the judge');
   assert.equal(good.itemCount, 1);
   if (good.pageCount !== null) assert.equal(good.onePage, true, 'fixture pdf is one page');
   if (good.fullness !== null) assert.equal(good.fullPage, true, 'fixture pdf fills the page');
+  if (good.extractable !== null) {
+    assert.equal(good.extractable, true, 'a bullet present in the PDF text layer extracts');
+  }
+  // an ATS-hostile render: the page looks right to a human, the text layer
+  // does not carry the bullet at all (outlined glyphs, scrambled columns)
+  writeFileSync(join(jobTexDir, 'resume.pdf'), onePagePdf('glyphs without a text layer'));
+  const opaque = judgeResume(dataDir, synced.added[0].id);
+  if (opaque.extractable !== null) {
+    assert.equal(opaque.extractable, false, 'a bullet missing from the text layer fails the judge');
+    assert.equal(opaque.unextractedLines.length, 1);
+  }
+  writeFileSync(join(jobTexDir, 'resume.pdf'), onePagePdf(pool[0].text, true, 12));
   // a one-page resume that leaves the bottom half empty must FAIL the judge
   writeFileSync(join(jobTexDir, 'resume.pdf'), onePagePdf('sparse fixture', false));
   const sparse = judgeResume(dataDir, synced.added[0].id);

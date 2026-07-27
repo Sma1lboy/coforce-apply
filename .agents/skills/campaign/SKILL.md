@@ -126,7 +126,9 @@ input anymore.
    > (1) cover the JD's top 3–5 required capabilities first — every one of
    > them should have at least one bullet if the pool has it; (2) prefer
    > bullets with concrete, verifiable outcomes over activity descriptions;
-   > (3) diversity beats repetition — max ~2 bullets making the same point;
+   > (3) diversity beats repetition — max ~2 bullets making the same point,
+   > and avoid two bullets in one entry opening with the same verb when the
+   > pool offers an alternative;
    > (4) respect entry coherence: bullets you pick determine which
    > experience/project entries appear, so avoid orphan entries with one weak
    > bullet; (5) 6–14 bullets total, one page after layout; (6) every entry
@@ -135,6 +137,13 @@ input anymore.
    > bullets; an entry whose intro bullet doesn't fit doesn't fit; (7) output
    > ONLY pool ids in display order — you cannot edit text, and ids outside
    > the pool will be rejected.
+
+   **Name what you could not cover.** Rule (1) is capped by the pool: list the
+   JD's headline requirements that NO pool bullet can serve. That list is the
+   gap report — say it to the user with the selection, and keep it for the
+   judge loop below, which otherwise spends three regenerate rounds
+   rediscovering it. A gap is Module 1 work (one more repo through
+   `/experience`), never a reason to reword or stretch a bullet here.
 
    Alongside the selection, check the JD against `~/.coforce/config.json`
    (canonical user intent — `needsSponsorship`, `workMode`, `locations`,
@@ -162,22 +171,30 @@ input anymore.
    ```
 
    `judge.json` must show `onePage: true` (exactly one page), `fullPage: true`
-   (content reaches ≥88% down the page — a half-empty page is as much a failed
+   (content reaches ≥93% down the page — a half-empty page is as much a failed
    product as a second page; fix by selecting MORE pool bullets, never by
-   inflating text), and `verbatim: true` (every `\resumeItem` is one of the
-   selected bullets, word for word). A failed metric blocks automatic approval
+   inflating text), `verbatim: true` (every `\resumeItem` is one of the
+   selected bullets, word for word), and `extractable: true` (every bullet
+   survives `pdftotext`, in order — every ATS reads that same text layer, so a
+   bullet that does not extract is a bullet no screener sees; a failure here
+   is almost always the user's own `latexTemplate`, so report it as a template
+   problem, not a resume problem). A failed metric blocks automatic approval
    in code; fix and re-render, don't argue.
 
    Then the LLM judge — **one spec, run context-free**: spawn a fresh
    subagent (Task tool) whose entire context is the resume text, the JD,
    and `references/resume-judge.md`.
    The agent that assembled the resume never judges it; do not pass it the
-   pool or your selection rationale. Run 3× and take the median when the
-   score drives a decision. Record the verdict as `llm-judge.json` in the job
-   folder (schema + pass bar in the spec): **automatic approval is code-gated
-   on a recorded passing verdict**, and a failing score loops — apply the
+   pool or your selection rationale. Run it once; median-of-3 only before
+   acting on a fail or an automatic approval (rule in the spec). Record the
+   verdict as `llm-judge.json` in the job
+   folder (schema + gate in the spec): **automatic approval is code-gated
+   on a recorded passing verdict**, and a failing gate loops — apply the
    fixes, re-render, re-judge, at most 3 rounds, then escalate to the user
-   with the verdicts. Isolation is two-way — the selection/assembly
+   with the verdicts. The gate covers only what a re-render can change
+   (presentation, JD fit, deductions); the spec's `total` measures the
+   candidate's evidence, so it is reported to the user as advice and never
+   blocks a resume. Isolation is two-way — the selection/assembly
    steps above must never read the judge spec: a generator that sees the
    rubric games the score instead of telling the truth.
 
@@ -186,12 +203,21 @@ input anymore.
 
    - *selection problem* (wrong bullets, ordering, sparse page) → fix this
      resume: reselect/reorder, re-render, re-judge.
+   - *pool gap* (the JD needs a capability no pool bullet carries — the
+     uncovered list from step 4 usually named it already) → **stop looping**.
+     Reselecting cannot conjure material; three rounds against a gap just
+     burn tokens and end in the same escalation. Tell the user which
+     capability is missing and which repo or experience would evidence it,
+     and send that one through Module 1.
    - *generation-rule problem* (a whole class of resumes would fail the same
      way: missing project links, unevidenced skills, no demo URLs) → sediment
      a rule change into Module 1's prompts (experience / profile SKILL.md)
      with the user's sign-off, then regenerate downstream. Judge findings are
      how the generation prompts iterate — never edit the judge to make a
      finding go away.
+
+   Classify BEFORE spending round 2. A fix that reappears unchanged after a
+   reselection is a gap or a rule problem, not a selection problem.
 
    Already-sedimented examples: full page ⇒ select more bullets (never
    inflate text); projects are born with repo/demo links.

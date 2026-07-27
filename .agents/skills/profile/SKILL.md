@@ -25,6 +25,14 @@ to a JD — set it when the user signals importance, otherwise omit.
 **Init** (`~/.coforce/profile.json` missing):
 - Create `~/.coforce/` if needed. If the user has an existing resume
   (PDF/JSON/text), read it and map into the schema.
+- **A resume that lands here gets an intake review** — the material the user
+  arrived with becomes the pool every future resume is selected from, so it is
+  worth knowing what a screener sees in it before building on top. Run it per
+  the `campaign` skill's `references/resume-judge.md`, **Intake mode** section
+  (sibling install; fresh subagent, never this one — a parser that has read
+  the rubric writes to it). It gates nothing and it runs AFTER whatever the
+  user actually came for: `tailor`'s front door delivers the PDF first, then
+  this. Skip it entirely if the user only asked to edit one field.
 - Point the user at the console's Profile tab (tracker skill, port 4517) as
   the friendly editing surface: structured form (basics, skill chips,
   experience/project/education cards with per-bullet editing) plus an
@@ -63,7 +71,9 @@ path: `experience` reads local git history, so a private checkout goes
 through the normal generate→review flow.
 
 **Review**: summarize the profile compactly (one line per experience/project) and
-point out gaps: missing dates, bullets with no results/metrics, stale `title`.
+point out gaps: missing dates, bullets with no results/metrics, stale `title`,
+and skills in `skills[]` that no bullet anywhere evidences (a screener reads
+those as keyword stuffing — either the bullet is missing or the skill is).
 
 ## Rules
 
