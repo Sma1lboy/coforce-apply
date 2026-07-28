@@ -24,6 +24,32 @@
   --font-body: "JetBrains Mono", ui-monospace, SFMono-Regular, monospace;
 }
 
+/* Hallmark light — same hues, lightness inverted; terracotta stays the brand.
+ * Tailwind v4 emits @theme as :root custom properties, so a runtime override
+ * here flips every utility that references them. */
+@media (prefers-color-scheme: light) {
+  :root {
+    --color-paper: oklch(97.3% 0.006 90);
+    --color-paper2: oklch(94.8% 0.008 90);
+    --color-paper3: oklch(96.2% 0.007 90);
+    --color-well: oklch(92.5% 0.009 90);
+    --color-ink: oklch(23% 0.012 60);
+    --color-ink2: oklch(32% 0.014 55);
+    --color-muted: oklch(45% 0.016 55);
+    --color-faint: oklch(55% 0.015 60);
+    --color-dim: oklch(64% 0.014 65);
+    --color-rule: oklch(89% 0.01 85);
+    --color-rule2: oklch(85.5% 0.012 85);
+    --color-accent: oklch(56% 0.125 41);
+    --color-accent2: oklch(61% 0.11 45);
+    --color-accentsoft: oklch(44% 0.095 43);
+    --color-ok: oklch(52% 0.11 136);
+    --color-warn: oklch(56% 0.11 79);
+    --color-info: oklch(50% 0.09 240);
+    --color-bad: oklch(50% 0.14 25);
+  }
+}
+
 html, body, #root { height: 100%; }
 body { @apply bg-paper text-ink font-body text-[13px]; }
 
