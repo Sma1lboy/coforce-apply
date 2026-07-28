@@ -1,0 +1,557 @@
+@import "tailwindcss";
+@import "./tokens.css";
+
+/* Every token above is re-exposed to Tailwind under the SAME name, so a class
+ * and a var() can never disagree. Nothing here invents a value — Hallmark
+ * discipline 3: no colour or font-family may be declared outside the token
+ * block, and anything new gets lifted into tokens.css first. */
+@theme inline {
+  --color-paper: var(--color-paper);
+  --color-paper-2: var(--color-paper-2);
+  --color-paper-3: var(--color-paper-3);
+  --color-well: var(--color-well);
+  --color-ink: var(--color-ink);
+  --color-ink-2: var(--color-ink-2);
+  --color-ink-3: var(--color-ink-3);
+  --color-muted: var(--color-muted);
+  --color-faint: var(--color-faint);
+  --color-dim: var(--color-dim);
+  --color-ghost: var(--color-ghost);
+  --color-rule: var(--color-rule);
+  --color-rule-2: var(--color-rule-2);
+  --color-rule-3: var(--color-rule-3);
+  --color-accent: var(--color-accent);
+  --color-accent-2: var(--color-accent-2);
+  --color-accent-soft: var(--color-accent-soft);
+  --color-accent-ink: var(--color-accent-ink);
+  --color-ok: var(--color-ok);
+  --color-warn: var(--color-warn);
+  --font-display: var(--font-display);
+  --font-text: var(--font-text);
+  --font-body: var(--font-body);
+
+  /* The type scale has to be registered here, not reached for with
+   * text-[var(--text-display)]. Tailwind cannot tell whether a var() holds a
+   * colour or a length, so it compiles that arbitrary value to `color:` and the
+   * font-size silently vanishes — which, combined with preflight's
+   * `h1..h6 { font-size: inherit }`, renders every heading at body size. */
+  --text-2xs: var(--text-2xs);
+  --text-xs: var(--text-xs);
+  --text-sm: var(--text-sm);
+  --text-md: var(--text-md);
+  --text-lg: var(--text-lg);
+  --text-xl: var(--text-xl);
+  --text-read: var(--text-read);
+  --text-read-lg: var(--text-read-lg);
+  --text-h3: var(--text-h3);
+  --text-h2: var(--text-h2);
+  --text-display: var(--text-display);
+  --text-mega: var(--text-mega);
+  --text-giant: var(--text-giant);
+}
+
+/* Gate 34: overflow-x clip on both html and body, never hidden. */
+html, body {
+  overflow-x: clip;
+}
+
+body {
+  margin: 0;
+  background: var(--color-paper);
+  color: var(--color-ink);
+  font-family: var(--font-body);
+  font-size: var(--text-lg);
+  line-height: 1.6;
+  -webkit-font-smoothing: antialiased;
+}
+
+/* Gate 38a: display type is always roman. No italic headers, ever. */
+h1, h2, h3, h4 {
+  font-family: var(--font-display);
+  font-style: normal;
+  font-weight: 600;
+  letter-spacing: -0.015em;
+  margin: 0;
+  /* Gate 51: long words in display sizes must break rather than overflow. */
+  overflow-wrap: anywhere;
+  min-width: 0;
+}
+
+a {
+  color: inherit;
+}
+
+:focus-visible {
+  outline: 2px solid var(--color-focus);
+  outline-offset: 2px;
+}
+
+/* ── Texture, stroke, motion ─────────────────────────────────────────────────
+ * Flat colour on flat colour is what made the earlier passes read as a document
+ * instead of a designed page. Three devices, all token-driven: a grain layer so
+ * the dark is a surface rather than an absence, a radial bloom anchoring the
+ * hero, and outlined display type as a second typographic voice.
+ */
+
+/* Grain. An inline SVG turbulence — no image request, no external asset, and it
+ * survives the CSP that would block a texture from a CDN. */
+body::before {
+  content: "";
+  position: fixed;
+  inset: 0;
+  z-index: 1;
+  pointer-events: none;
+  opacity: 0.05;
+  mix-blend-mode: overlay;
+  background-image: url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' width='140' height='140'%3E%3Cfilter id='n'%3E%3CfeTurbulence type='fractalNoise' baseFrequency='0.85' numOctaves='3'/%3E%3C/filter%3E%3Crect width='140' height='140' filter='url(%23n)'/%3E%3C/svg%3E");
+}
+
+/* The bloom sits behind the headline, off-centre, so the hero has a light
+ * source instead of even illumination. The gradient is centred and sized
+ * closest-side so it reaches full transparency INSIDE its own box — a
+ * farthest-corner gradient was still visibly warm at the element's left edge,
+ * which read as a hard-edged dark band beside it on wide viewports. */
+.bloom {
+  position: absolute;
+  inset-inline-start: -30%;
+  inset-block-start: -55%;
+  width: min(1100px, 120%);
+  aspect-ratio: 1;
+  pointer-events: none;
+  z-index: -1;
+  background: radial-gradient(
+    circle closest-side at 50% 50%,
+    var(--color-accent-wash) 0%,
+    oklch(65% 0.107 41 / 0.05) 45%,
+    transparent 95%
+  );
+  animation: bloom-breathe 11s ease-in-out infinite alternate;
+}
+
+/* The light source breathes — slow enough to be felt rather than watched. */
+@keyframes bloom-breathe {
+  from { transform: scale(1); opacity: 0.85; }
+  to   { transform: scale(1.1) translate(1.5%, 2%); opacity: 1; }
+}
+
+/* Outlined display type — the second voice. Fill is transparent and the letter
+ * is drawn, which is why it can sit next to a solid line of the same face at the
+ * same size and still read as a different register. */
+.stroked {
+  color: transparent;
+  -webkit-text-stroke: 2px var(--color-accent);
+  paint-order: stroke fill;
+}
+
+@supports not (-webkit-text-stroke: 1px black) {
+  .stroked { color: var(--color-accent); }
+}
+
+/* Fill sweeps in behind the stroke once the word is on screen. The gradient is
+ * clipped to the glyphs, so it reads as the letter filling up rather than a box
+ * sliding past. */
+.stroked--fill {
+  background-image: linear-gradient(90deg, var(--color-accent) 50%, transparent 50%);
+  background-size: 220% 100%;
+  background-position: 100% 0;
+  -webkit-background-clip: text;
+  background-clip: text;
+  transition: background-position 1100ms var(--ease-out) 120ms;
+}
+
+.is-in .stroked--fill { background-position: 0 0; }
+
+/* Load-in choreography for the hero. Everything above the fold enters once,
+ * staggered by --i, without waiting for an IntersectionObserver — the hero is
+ * always in view on load. */
+@keyframes intro {
+  from { opacity: 0; transform: translateY(22px); }
+  to   { opacity: 1; transform: none; }
+}
+
+.intro {
+  opacity: 0;
+  animation: intro 780ms var(--ease-out) calc(var(--i, 0) * 110ms) both;
+}
+
+/* Scroll reveal. One class, one transition, staggered by a custom property the
+ * markup sets per item — no animation library for what a transition does. */
+.rise {
+  opacity: 0;
+  transform: translateY(18px);
+  transition:
+    opacity 620ms var(--ease-out) calc(var(--i, 0) * 70ms),
+    transform 620ms var(--ease-out) calc(var(--i, 0) * 70ms);
+}
+
+.is-in .rise,
+.rise.is-in {
+  opacity: 1;
+  transform: none;
+}
+
+/* ── Map/Diagram ─────────────────────────────────────────────────────────────
+ * The page's organising structure is a spatial graph, so the geometry lives in
+ * CSS rather than in forty arbitrary utility classes. Two rails converge on one
+ * node: everything the user has verified enters from the left, every job
+ * requirement from the right, and the ONLY edge out of the crossing is the one
+ * that goes through the pool. The layout is the argument.
+ */
+.map {
+  --node-line: var(--color-rule-2);
+  display: grid;
+  grid-template-columns: minmax(0, 1fr) auto minmax(0, 1fr);
+  align-items: start;
+  column-gap: var(--space-lg);
+  row-gap: var(--space-md);
+}
+
+.map__rail {
+  display: grid;
+  row-gap: var(--space-sm);
+  min-width: 0;
+}
+
+/* Each step is a plate, not a card: one hairline on the leading edge, no box,
+ * no radius, no shadow. Cards were the thing that made every section look the
+ * same. */
+.map__step {
+  min-width: 0;
+  border-left: 2px solid var(--node-line);
+  padding: var(--space-2xs) 0 var(--space-2xs) var(--space-sm);
+}
+
+/* Hover lights the leading edge and nudges the plate along the flow direction —
+ * the affordance is the graph reacting, not a card lifting. */
+.map__step {
+  transition:
+    border-left-color var(--dur-short) var(--ease-out),
+    transform var(--dur-short) var(--ease-out);
+}
+
+.map__step:hover {
+  border-left-color: var(--color-accent-2);
+  transform: translateX(3px);
+}
+
+/* The live steps' edge glows and softly pulses — these are the two nodes where
+ * a human is in the loop, so they read as powered. */
+.map__step--live {
+  border-left-color: var(--color-accent);
+  animation: edge-pulse 3200ms ease-in-out infinite alternate;
+}
+
+@keyframes edge-pulse {
+  from { box-shadow: -6px 0 18px -12px var(--color-accent); }
+  to   { box-shadow: -6px 0 24px -8px var(--color-accent); }
+}
+
+/* Two flows actually meeting. A vertical rule between two columns reads as a
+ * gutter, not a confluence — the whole claim of this layout is that both rails
+ * end in the same place, so the merge has to be drawn. preserveAspectRatio is
+ * off so the curves stretch with the column width instead of scaling the
+ * stroke. */
+.map__converge {
+  grid-column: 1 / -1;
+  width: 100%;
+  height: var(--space-2xl);
+  display: block;
+  overflow: visible;
+  /* Drawn by wiping downward, which is the direction the flow runs. Not
+   * stroke-dasharray: the dash length is in user units while non-scaling-stroke
+   * draws in screen units, so under a stretched viewBox the pattern and the path
+   * length disagree and the "line" renders as disconnected fragments. */
+  clip-path: inset(0 0 100% 0);
+  transition: clip-path 1100ms var(--ease-out);
+}
+
+.is-in .map__converge { clip-path: inset(0 0 0 0); }
+
+.map__converge path {
+  fill: none;
+  stroke: var(--color-accent);
+  stroke-width: 1.5;
+  vector-effect: non-scaling-stroke;
+  opacity: 0.8;
+}
+
+.map__converge circle {
+  fill: var(--color-accent);
+  opacity: 0;
+}
+
+.is-in .map__converge circle {
+  opacity: 1;
+  animation: drop 2600ms var(--ease-out) 900ms infinite;
+}
+
+/* A carrier travelling down the merged edge: the diagram is a flow, so
+ * something should be flowing. */
+@keyframes drop {
+  0%   { transform: translateY(-14px); opacity: 0; }
+  18%  { opacity: 1; }
+  70%  { opacity: 1; }
+  100% { transform: translateY(0); opacity: 0; }
+}
+
+/* A horizontal track for the post-submission lane: one hairline, stages sitting
+ * on it, and the failure state hanging below rather than posing as a step. */
+.track {
+  position: relative;
+  border-top: 1px solid var(--color-rule-2);
+  padding-top: var(--space-md);
+}
+
+.track__stages {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: baseline;
+  gap: var(--space-2xs) var(--space-md);
+}
+
+/* Stages start unlit and light up left-to-right once the section is in view —
+ * the lane switching on ahead of the runner. */
+.track__stage {
+  position: relative;
+  font-family: var(--font-body);
+  font-size: var(--text-sm);
+  color: var(--color-dim);
+  transition: color 600ms var(--ease-out) calc(var(--si, 0) * 320ms);
+}
+
+.is-in .track__stage { color: var(--color-ink-2); }
+
+/* The tick that ties each stage back up to the rail. */
+.track__stage::before {
+  content: "";
+  position: absolute;
+  top: calc(-1 * var(--space-md));
+  left: 0;
+  width: 1px;
+  height: var(--space-xs);
+  background: var(--color-rule-2);
+  transition: background 600ms var(--ease-out) calc(var(--si, 0) * 320ms);
+}
+
+.is-in .track__stage[data-open="true"] { color: var(--color-accent-soft); }
+.is-in .track__stage[data-open="true"]::before { background: var(--color-accent); }
+
+/* A carrier running the rail left to right — one application moving through the
+ * lane. It stops at `rejected`, because most of them do. */
+.track__runner {
+  position: absolute;
+  top: -4px;
+  left: 0;
+  width: 7px;
+  height: 7px;
+  border-radius: var(--radius-dot);
+  background: var(--color-accent);
+  box-shadow: 0 0 12px var(--color-accent);
+  opacity: 0;
+}
+
+.is-in .track__runner {
+  animation: run 6500ms var(--ease-out) 400ms infinite;
+}
+
+@keyframes run {
+  0%        { left: 0;    opacity: 0; }
+  6%        { opacity: 1; }
+  86%       { left: calc(100% - 7px); opacity: 1; }
+  100%      { left: calc(100% - 7px); opacity: 0; }
+}
+
+/* Mono ticker. What scrolls past is the real contents of the data home — the
+ * files this thing actually writes — so the strip carries information rather
+ * than decorating with words. */
+.marquee {
+  overflow: hidden;
+  border-block: 1px solid var(--color-rule);
+  padding-block: var(--space-xs);
+  mask-image: linear-gradient(90deg, transparent, black 6%, black 94%, transparent);
+}
+
+.marquee__row {
+  display: flex;
+  width: max-content;
+  gap: var(--space-lg);
+  animation: slide 42s linear infinite;
+}
+
+.marquee:hover .marquee__row { animation-play-state: paused; }
+
+@keyframes slide {
+  from { transform: translateX(0); }
+  to   { transform: translateX(-50%); }
+}
+
+.marquee__item {
+  font-family: var(--font-body);
+  font-size: var(--text-xs);
+  color: var(--color-dim);
+  white-space: nowrap;
+}
+
+.marquee__item b {
+  font-weight: 500;
+  color: var(--color-accent-soft);
+}
+
+.track__fallback {
+  margin-top: var(--space-md);
+  padding-left: var(--space-sm);
+  border-left: 2px solid var(--color-warn);
+  font-family: var(--font-body);
+  font-size: var(--text-xs);
+  color: var(--color-warn);
+}
+
+/* The wash band. Full-bleed so the section edge itself is the divider — no
+ * rule, no ornament. Used twice, deliberately: the crossing mid-page and the
+ * closing CTA, bookending the argument in the same colour. Its edge lines draw
+ * outward from the centre once the band is on screen. */
+.band {
+  position: relative;
+  background: var(--color-accent-wash);
+  padding: var(--space-lg) var(--page-gutter);
+  margin-inline: calc(-1 * var(--page-gutter));
+}
+
+.band::before,
+.band::after {
+  content: "";
+  position: absolute;
+  left: 0;
+  right: 0;
+  height: 1px;
+  background: var(--color-accent-line);
+  transform: scaleX(0);
+  transition: transform 950ms var(--ease-out) 150ms;
+}
+
+.band::before { top: 0; }
+.band::after { bottom: 0; }
+
+.is-in .band::before,
+.is-in .band::after,
+.band.is-in::before,
+.band.is-in::after {
+  transform: scaleX(1);
+}
+
+.map__cross {
+  grid-column: 1 / -1;
+}
+
+/* The install commands as a terminal plate: prompts are presentation (dim,
+ * not selected with the text), the copy button hands back the real one-liner. */
+.cmd {
+  position: relative;
+}
+
+/* Room for the copy chip, so the longest command line never runs under it. */
+.cmd pre {
+  padding-right: 4.5rem;
+}
+
+.cmd__prompt {
+  color: var(--color-dim);
+  user-select: none;
+}
+
+/* Bottom-right, because the last line (`/tailor …`) is the short one — the
+ * clone URL on line one would run under a top-right chip at narrow widths. */
+.cmd__copy {
+  position: absolute;
+  bottom: 0;
+  right: 0;
+  border: 1px solid var(--color-rule-2);
+  border-radius: var(--radius-chip);
+  background: transparent;
+  padding: 2px 8px;
+  font-family: var(--font-body);
+  font-size: var(--text-2xs);
+  letter-spacing: 0.08em;
+  text-transform: uppercase;
+  color: var(--color-faint);
+  cursor: pointer;
+  transition: color var(--dur-short) var(--ease-out), border-color var(--dur-short) var(--ease-out);
+}
+
+.cmd__copy:hover {
+  color: var(--color-accent-soft);
+  border-color: var(--color-accent-line);
+}
+
+.cmd__copy:active { transform: scale(0.94); }
+
+/* The GitHub chip — the repo is the product's front door, so its link is a
+ * drawn object, not a footnote. */
+.ghbtn {
+  display: inline-block;
+  border: 1px solid var(--color-rule-2);
+  border-radius: var(--radius-btn);
+  padding: 4px 12px;
+  font-family: var(--font-body);
+  font-size: var(--text-2xs);
+  font-weight: 500;
+  letter-spacing: 0.12em;
+  text-transform: uppercase;
+  text-decoration: none;
+  color: var(--color-accent-soft);
+  transition:
+    border-color var(--dur-short) var(--ease-out),
+    background-color var(--dur-short) var(--ease-out),
+    transform var(--dur-short) var(--ease-out);
+}
+
+.ghbtn:hover {
+  border-color: var(--color-accent-line);
+  background: var(--color-accent-wash);
+  transform: translateY(-1px);
+}
+
+.cmd__copy--ok {
+  color: var(--color-ok);
+  border-color: var(--color-ok-line);
+}
+
+/* Screenshots respond to the pointer: a lift, a lit edge, a faint cast of the
+ * accent — the affordance for "this is a real artifact you can look at". */
+.shot {
+  transition:
+    transform 240ms var(--ease-out),
+    border-color 240ms var(--ease-out),
+    box-shadow 240ms var(--ease-out);
+}
+
+.shot:hover {
+  transform: translateY(-5px);
+  border-color: var(--color-accent-line);
+  box-shadow: 0 24px 48px -28px var(--color-accent-wash), 0 12px 28px -18px oklch(0% 0 0 / 0.5);
+}
+
+@media (max-width: 860px) {
+  .map {
+    grid-template-columns: minmax(0, 1fr);
+  }
+  /* Stacked, the two rails are already sequential — a drawn merge between two
+   * things no longer side by side would be a lie about the layout. The curves
+   * become one vertical connector. */
+  .map__converge {
+    height: var(--space-lg);
+    width: 2px;
+    justify-self: start;
+    margin-left: 1px;
+    background: linear-gradient(to bottom, var(--color-rule-3), var(--color-accent));
+  }
+  .map__converge path { display: none; }
+}
+
+@media (prefers-reduced-motion: reduce) {
+  *, *::before, *::after {
+    animation-duration: 0.01ms !important;
+    transition-duration: 0.01ms !important;
+    scroll-behavior: auto !important;
+  }
+}

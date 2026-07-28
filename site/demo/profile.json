@@ -1,0 +1,115 @@
+{
+  "_comment": "Demo profile for the landing page's 'what comes out' asset ONLY. Not a harness fixture (harness/fixtures/profile.json is smaller and must stay that way — the campaign tests read it). Invented person, invented employers: the caption on the page says so. What is NOT invented is the artifact — site/demo/render.mjs renders this through the real tailor template and refuses to emit unless the PDF clears the product's own machine gate (exactly one page, content reaching >= 93% down it). A marketing asset that the product itself would reject is worse than no asset.",
+  "name": "Jordan Avery",
+  "title": "Software Engineer",
+  "email": "jordan.avery@example.com",
+  "phone": "(415) 555-0142",
+  "linkedin": "jordan-avery",
+  "github": "jordanavery",
+  "location": "San Francisco, CA",
+  "skills": [
+    "Go",
+    "Python",
+    "TypeScript",
+    "Rust",
+    "PostgreSQL",
+    "Redis",
+    "Kafka",
+    "gRPC",
+    "React",
+    "Node.js",
+    "Docker",
+    "Kubernetes",
+    "Terraform",
+    "AWS",
+    "Prometheus",
+    "OpenTelemetry"
+  ],
+  "education": [
+    {
+      "institution": "University of Washington",
+      "degree": "Bachelor of Science in Computer Science; GPA: 3.79/4.00",
+      "date": "Sep. 2019 -- Jun. 2023",
+      "location": "Seattle, WA"
+    }
+  ],
+  "experience": [
+    {
+      "company": "Northwind Data",
+      "title": "Software Engineer, Platform",
+      "date": "Aug. 2023 -- Present",
+      "location": "San Francisco, CA",
+      "description": [
+        {
+          "text": "Rebuilt the ingestion pipeline on Kafka and Go, lifting sustained throughput from 40k to 180k events per second while cutting p99 write latency by 62%."
+        },
+        {
+          "text": "Split a 90k-line Django monolith into four gRPC services behind a schema registry, shipping the migration in staged cutovers with zero customer-visible downtime."
+        },
+        {
+          "text": "Introduced OpenTelemetry tracing across 14 services and cut median incident triage time from 45 minutes to 9 by making cross-service latency attributable."
+        },
+        {
+          "text": "Replaced nightly batch rollups with incremental materialized views in PostgreSQL, reducing warehouse spend by $18k per month."
+        },
+        {
+          "text": "Owned the on-call rotation's reliability work for two quarters, driving error budget burn from 210% to 34% of the monthly allowance."
+        }
+      ]
+    },
+    {
+      "company": "Cobalt Systems",
+      "title": "Software Engineer Intern",
+      "date": "May 2022 -- Aug. 2022",
+      "location": "Seattle, WA",
+      "description": [
+        {
+          "text": "Built a Terraform module library that reduced new-service provisioning from a two-day manual checklist to a 15-minute templated pull request."
+        },
+        {
+          "text": "Instrumented the deploy pipeline with Prometheus metrics, surfacing a cache misconfiguration that had been adding 300ms to every authenticated request."
+        },
+        {
+          "text": "Wrote the load-test harness that became the release gate, catching a connection-pool regression that would have degraded checkout for 8% of sessions."
+        },
+        {
+          "text": "Documented the provisioning path and paired with three engineers on their first service, removing the platform team as a bottleneck for new work."
+        }
+      ]
+    }
+  ],
+  "projects": [
+    {
+      "name": "driftwood",
+      "technologies": "Rust, WebAssembly, SQLite",
+      "dateRange": "Feb. 2024 -- Present",
+      "description": [
+        {
+          "text": "Built driftwood, an embedded change-data-capture engine that streams SQLite writes to any sink; 1.2k GitHub stars and 40k monthly crates.io downloads."
+        },
+        {
+          "text": "Compiled the core to WebAssembly so the same replication logic runs in the browser, in a Cloudflare Worker, and on a Raspberry Pi from one codebase."
+        },
+        {
+          "text": "Held replication lag under 50ms at 20k writes per second by batching on a lock-free ring buffer instead of a mutex-guarded queue."
+        }
+      ]
+    },
+    {
+      "name": "paperweight",
+      "technologies": "TypeScript, React, PostgreSQL",
+      "dateRange": "Jun. 2023 -- Dec. 2023",
+      "description": [
+        {
+          "text": "Developed paperweight, a self-hosted document search service indexing 400k PDFs with hybrid keyword and vector retrieval."
+        },
+        {
+          "text": "Cut cold-start query time from 2.4s to 180ms by moving embeddings into pgvector with an IVFFlat index tuned against a labelled relevance set."
+        },
+        {
+          "text": "Shipped an offline-first Electron client so the same index is searchable on a laptop with no network, syncing deltas on reconnect."
+        }
+      ]
+    }
+  ]
+}

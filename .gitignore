@@ -225,6 +225,11 @@ dist/
 !.agents/skills/tracker/web/dist/
 !.agents/skills/tracker/web/dist/**
 
+# the landing site's static assets (self-hosted fonts, demo captures) must be
+# committed — the generic react/gatsby `public/` rule above would swallow them
+!site/public/
+!site/public/**
+
 # local capture material — tooling is committed, captures are not
 harness/stories/
 .DS_Store
