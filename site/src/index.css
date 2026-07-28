@@ -47,6 +47,7 @@
   --text-h2: var(--text-h2);
   --text-display: var(--text-display);
   --text-mega: var(--text-mega);
+  --text-hero: var(--text-hero);
   --text-giant: var(--text-giant);
 }
 
@@ -106,32 +107,85 @@ body::before {
   background-image: url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' width='140' height='140'%3E%3Cfilter id='n'%3E%3CfeTurbulence type='fractalNoise' baseFrequency='0.85' numOctaves='3'/%3E%3C/filter%3E%3Crect width='140' height='140' filter='url(%23n)'/%3E%3C/svg%3E");
 }
 
-/* The bloom sits behind the headline, off-centre, so the hero has a light
- * source instead of even illumination. The gradient is centred and sized
- * closest-side so it reaches full transparency INSIDE its own box — a
- * farthest-corner gradient was still visibly warm at the element's left edge,
- * which read as a hard-edged dark band beside it on wide viewports. */
-.bloom {
-  position: absolute;
-  inset-inline-start: -30%;
-  inset-block-start: -55%;
-  width: min(1100px, 120%);
-  aspect-ratio: 1;
-  pointer-events: none;
-  z-index: -1;
-  background: radial-gradient(
-    circle closest-side at 50% 50%,
-    var(--color-accent-wash) 0%,
-    oklch(65% 0.107 41 / 0.05) 45%,
-    transparent 95%
-  );
-  animation: bloom-breathe 11s ease-in-out infinite alternate;
+/* ── Hero ────────────────────────────────────────────────────────────────────
+ * The engraved illustration is the fold. It drifts on a very slow Ken Burns —
+ * one still frame plus layered scrims reads as the "animated hero" of the
+ * genre without a video file or per-frame generation flicker. Scrims are
+ * color-mix on the paper token, so the art always fades into the page colour
+ * and text on the left stays readable at any viewport.
+ */
+.hero {
+  position: relative;
+  overflow: clip;
+  background: var(--color-paper);
 }
 
-/* The light source breathes — slow enough to be felt rather than watched. */
-@keyframes bloom-breathe {
-  from { transform: scale(1); opacity: 0.85; }
-  to   { transform: scale(1.1) translate(1.5%, 2%); opacity: 1; }
+.hero__art {
+  position: absolute;
+  inset: 0;
+  background-image: var(--hero-art);
+  background-size: cover;
+  background-position: 70% center;
+  animation: hero-drift 38s ease-in-out infinite alternate;
+}
+
+.hero__art::after {
+  content: "";
+  position: absolute;
+  inset: 0;
+  background:
+    linear-gradient(
+      90deg,
+      var(--color-paper) 0%,
+      color-mix(in oklch, var(--color-paper) 86%, transparent) 30%,
+      color-mix(in oklch, var(--color-paper) 34%, transparent) 58%,
+      color-mix(in oklch, var(--color-paper) 10%, transparent) 100%
+    ),
+    linear-gradient(0deg, var(--color-paper) 0%, transparent 24%),
+    linear-gradient(180deg, color-mix(in oklch, var(--color-paper) 82%, transparent) 0%, transparent 20%);
+}
+
+/* Narrow screens put text straight over the busiest part of the engraving, so
+ * the whole art takes a heavier wash there — atmosphere, not backdrop. */
+@media (max-width: 860px) {
+  .hero__art::after {
+    /* A flat colour can't be one layer of a multi-layer background, so the
+     * even wash is a two-stop gradient of the same colour. */
+    background:
+      linear-gradient(
+        color-mix(in oklch, var(--color-paper) 66%, transparent),
+        color-mix(in oklch, var(--color-paper) 66%, transparent)
+      ),
+      linear-gradient(0deg, var(--color-paper) 0%, transparent 30%),
+      linear-gradient(180deg, color-mix(in oklch, var(--color-paper) 82%, transparent) 0%, transparent 24%);
+  }
+}
+
+@keyframes hero-drift {
+  from { transform: scale(1.02) translateX(0); }
+  to   { transform: scale(1.09) translateX(-1.6%); }
+}
+
+/* The install plate sits over artwork on wide screens — a whisper of the well
+ * colour behind it keeps the commands readable without becoming a card. */
+.hero .cmd {
+  background: color-mix(in oklch, var(--color-well) 62%, transparent);
+  backdrop-filter: blur(5px);
+  padding: var(--space-xs) var(--space-sm);
+}
+
+.chip {
+  display: inline-block;
+  border: 1px solid var(--color-accent-line);
+  border-radius: 999px;
+  padding: 4px 14px;
+  font-family: var(--font-body);
+  font-size: var(--text-2xs);
+  font-weight: 500;
+  letter-spacing: 0.16em;
+  text-transform: uppercase;
+  color: var(--color-accent-soft);
+  background: var(--color-accent-wash);
 }
 
 /* Outlined display type — the second voice. Fill is transparent and the letter
@@ -528,7 +582,9 @@ body::before {
 .shot:hover {
   transform: translateY(-5px);
   border-color: var(--color-accent-line);
-  box-shadow: 0 24px 48px -28px var(--color-accent-wash), 0 12px 28px -18px oklch(0% 0 0 / 0.5);
+  box-shadow:
+    0 24px 48px -28px var(--color-accent-wash),
+    0 12px 28px -18px color-mix(in oklch, var(--color-ink) 30%, transparent);
 }
 
 @media (max-width: 860px) {
@@ -551,6 +607,10 @@ body::before {
 @media (prefers-reduced-motion: reduce) {
   *, *::before, *::after {
     animation-duration: 0.01ms !important;
+    /* Without this, `infinite alternate` animations don't go still — they
+     * strobe between their two keyframes every 0.01ms, and the whole page
+     * twitches. One iteration ends them instantly at a resting state. */
+    animation-iteration-count: 1 !important;
     transition-duration: 0.01ms !important;
     scroll-behavior: auto !important;
   }

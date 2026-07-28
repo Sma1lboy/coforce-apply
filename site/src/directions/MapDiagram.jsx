@@ -8,7 +8,7 @@
  */
 import { useState } from 'react';
 import {
-  product, install, firstRun, pipeline, supplyRail, demandRail, crossing, gate,
+  product, install, firstRun, heroFacts, pipeline, supplyRail, demandRail, crossing, gate,
   lane, tracking, ironLaws, requirements, dataHome, shots,
 } from '../content.js';
 import { useInView } from '../useInView.js';
@@ -94,58 +94,83 @@ export default function MapDiagram() {
   const [ctaRef, ctaIn] = useInView({ threshold: 0.3 });
 
   return (
-    <main className="mx-auto max-w-[var(--page-max)] px-[var(--page-gutter)] pb-[var(--space-3xl)]">
-      {/* The repo is the product's only address, so it gets a permanent seat in
-          the top bar instead of hiding in the footer. */}
-      <nav
-        className="flex flex-wrap items-center justify-between gap-[var(--space-sm)] border-b py-[var(--space-sm)] font-body text-2xs font-medium uppercase tracking-[0.2em]"
-        style={{ borderColor: 'var(--color-rule)' }}
-        aria-label="Top"
-      >
-        <span style={{ color: 'var(--color-accent)' }}>◆ {product.name}</span>
-        <span className="flex items-center gap-[var(--space-sm)]" style={{ color: 'var(--color-faint)' }}>
-          <span>{product.license}</span>
-          <a className="ghbtn" href={product.repo}>github ↗</a>
-        </span>
-      </nav>
-
-      {/* isolate keeps the bloom's negative z-index inside the header instead of
-          sliding under the page background. The headline runs the full page
-          width — mega type needs the whole measure, or "on" ends up alone on a
-          line — and the summary + install command share the row beneath it. */}
-      <header className="relative isolate pt-[var(--space-xl)] pb-[var(--space-xl)]">
-        <div className="bloom" aria-hidden="true" />
-        {/* The tagline IS the headline — a stranger has five seconds, and
-            "what does it do" beats wordplay. Two lines, same face, two
-            registers: one solid, one drawn, and the drawn line stays drawn. */}
-        <h1
-          className="mt-[var(--space-sm)] text-mega leading-[0.86]"
-          style={{ letterSpacing: '-0.04em' }}
-        >
-          <span className="intro block" style={{ '--i': 1 }}>Your job hunt</span>
-          <span className="intro stroked block" style={{ '--i': 2 }}>on autopilot.</span>
-        </h1>
-        <div className="mt-[var(--space-lg)] grid gap-[var(--space-lg)] lg:grid-cols-[minmax(0,1.1fr)_minmax(0,1fr)] lg:items-start">
-          <p
-            className="intro m-0 max-w-[46ch] font-text text-read-lg leading-[1.5]"
-            style={{ color: 'var(--color-ink-2)', '--i': 3 }}
+    <>
+      {/* Full-bleed hero: the engraved gate illustration is the argument in one
+          image — resumes fly on autopilot, a hand rests on the lever. Text sits
+          on the scrimmed left; nav floats on top; real figures anchor the foot. */}
+      <section className="hero" aria-label={product.name}>
+        <div className="hero__art" aria-hidden="true" />
+        <div className="relative mx-auto flex min-h-[100svh] w-full max-w-[var(--page-max)] flex-col px-[var(--page-gutter)]">
+          {/* The repo is the product's only address, so it gets a permanent
+              seat in the top bar instead of hiding in the footer. */}
+          <nav
+            className="flex flex-wrap items-center justify-between gap-[var(--space-sm)] py-[var(--space-sm)] font-body text-2xs font-medium uppercase tracking-[0.2em]"
+            aria-label="Top"
           >
-            {product.summary}
-          </p>
-          <div className="intro min-w-0" style={{ '--i': 4 }}>
-            <InstallBlock />
+            <span style={{ color: 'var(--color-accent)' }}>◆ {product.name}</span>
+            <span className="flex items-center gap-[var(--space-sm)]" style={{ color: 'var(--color-faint)' }}>
+              <span>{product.license}</span>
+              <a className="ghbtn" href={product.repo}>github ↗</a>
+            </span>
+          </nav>
+
+          <div className="flex flex-1 items-center">
+            <div className="min-w-0 max-w-[620px] py-[var(--space-xl)]">
+              <div className="intro">
+                <span className="chip">skill-first job application agent</span>
+              </div>
+              {/* The tagline IS the headline — a stranger has five seconds, and
+                  "what does it do" beats wordplay. Two lines, same face, two
+                  registers: one solid, one drawn, and the drawn line stays
+                  drawn. */}
+              <h1
+                className="mt-[var(--space-md)] text-hero leading-[0.92]"
+                style={{ letterSpacing: '-0.035em' }}
+              >
+                <span className="intro block" style={{ '--i': 1 }}>Your job hunt</span>
+                <span className="intro stroked block" style={{ '--i': 2 }}>on autopilot.</span>
+              </h1>
+              <p
+                className="intro mt-[var(--space-md)] mb-0 max-w-[46ch] font-text text-read-lg leading-[1.5]"
+                style={{ color: 'var(--color-ink-2)', '--i': 3 }}
+              >
+                {product.summary}
+              </p>
+              <div className="intro mt-[var(--space-md)]" style={{ '--i': 4 }}>
+                <InstallBlock />
+              </div>
+            </div>
+          </div>
+
+          <div className="intro flex flex-wrap items-end justify-between gap-x-[var(--space-xl)] gap-y-[var(--space-md)] pb-[var(--space-lg)]" style={{ '--i': 5 }}>
+            <div className="flex flex-wrap gap-x-[var(--space-xl)] gap-y-[var(--space-sm)]">
+              {heroFacts.map(fact => (
+                <div key={fact.figure} className="min-w-0">
+                  <p className="m-0 font-display text-h2 leading-none" style={{ color: 'var(--color-ink)' }}>
+                    {fact.figure}
+                  </p>
+                  <p className="m-0 mt-[var(--space-2xs)] font-body text-2xs" style={{ color: 'var(--color-muted)' }}>
+                    {fact.note}
+                  </p>
+                </div>
+              ))}
+            </div>
+            <div className="min-w-0 text-right">
+              <Tag>runs on</Tag>
+              <p className="m-0 mt-[var(--space-2xs)] font-body text-xs" style={{ color: 'var(--color-muted)' }}>
+                {requirements.join(' · ')}
+              </p>
+            </div>
           </div>
         </div>
-      </header>
+      </section>
 
+      <main className="mx-auto max-w-[var(--page-max)] px-[var(--page-gutter)] pb-[var(--space-3xl)]">
       {/* The operating cycle in four commands — the concrete answer to "what
           does this thing actually do", before any diagram. */}
-      <div
-        className="grid grid-cols-2 gap-x-[var(--space-lg)] gap-y-[var(--space-md)] border-t pt-[var(--space-md)] pb-[var(--space-lg)] lg:grid-cols-4"
-        style={{ borderColor: 'var(--color-rule)' }}
-      >
+      <div className="grid grid-cols-2 gap-x-[var(--space-lg)] gap-y-[var(--space-md)] pt-[var(--space-xl)] pb-[var(--space-lg)] lg:grid-cols-4">
         {pipeline.map((step, i) => (
-          <div key={step.verb} className="intro min-w-0" style={{ '--i': i + 5 }}>
+          <div key={step.verb} className="intro min-w-0" style={{ '--i': i + 6 }}>
             <p className="m-0 font-display text-h3 leading-tight">
               {step.verb}
               {i < pipeline.length - 1 && (
@@ -428,6 +453,7 @@ export default function MapDiagram() {
         </a>
         <span>{product.license} · no account, no telemetry</span>
       </footer>
-    </main>
+      </main>
+    </>
   );
 }

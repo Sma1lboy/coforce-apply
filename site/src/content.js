@@ -18,6 +18,16 @@ export const product = {
 // pointing at a signup form that does not exist.
 export const install = 'git clone https://github.com/Sma1lboy/coforce-apply && cd coforce-apply && claude';
 
+// The hero's fact row. The genre slot is "impressive metrics"; the discipline
+// still bans invented ones, so every figure here has a denominator on disk:
+// one command is the README's "Try it in two minutes", 94.2% is the demo
+// render gate's measured coverage, zero/zero is PRIVACY.md verbatim.
+export const heroFacts = [
+  { figure: '1 command', note: 'from clone to a tailored PDF' },
+  { figure: '94.2%', note: 'page coverage on the demo, measured' },
+  { figure: '0 · 0', note: 'accounts · telemetry' },
+];
+
 // The operating cycle, verbatim from the README banner: discover → tailor →
 // apply → track. Each step names the actual skill you invoke — the commands
 // ARE the product, so the page shows them instead of marketing verbs.
