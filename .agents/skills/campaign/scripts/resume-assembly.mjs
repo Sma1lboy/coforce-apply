@@ -33,6 +33,22 @@ const escapeTex = value => String(value || '')
 
 const escapeUrl = value => String(value || '').replace(/([%#])/g, '\\$1');
 
+const HEADER_ESCAPES = {
+  '\\': '\\textbackslash{}',
+  '&': '\\&',
+  '%': '\\%',
+  '#': '\\#',
+  '_': '\\_',
+  '$': '\\$',
+  '~': '\\textasciitilde{}',
+  '^': '\\textasciicircum{}',
+  '{': '\\{',
+  '}': '\\}',
+};
+
+const escapeHeaderText = value => String(value ?? '')
+  .replace(/[\\&%#_$~^{}]/g, character => HEADER_ESCAPES[character]);
+
 const sectionLabels = language =>
   SECTION_LABELS[normalizeResumeLanguage(language)] || SECTION_LABELS['en-US'];
 
@@ -204,26 +220,58 @@ export const localizeResumeTemplate = (template, profile, language, options = {}
   const normalized = normalizeResumeLanguage(language);
   const contact = resolveProfileContact(profile, normalized);
   let localizedTemplate = String(template);
-  const contactLine = localizedTemplate.split(/\r?\n/).find(line => line.includes('mailto:'));
-  if (contactLine) {
-    let replacement = contactLine;
-    if (contact.phone) {
-      const inline = replacement.replace(
-        /(\\small\s*\{)\s*[^|{}]*(?=\|)/,
-        (_, prefix) => `${prefix}${contact.phone}`,
-      );
-      replacement = inline === replacement
-        ? replacement.replace(/^(\s*)[^|{}]*(?=\|)/, `$1${contact.phone}`)
-        : inline;
-    }
-    if (contact.email) {
-      replacement = replacement.replace(
-        /\\href\{mailto:[^}]+\}\{[^}]+\}/,
-        `\\href{mailto:${contact.email}}{${contact.email}}`,
+  const header = documentHeader(localizedTemplate);
+  let localizedHeader = header;
+
+  if (contact.phone) {
+    for (const scheme of ['sms', 'tel']) {
+      localizedHeader = localizedHeader.replaceAll(
+        `\\href{${scheme}:{phone}}{{phone}}`,
+        `\\href{${scheme}:${escapeUrl(contact.phone)}}{${escapeHeaderText(contact.phone)}}`,
       );
     }
-    localizedTemplate = localizedTemplate.replace(contactLine, replacement);
   }
+  if (contact.email) {
+    localizedHeader = localizedHeader.replaceAll(
+      '\\href{mailto:{email}}{{email}}',
+      `\\href{mailto:${escapeUrl(contact.email)}}{${escapeHeaderText(contact.email)}}`,
+    );
+  }
+
+  const replaceHref = (schemes, value) => {
+    if (!value) return;
+    const schemePattern = schemes.join('|');
+    localizedHeader = localizedHeader.replace(
+      new RegExp(`\\\\href\\{(${schemePattern}):[^{}]*\\}\\{[^{}]*\\}`, 'g'),
+      (_, scheme) => `\\href{${scheme}:${escapeUrl(value)}}{${escapeHeaderText(value)}}`,
+    );
+  };
+  replaceHref(['sms', 'tel'], contact.phone);
+  replaceHref(['mailto'], contact.email);
+
+  if (contact.phone) {
+    const phone = escapeHeaderText(contact.phone);
+    localizedHeader = localizedHeader
+      .replace(/(\\small\s*\{)\s*[^|{}]*(?=\|)/g, (_, prefix) => `${prefix}${phone}`)
+      .replace(/^(\s*)[^|{}\n]*(?=\|\\href\{mailto:)/gm, (_, indent) => `${indent}${phone}`);
+  }
+
+  const values = {
+    name: profile.name,
+    phone: contact.phone,
+    email: contact.email,
+    linkedin: profile.linkedin,
+    github: profile.github,
+    website: profile.website,
+    location: profile.location,
+    title: profile.title,
+  };
+  for (const [name, value] of Object.entries(values)) {
+    if (value !== null && value !== undefined) {
+      localizedHeader = localizedHeader.replaceAll(`{${name}}`, escapeHeaderText(value));
+    }
+  }
+  localizedTemplate = localizedTemplate.replace(header, localizedHeader);
   if (normalized !== 'zh-CN') return localizedTemplate;
   const cjkFont = String(options.cjkFont || (process.platform === 'darwin'
     ? 'Songti SC'

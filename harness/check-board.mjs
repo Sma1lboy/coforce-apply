@@ -10,12 +10,14 @@ import {
   existsSync,
   cpSync,
   mkdirSync,
+  mkdtempSync,
   readFileSync,
   readdirSync,
   writeFileSync,
 } from 'node:fs';
 import { strict as assert } from 'node:assert';
 import { dirname, join } from 'node:path';
+import { tmpdir } from 'node:os';
 import { fileURLToPath } from 'node:url';
 import { onePagePdf } from './pdf-fixture.mjs';
 
@@ -309,8 +311,7 @@ try {
   // fresh workspace: a data home with no applications.json is an empty board,
   // not a crash (board.mjs must never invent or overwrite data it cannot read)
   {
-    const freshHome = join(outDir, 'fresh-home');
-    mkdirSync(freshHome, { recursive: true });
+    const freshHome = mkdtempSync(join(tmpdir(), 'coforce-board-fresh-'));
     const fresh = spawn(
       process.execPath,
       ['.agents/skills/tracker/scripts/board.mjs', join(freshHome, 'applications.json'), '--serve', '0'],
@@ -330,6 +331,25 @@ try {
       const freshState = await (await fetch(`http://localhost:${freshPort}/api/state`)).json();
       assert.deepEqual(freshState.apps, [], 'missing applications.json → empty board');
       assert.equal(freshState.prefs, null, 'no settings → the welcome wizard opens');
+      const freshSkillPolicyResponse = await fetch(`http://localhost:${freshPort}/api/skills/policy`);
+      assert.equal(freshSkillPolicyResponse.status, 200, 'fresh profile skill policy is readable');
+      const freshSkillPolicy = await freshSkillPolicyResponse.json();
+      assert.equal(freshSkillPolicy.review.status, 'review_requested');
+      assert.deepEqual(freshSkillPolicy.skills, [], 'fresh profile starts with an empty skill inventory');
+      const freshProfileSave = await fetch(`http://localhost:${freshPort}/api/profile`, {
+        method: 'POST',
+        headers: { 'content-type': 'application/json' },
+        body: JSON.stringify({ name: 'Fresh Candidate', skills: ['Node.js'] }),
+      });
+      assert.equal(freshProfileSave.status, 204, 'first profile save succeeds without restarting the board');
+      const refreshedSkillPolicy = await (
+        await fetch(`http://localhost:${freshPort}/api/skills/policy`)
+      ).json();
+      assert.deepEqual(
+        refreshedSkillPolicy.skills.map(skill => skill.name),
+        ['Node.js'],
+        'skill inventory becomes available immediately after the first profile save'
+      );
       assert.equal(
         existsSync(join(freshHome, 'applications.json')),
         false,
@@ -409,8 +429,10 @@ try {
       minimumPageCoveragePercent: 93,
       onePage: true,
       fullPage: true,
+      resumeItemsUseBodyArgument: true,
       verbatim: true,
       skillsVerbatim: true,
+      extractable: true,
     }),
     'llm-judge.json': JSON.stringify({
       schemaVersion: '2.1',

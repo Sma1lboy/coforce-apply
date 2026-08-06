@@ -118,6 +118,37 @@ export const pageCoverageDeliveryProof = judge => {
   };
 };
 
+const REQUIRED_MACHINE_GATE_CHECKS = [
+  ['onePage', 'resume must be exactly one page'],
+  ['fullPage', 'page coverage must meet the configured minimum'],
+  ['resumeItemsUseBodyArgument', 'resume bullets must use the template body argument'],
+  ['verbatim', 'resume bullets must come verbatim from the selected pool'],
+  ['skillsVerbatim', 'rendered skills must match the selected skills'],
+  ['extractable', 'every resume bullet must survive PDF text extraction'],
+];
+
+const OPTIONAL_MACHINE_GATE_CHECKS = [
+  ['sectionTransitionsCompact', 'section transitions must stay compact'],
+  ['templatePreambleExact', 'template preamble must match the managed template'],
+  ['templateContactHeaderExact', 'contact header must match the managed template'],
+  ['skillsSectionSpacingExact', 'Skills spacing must match the managed template'],
+  ['projectEntryScaffoldingExact', 'Project entries must match the managed template'],
+  ['projectTransitionSpacingExact', 'Project transitions must match the managed template'],
+  ['projectTailSpacingExact', 'Project tail spacing must match the managed template'],
+];
+
+export const machineGateFailures = judge => [
+  ...REQUIRED_MACHINE_GATE_CHECKS
+    .filter(([key]) => judge?.[key] !== true)
+    .map(([key, message]) => ({ key, message, actual: judge?.[key] ?? null })),
+  ...OPTIONAL_MACHINE_GATE_CHECKS
+    .filter(([key]) => judge?.[key] === false)
+    .map(([key, message]) => ({ key, message, actual: false })),
+];
+
+const machineGateFailureMessage = failures =>
+  `Machine review failed: ${failures.map(item => item.message).join('; ')}`;
+
 const coverageFeedbackText = ({ fullness, minimumPageCoveragePercent }) => {
   const actual = pageCoverageActualPercent(fullness);
   return actual === null
@@ -388,23 +419,7 @@ export function applyResumeReviewPolicy(dataDir) {
     } catch {
       continue;
     }
-    // null = unverifiable (no pdfinfo / template without \resumeItem); only a
-    // FAILED metric blocks auto-approval — humans can still approve manually
-    if (
-      judge.onePage === false ||
-      judge.fullPage === false ||
-      judge.sectionTransitionsCompact === false ||
-      judge.templatePreambleExact === false ||
-      judge.templateContactHeaderExact === false ||
-      judge.skillsSectionSpacingExact === false ||
-      judge.projectEntryScaffoldingExact === false ||
-      judge.projectTransitionSpacingExact === false ||
-      judge.projectTailSpacingExact === false ||
-      judge.resumeItemsUseBodyArgument === false ||
-      judge.verbatim === false ||
-      judge.skillsVerbatim === false ||
-      judge.extractable === false
-    ) continue;
+    if (machineGateFailures(judge).length) continue;
     const coverageProof = pageCoverageDeliveryProof(judge);
     if (!coverageProof) continue;
     // the LLM review is mandatory: no recorded passing verdict, no automatic
@@ -873,8 +888,9 @@ export function stageArtifacts(dataDir, id, artifacts) {
     try {
       const judge = judgeResume(dataDir, id);
       const proof = pageCoverageDeliveryProof(judge);
+      const gateFailures = machineGateFailures(judge);
       staged = updateJob(dataDir, id, current => {
-        if (proof) {
+        if (proof && gateFailures.length === 0) {
           current.status = 'rendered';
           current.reviewDeliveryProof = {
             ...(current.reviewDeliveryProof || {}),
@@ -890,11 +906,15 @@ export function stageArtifacts(dataDir, id, artifacts) {
                 fullness: judge.fullness,
                 minimumPageCoveragePercent: judge.minimumPageCoveragePercent,
               })
-            : 'Page coverage could not be measured; Review delivery proof is required';
-          addCoverageFeedbackIfMissing(current, {
-            fullness: judge.fullness,
-            minimumPageCoveragePercent: judge.minimumPageCoveragePercent,
-          });
+            : gateFailures.length
+              ? machineGateFailureMessage(gateFailures)
+              : 'Page coverage could not be measured; Review delivery proof is required';
+          if (judge.fullPage !== true) {
+            addCoverageFeedbackIfMissing(current, {
+              fullness: judge.fullness,
+              minimumPageCoveragePercent: judge.minimumPageCoveragePercent,
+            });
+          }
         }
       });
     } catch (error) {
@@ -1113,12 +1133,17 @@ export function renderResume(dataDir, id, texSource = null, explicitLanguage = n
     }
     writeFileSync(join(dir, 'render.log'), output);
     const judge = judgeResume(dataDir, id);
-    if (judge.fullPage === false) {
+    const gateFailures = machineGateFailures(judge);
+    if (gateFailures.length) {
       const error = new Error(
-        `Resume page coverage ${Math.round(judge.fullness * 1000) / 10}% is below the configured ` +
-        `${judge.minimumPageCoveragePercent}% minimum`
+        judge.fullPage === false
+          ? `Resume page coverage ${Math.round(judge.fullness * 1000) / 10}% is below the configured ` +
+            `${judge.minimumPageCoveragePercent}% minimum`
+          : machineGateFailureMessage(gateFailures)
       );
-      error.code = 'PAGE_COVERAGE_INSUFFICIENT';
+      error.code = judge.fullPage === false
+        ? 'PAGE_COVERAGE_INSUFFICIENT'
+        : 'MACHINE_GATE_FAILED';
       error.judge = judge;
       throw error;
     }
@@ -1149,10 +1174,13 @@ export function renderResume(dataDir, id, texSource = null, explicitLanguage = n
   } catch (error) {
     updateJob(dataDir, id, current => {
       const coverageFailure = String(error.code || '').startsWith('PAGE_COVERAGE_');
-      current.status = coverageFailure ? 'revision_requested' : 'render_failed';
+      const machineFailure = error.code === 'MACHINE_GATE_FAILED';
+      current.status = coverageFailure || machineFailure ? 'revision_requested' : 'render_failed';
       current.error = String(error.message || error);
-      if (coverageFailure) {
+      if (coverageFailure || machineFailure) {
         current.reviewDeliveryProof = null;
+      }
+      if (coverageFailure) {
         addCoverageFeedbackIfMissing(current, {
           fullness: error.judge?.fullness ?? null,
           minimumPageCoveragePercent:
@@ -1711,12 +1739,14 @@ export function approveJob(dataDir, id) {
   const missing = REQUIRED_EXPORT_FILES.filter(name => !existsSync(join(dir, name)));
   if (missing.length) throw new Error(`Cannot approve; missing ${missing.join(', ')}`);
   const judge = currentResumeJudge(dataDir, job);
+  const gateFailures = machineGateFailures(judge);
   if (judge.fullPage === false) {
     throw new Error(
       `Cannot approve; page coverage ${Math.round(judge.fullness * 1000) / 10}% is below the ` +
       `${judge.minimumPageCoveragePercent}% minimum`
     );
   }
+  if (gateFailures.length) throw new Error(`Cannot approve; ${machineGateFailureMessage(gateFailures)}`);
   const proof = pageCoverageDeliveryProof(judge);
   if (!proof) throw new Error('Cannot approve; page coverage delivery proof is missing');
   return updateJob(dataDir, id, current => {

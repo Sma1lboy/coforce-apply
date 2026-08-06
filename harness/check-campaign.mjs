@@ -37,7 +37,7 @@ import {
   upsertSource,
 } from '../.agents/skills/experience/scripts/experience-lib.mjs';
 import { resolveProfileContact } from '../.agents/lib/profile-contact.mjs';
-import { onePagePdf } from './pdf-fixture.mjs';
+import { onePagePdf, twoPagePdf } from './pdf-fixture.mjs';
 
 const dataDir = process.env.COFORCE_CAMPAIGN_DIR || mkdtempSync(join(tmpdir(), 'coforce-campaign-'));
 const llmVerdict = ({ total = 90, presentation = 18, jdFit = 8, deductions = 8, actionableDeductions = 2, criticalFixes = [] } = {}) => {
@@ -169,6 +169,60 @@ assert.deepEqual(resolveProfileContact(fixtureProfile, 'zh'), {
 assert.deepEqual(resolveProfileContact(fixtureProfile, 'en-US'), {
   language: 'en-US', email: 'test@example.com', phone: '614-000-0000',
 });
+
+// The bundled setup template is a fillable source. Normalizing its static
+// contract must materialize profile fields, never copy raw placeholders back
+// over the assembled resume header.
+{
+  const placeholderDir = mkdtempSync(join(tmpdir(), 'coforce-template-placeholders-'));
+  const templateDir = join(placeholderDir, 'templates');
+  mkdirSync(templateDir, { recursive: true });
+  const templatePath = join(templateDir, 'resume_template.tex');
+  const rawTemplate = [
+    '\\documentclass{article}',
+    '\\newcommand{\\resumeItem}[2]{#2}',
+    '\\begin{document}',
+    '\\begin{center}',
+    '\\textbf{\\Huge \\scshape {name}}\\\\',
+    '\\small',
+    '\\href{sms:{phone}}{{phone}} $|$',
+    '\\href{mailto:{email}}{{email}}',
+    '\\end{center}',
+    '\\section{Skills}',
+    '\\resumeHeadingSkillStart',
+    '\\resumeSubItem{Languages:}{Node.js}',
+    '\\resumeHeadingSkillEnd',
+    '\\section{Projects}',
+    '\\resumeSubHeadingListStart',
+    '\\resumeSubheading{One}{}{}{}',
+    '\\resumeItem{}{Built a thing}',
+    '\\resumeSubHeadingListEnd',
+    '\\end{document}',
+    '',
+  ].join('\n');
+  writeFileSync(templatePath, rawTemplate);
+  writeFileSync(join(placeholderDir, 'config.json'), JSON.stringify({ latexTemplate: templatePath }));
+  writeFileSync(join(placeholderDir, 'profile.json'), JSON.stringify({
+    name: 'Real Candidate', email: 'real@example.com', phone: '1234567890',
+  }));
+  const placeholderJob = syncJobs(placeholderDir, [{
+    url: 'https://jobs.example/placeholders', company: 'Template Co', role: 'Engineer',
+  }]).added[0];
+  const placeholderJobDir = join(
+    placeholderDir, 'campaigns', 'current', 'jobs', placeholderJob.folder,
+  );
+  writeFileSync(join(placeholderJobDir, 'resume.tex'), rawTemplate
+    .replace('{name}', 'Real Candidate')
+    .replaceAll('{email}', 'real@example.com')
+    .replaceAll('{phone}', '1234567890'));
+  syncTemplateContractToResume(placeholderDir, placeholderJob.id, 'en-US');
+  const normalized = readFileSync(join(placeholderJobDir, 'resume.tex'), 'utf8');
+  assert.match(normalized, /Real Candidate/);
+  assert.match(normalized, /real@example\.com/);
+  assert.match(normalized, /1234567890/);
+  assert.doesNotMatch(normalized, /\{(?:name|email|phone)\}/,
+    'template normalization never restores raw profile placeholders');
+}
 writeFileSync(libraryPath, JSON.stringify({
   github_logins: ['candidate'],
   sources: [{ repo: 'example/product', authors: ['candidate'], project: 'Product' }],
@@ -303,9 +357,27 @@ for (const [jobIndex, job] of synced.added.entries()) {
     rolePack: 1,
     jdExtras: 1,
   });
-  const staged = stageArtifacts(dataDir, job.id, { tex, pdf });
-  assert.equal(staged.status, 'rendered', 'default mode waits for manual review');
-  assert.equal(staged.approvalMode, null);
+  // The synthetic PDF fixture has a Latin-only text layer. Exercise the
+  // manual-review transition with the English selection here; the real
+  // Tectonic E2E below covers the Chinese assembler and extracted CJK text.
+  if (resumeLanguage === 'en-US') {
+    writeFileSync(tex, [
+      '\\documentclass{article}',
+      '\\newcommand{\\resumeItem}[2]{#2}',
+      '\\newcommand{\\resumeSubItem}[2]{#1 #2}',
+      '\\begin{document}',
+      '\\section{\\textbf{Skills}}',
+      '\\resumeSubItem{Relevant Skills:}{TypeScript, Node.js, Python}',
+      `\\resumeItem{}{${pool[0].text}}`,
+      `\\resumeItem{}{${pool[2].text}}`,
+      '\\end{document}',
+      '',
+    ].join('\n'));
+    writeFileSync(pdf, onePagePdf(`${pool[0].text} ${pool[2].text}`, true, 8));
+    const staged = stageArtifacts(dataDir, job.id, { tex, pdf });
+    assert.equal(staged.status, 'rendered', 'default mode waits for manual review');
+    assert.equal(staged.approvalMode, null);
+  }
 }
 assert.throws(
   () => selectBullets(dataDir, synced.added[0].id, [pool[0].id, 'deadbeef']),
@@ -403,7 +475,8 @@ if (hasTectonic) {
   const fixtureTemplatePath = join(dataDir, 'fixture-template.tex');
   const fixtureTemplate =
     `\\documentclass{article}\n\\newcommand{\\resumeItem}[2]{\\textbf{#1}#2}\n\\begin{document}\n` +
-    `\\small{614-000-0000|\\href{mailto:test@example.com}{test@example.com}}\n` +
+    `\\small\n\\href{sms:614-000-0000}{614-000-0000} $|$\n` +
+    `\\href{mailto:test@example.com}{test@example.com}\n` +
     `\\vspace{-8mm}\n` +
     `\\section{\\textbf{Skills}}\\resumeSubItem{Languages, Frameworks, Backend \\& Data:}{TypeScript, Node.js, Python}\n` +
     `\\section{\\textbf{Projects}}\n` +
@@ -440,6 +513,7 @@ if (hasTectonic) {
         `\\resumeItem{${pool[0].textZh}}{}\n\\resumeItem{}{${pool[2].textZh}}`,
       );
   writeFileSync(join(jobTexDir, 'resume.tex'), driftedResume);
+  writeFileSync(join(jobTexDir, 'resume.pdf'), onePagePdf('CoForce campaign fixture'));
   const normalizedTemplate = syncTemplateContractToResume(dataDir, synced.added[0].id);
   assert.equal(normalizedTemplate.updated, true);
   assert.equal(normalizedTemplate.templatePreambleExact, true);
@@ -449,11 +523,13 @@ if (hasTectonic) {
   assert.equal(normalizedTemplate.projectTransitionSpacingExact, true);
   assert.equal(normalizedTemplate.projectTailSpacingExact, true);
   assert.equal(normalizedTemplate.resumeItemsUseBodyArgument, true);
-  assert.match(
-    readFileSync(join(jobTexDir, 'resume.tex'), 'utf8'),
-    /\\small\{18900000000\|\\href\{mailto:cn@example\.com\}\{cn@example\.com\}\}\n\\vspace\{-8mm\}\n\\section\{\\textbf\{专业技能\}\}/,
-    'config.json is the only template source and its contact is localized for the selected resume language'
-  );
+  const normalizedFixtureTex = readFileSync(join(jobTexDir, 'resume.tex'), 'utf8');
+  assert.match(normalizedFixtureTex, /\\href\{sms:18900000000\}\{18900000000\}/,
+    'the localized phone is applied even when it is on a separate template line');
+  assert.match(normalizedFixtureTex, /\\href\{mailto:cn@example\.com\}\{cn@example\.com\}/,
+    'the localized email is applied from the same profile override');
+  assert.match(normalizedFixtureTex, /\\vspace\{-8mm\}\n\\section\{\\textbf\{专业技能\}\}/,
+    'config.json remains the only template source for localized section spacing');
   const good = judgeResume(dataDir, synced.added[0].id);
   assert.equal(good.verbatim, true, 'pool bullet verbatim passes the judge');
   assert.equal(good.resumeItemsUseBodyArgument, true, 'resume bullets use the non-bold body argument');
@@ -531,8 +607,21 @@ if (hasTectonic) {
     assert.equal(opaque.extractable, false, 'a bullet missing from the text layer fails the judge');
     assert.equal(opaque.unextractedLines.length, 1);
   }
-  stageArtifacts(dataDir, englishJob.id, { tex, pdf });
-  judgeResume(dataDir, englishJob.id); // restore a clean judge for the flow below
+  const assembledEnglish = assembleResume(dataDir, englishJob.id, 'en-US');
+  syncTemplateContractToResume(dataDir, englishJob.id, 'en-US');
+  writeFileSync(tex, readFileSync(assembledEnglish.path, 'utf8'));
+  const englishPdfText = `${pool[0].text} ${pool[2].text}`;
+  writeFileSync(pdf, twoPagePdf(englishPdfText, true, 8));
+  const twoPageStage = stageArtifacts(dataDir, englishJob.id, { tex, pdf });
+  assert.equal(twoPageStage.status, 'revision_requested', 'a two-page staged PDF never reaches Review');
+  assert.throws(
+    () => approveJob(dataDir, englishJob.id),
+    /exactly one page/,
+    'manual approval cannot bypass the shared machine gate'
+  );
+  writeFileSync(pdf, onePagePdf(englishPdfText, true, 8));
+  const restored = stageArtifacts(dataDir, englishJob.id, { tex, pdf });
+  assert.equal(restored.status, 'rendered', 'a clean staged PDF returns to Review');
 }
 
 // Saved skill selections replace stale sparse template keywords while the
@@ -563,13 +652,31 @@ if (hasTectonic) {
   stageArtifacts(dataDir, jobView.id, { tex, pdf });
 }
 
+const stageReviewableEnglishFixture = jobId => {
+  selectBullets(
+    dataDir,
+    jobId,
+    [pool[0].id, pool[2].id],
+    skills.map(skill => skill.id),
+    'backend',
+    'en-US',
+  );
+  const assembled = assembleResume(dataDir, jobId, 'en-US');
+  syncTemplateContractToResume(dataDir, jobId, 'en-US');
+  writeFileSync(tex, readFileSync(assembled.path, 'utf8'));
+  writeFileSync(pdf, onePagePdf(`${pool[0].text} ${pool[2].text}`, true, 8));
+  return stageArtifacts(dataDir, jobId, { tex, pdf });
+};
+
 const first = synced.added[0];
+assert.equal(stageReviewableEnglishFixture(first.id).status, 'rendered');
 addFeedback(dataDir, first.id, 'Lead with the retry and observability work.');
 assert.equal(campaignView(dataDir).jobs.find(job => job.id === first.id).status, 'revision_requested');
-stageArtifacts(dataDir, first.id, { tex, pdf });
+assert.equal(stageReviewableEnglishFixture(first.id).status, 'rendered');
 approveJob(dataDir, first.id);
 assert.equal(campaignView(dataDir).jobs.find(job => job.id === first.id).approvalMode, 'manual');
 assert.throws(() => exportCampaign(dataDir), /All resumes must be approved/);
+assert.equal(stageReviewableEnglishFixture(synced.added[1].id).status, 'rendered');
 approveJob(dataDir, synced.added[1].id);
 
 const exported = exportCampaign(dataDir);
@@ -610,6 +717,13 @@ assert.equal(coverageFeedbackView.status, 'revision_requested');
 assert.equal(coverageFeedbackView.feedback.length, 1, 'structured feedback reason is idempotent while open');
 assert.equal(coverageFeedbackView.feedback[0].reasonCode, 'page_coverage_insufficient');
 assert.equal(coverageFeedbackView.feedback[0].visibility, 'internal');
+const coverageFeedbackJobDir = join(
+  coverageFeedbackDir, 'campaigns', 'current', 'jobs', coverageFeedbackJob.folder,
+);
+writeFileSync(join(coverageFeedbackJobDir, 'match.json'), JSON.stringify({
+  bullets: [{ text: pool[0].text }, { text: pool[2].text }],
+  skills: skills.map(skill => ({ name: skill.name })),
+}));
 stageArtifacts(coverageFeedbackDir, coverageFeedbackJob.id, { tex, pdf });
 coverageFeedbackView = campaignView(coverageFeedbackDir).jobs[0];
 assert.equal(coverageFeedbackView.status, 'rendered', 'passing coverage proof delivers the revision back to Review');
@@ -627,9 +741,17 @@ const autoJd = join(autoDir, 'job-description.md');
 const autoMatch = join(autoDir, 'match-report.md');
 writeFileSync(autoJd, '# Job description\n\nGrounded fixture role.\n');
 writeFileSync(autoMatch, '# Match report\n\nEvidence: fixture.\n');
+const writePassingMatch = (dir, job) => {
+  const dirPath = join(dir, 'campaigns', 'current', 'jobs', job.folder);
+  writeFileSync(join(dirPath, 'match.json'), JSON.stringify({
+    bullets: [{ text: pool[0].text }, { text: pool[2].text }],
+    skills: skills.map(skill => ({ name: skill.name })),
+  }));
+};
 const autoFirst = syncJobs(autoDir, [{
   id: 'auto-1', company: 'Auto Labs', role: 'Engineer', url: 'https://jobs.example/auto-1',
 }]).added[0];
+writePassingMatch(autoDir, autoFirst);
 stageArtifacts(autoDir, autoFirst.id, { jd: autoJd, match: autoMatch, tex, pdf });
 assert.equal(campaignView(autoDir).jobs[0].status, 'rendered');
 assert.equal(campaignView(autoDir).lastExport, null);
@@ -654,6 +776,7 @@ assert.equal(campaignView(autoDir).reviewRequired, false);
 // a failed judge metric must block auto-approval even with review disabled
 const gateDir = mkdtempSync(join(tmpdir(), 'coforce-campaign-gate-'));
 const gateJob = syncJobs(gateDir, [{ id: 'gate-1', company: 'Gate Labs', role: 'Engineer', url: 'https://jobs.example/gate-1' }]).added[0];
+writePassingMatch(gateDir, gateJob);
 stageArtifacts(gateDir, gateJob.id, { jd: autoJd, match: autoMatch, tex, pdf });
 const gateView = campaignView(gateDir).jobs[0];
 const gateJobDir = join(gateDir, 'campaigns', 'current', 'jobs', gateView.folder);
@@ -670,6 +793,7 @@ assert.equal(campaignView(gateDir).jobs[0].status, 'rendered', 'job stays in rev
 const autoSecond = syncJobs(autoDir, [{
   id: 'auto-2', company: 'Auto Labs', role: 'Platform Engineer', url: 'https://jobs.example/auto-2',
 }]).added[0];
+writePassingMatch(autoDir, autoSecond);
 const autoStaged = stageArtifacts(autoDir, autoSecond.id, { jd: autoJd, match: autoMatch, tex, pdf });
 assert.equal(autoStaged.status, 'rendered', 'auto mode still waits for the mandatory llm verdict');
 const autoSecondView = campaignView(autoDir).jobs.find(job => job.id === autoSecond.id);
