@@ -104,6 +104,16 @@ export default function Settings({ state, onChanged, goWizard }) {
             <input className="inp" defaultValue={config.latexTemplate ?? ''} placeholder="/absolute/path/resume-template.tex" onBlur={e => e.target.value !== (config.latexTemplate ?? '') && saveConfig({ latexTemplate: e.target.value })} />
           </label>
           <label className="flex flex-col gap-1">
+            <span className="flabel">Chinese resume font</span>
+            <input
+              className="inp"
+              defaultValue={config.resumeCjkFont ?? ''}
+              placeholder="Songti SC / Noto Serif CJK SC"
+              onBlur={e => e.target.value !== (config.resumeCjkFont ?? '') && saveConfig({ resumeCjkFont: e.target.value })}
+            />
+            <span className="text-[10px] text-dim">Optional system font name used by XeLaTeX/Tectonic.</span>
+          </label>
+          <label className="flex flex-col gap-1">
             <span className="flabel">Minimum page coverage (%)</span>
             <input
               className="inp"

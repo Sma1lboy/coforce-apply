@@ -413,15 +413,17 @@ try {
       skillsVerbatim: true,
     }),
     'llm-judge.json': JSON.stringify({
+      schemaVersion: '2.1',
       judgedAt: '2026-07-26T00:00:00.000Z',
       runs: 3,
       medianTotal: 87,
+      gate: { presentation: 18, jdFit: 8, actionableDeductions: 2, criticalFixes: [] },
       pass: true,
-      fixes: ['Add one stronger result metric.'],
+      fixes: [{ fix: 'Add one stronger result metric.', severity: 'normal' }],
       verdicts: [
-        { total: 84, jd_fit_note: 'Good adjacent fit.' },
-        { total: 87, jd_fit_note: 'Strong direct fit; improve proof of impact.' },
-        { total: 90, jd_fit_note: 'Strong direct fit.' },
+        { total: 84, presentation: { score: 17 }, jd_fit: { score: 7, note: 'Good adjacent fit.' }, deductions: { total: 8 }, actionable_deductions: { total: 3 }, fixes: [] },
+        { total: 87, presentation: { score: 18 }, jd_fit: { score: 8, note: 'Strong direct fit; improve proof of impact.' }, deductions: { total: 7 }, actionable_deductions: { total: 2 }, fixes: [] },
+        { total: 90, presentation: { score: 19 }, jd_fit: { score: 9, note: 'Strong direct fit.' }, deductions: { total: 6 }, actionable_deductions: { total: 1 }, fixes: [] },
       ],
     }),
   })) writeFileSync(join(campaignDir, name), content);
@@ -431,6 +433,7 @@ try {
   assert.equal(judgedJob.machineJudge.fullPage, undefined, 'Human API hides the coverage verdict');
   assert.equal(judgedJob.reviewDeliveryProof, undefined, 'Human API hides internal delivery proof');
   assert.equal(judgedJob.llmJudge.medianTotal, 87, 'campaign API exposes the LLM judge median');
+  assert.equal(judgedJob.llmJudge.valid, true, 'campaign API validates the current LLM judge schema');
   assert.equal(
     judgedJob.llmJudge.jdFitNote,
     'Strong direct fit; improve proof of impact.',

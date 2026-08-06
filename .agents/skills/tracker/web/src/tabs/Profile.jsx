@@ -508,8 +508,8 @@ export default function Profile({ state, onChanged }) {
             empty={{ company: '', title: '', date: '', location: '', description: [{ text: '', textZh: null }] }}
             fields={[['Company', 'company'], ['Title', 'title'], ['Date', 'date'], ['Location', 'location']]} />
           <SectionCards title="Projects" keyName="projects" addLabel="+ Add project"
-            empty={{ name: '', technologies: '', dateRange: '', description: [{ text: '', textZh: null }] }}
-            fields={[['Name', 'name'], ['Technologies', 'technologies'], ['Date range', 'dateRange', true]]} />
+            empty={{ name: '', role: '', url: '', technologies: '', dateRange: '', description: [{ text: '', textZh: null }] }}
+            fields={[['Name', 'name'], ['Role label', 'role'], ['Repository URL', 'url', true], ['Technologies', 'technologies'], ['Date range', 'dateRange']]} />
           <SectionCards title="Education" keyName="education" addLabel="+ Add education"
             empty={{ institution: '', degree: '', date: '', location: '' }}
             fields={[['Institution', 'institution'], ['Degree', 'degree'], ['Date', 'date'], ['Location', 'location']]} />
