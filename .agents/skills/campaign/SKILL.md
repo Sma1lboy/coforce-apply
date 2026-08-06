@@ -157,7 +157,10 @@ not a selection problem.
 
 With `requireResumeReview: true`, the Review tab handles feedback and approval.
 With it disabled, a complete passing render can auto-approve. Neither mode
-authorizes submitting an application.
+authorizes submitting an application. Manual approval never bypasses the
+machine gate: staged and locally rendered PDFs must pass the same one-page,
+coverage, grounding, extraction, and template checks before Review can approve
+them.
 
 Export only when every job is approved:
 

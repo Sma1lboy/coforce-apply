@@ -32,7 +32,7 @@ import {
   upsertSource,
 } from '../.agents/skills/experience/scripts/experience-lib.mjs';
 import { resolveProfileContact } from '../.agents/lib/profile-contact.mjs';
-import { onePagePdf } from './pdf-fixture.mjs';
+import { onePagePdf, twoPagePdf } from './pdf-fixture.mjs';
 
 const dataDir = process.env.COFORCE_CAMPAIGN_DIR || mkdtempSync(join(tmpdir(), 'coforce-campaign-'));
 const jobs = [
@@ -111,6 +111,60 @@ assert.deepEqual(resolveProfileContact(fixtureProfile, 'zh'), {
 assert.deepEqual(resolveProfileContact(fixtureProfile, 'en-US'), {
   language: 'en-US', email: 'test@example.com', phone: '614-000-0000',
 });
+
+// The bundled setup template is a fillable source. Normalizing its static
+// contract must materialize profile fields, never copy raw placeholders back
+// over the assembled resume header.
+{
+  const placeholderDir = mkdtempSync(join(tmpdir(), 'coforce-template-placeholders-'));
+  const templateDir = join(placeholderDir, 'templates');
+  mkdirSync(templateDir, { recursive: true });
+  const templatePath = join(templateDir, 'resume_template.tex');
+  const rawTemplate = [
+    '\\documentclass{article}',
+    '\\newcommand{\\resumeItem}[2]{#2}',
+    '\\begin{document}',
+    '\\begin{center}',
+    '\\textbf{\\Huge \\scshape {name}}\\\\',
+    '\\small',
+    '\\href{sms:{phone}}{{phone}} $|$',
+    '\\href{mailto:{email}}{{email}}',
+    '\\end{center}',
+    '\\section{Skills}',
+    '\\resumeHeadingSkillStart',
+    '\\resumeSubItem{Languages:}{Node.js}',
+    '\\resumeHeadingSkillEnd',
+    '\\section{Projects}',
+    '\\resumeSubHeadingListStart',
+    '\\resumeSubheading{One}{}{}{}',
+    '\\resumeItem{}{Built a thing}',
+    '\\resumeSubHeadingListEnd',
+    '\\end{document}',
+    '',
+  ].join('\n');
+  writeFileSync(templatePath, rawTemplate);
+  writeFileSync(join(placeholderDir, 'config.json'), JSON.stringify({ latexTemplate: templatePath }));
+  writeFileSync(join(placeholderDir, 'profile.json'), JSON.stringify({
+    name: 'Real Candidate', email: 'real@example.com', phone: '1234567890',
+  }));
+  const placeholderJob = syncJobs(placeholderDir, [{
+    url: 'https://jobs.example/placeholders', company: 'Template Co', role: 'Engineer',
+  }]).added[0];
+  const placeholderJobDir = join(
+    placeholderDir, 'campaigns', 'current', 'jobs', placeholderJob.folder,
+  );
+  writeFileSync(join(placeholderJobDir, 'resume.tex'), rawTemplate
+    .replace('{name}', 'Real Candidate')
+    .replaceAll('{email}', 'real@example.com')
+    .replaceAll('{phone}', '1234567890'));
+  syncTemplateContractToResume(placeholderDir, placeholderJob.id, 'en-US');
+  const normalized = readFileSync(join(placeholderJobDir, 'resume.tex'), 'utf8');
+  assert.match(normalized, /Real Candidate/);
+  assert.match(normalized, /real@example\.com/);
+  assert.match(normalized, /1234567890/);
+  assert.doesNotMatch(normalized, /\{(?:name|email|phone)\}/,
+    'template normalization never restores raw profile placeholders');
+}
 writeFileSync(libraryPath, JSON.stringify({
   github_logins: ['candidate'],
   sources: [{ repo: 'example/product', authors: ['candidate'], project: 'Product' }],
@@ -245,6 +299,19 @@ for (const [jobIndex, job] of synced.added.entries()) {
     rolePack: 1,
     jdExtras: 1,
   });
+  writeFileSync(tex, [
+    '\\documentclass{article}',
+    '\\newcommand{\\resumeItem}[2]{#2}',
+    '\\newcommand{\\resumeSubItem}[2]{#1 #2}',
+    '\\begin{document}',
+    '\\section{\\textbf{Skills}}',
+    '\\resumeSubItem{Relevant Skills:}{TypeScript, Node.js, Python}',
+    `\\resumeItem{}{${pool[0].text}}`,
+    `\\resumeItem{}{${pool[2].text}}`,
+    '\\end{document}',
+    '',
+  ].join('\n'));
+  writeFileSync(pdf, onePagePdf(`${pool[0].text} ${pool[2].text}`, true, 8));
   const staged = stageArtifacts(dataDir, job.id, { tex, pdf });
   assert.equal(staged.status, 'rendered', 'default mode waits for manual review');
   assert.equal(staged.approvalMode, null);
@@ -281,7 +348,8 @@ assert.equal(statSync(libraryPath).mtimeMs, libraryBefore.mtimeMs, 'campaign mus
   const fixtureTemplatePath = join(dataDir, 'fixture-template.tex');
   const fixtureTemplate =
     `\\documentclass{article}\n\\newcommand{\\resumeItem}[2]{\\textbf{#1}#2}\n\\begin{document}\n` +
-    `\\small{614-000-0000|\\href{mailto:test@example.com}{test@example.com}}\n` +
+    `\\small\n\\href{sms:614-000-0000}{614-000-0000} $|$\n` +
+    `\\href{mailto:test@example.com}{test@example.com}\n` +
     `\\vspace{-8mm}\n` +
     `\\section{\\textbf{Skills}}\\resumeSubItem{Languages, Frameworks, Backend \\& Data:}{TypeScript, Node.js, Python}\n` +
     `\\section{\\textbf{Projects}}\n` +
@@ -322,11 +390,11 @@ assert.equal(statSync(libraryPath).mtimeMs, libraryBefore.mtimeMs, 'campaign mus
   assert.equal(normalizedTemplate.projectTransitionSpacingExact, true);
   assert.equal(normalizedTemplate.projectTailSpacingExact, true);
   assert.equal(normalizedTemplate.resumeItemsUseBodyArgument, true);
-  assert.match(
-    readFileSync(join(jobTexDir, 'resume.tex'), 'utf8'),
-    /\\small\{18900000000\|\\href\{mailto:cn@example\.com\}\{cn@example\.com\}\}\n\\vspace\{-8mm\}\n\\section\{\\textbf\{Skills\}\}/,
-    'config.json is the only template source and its contact is localized for the selected resume language'
-  );
+  const normalizedFixtureTex = readFileSync(join(jobTexDir, 'resume.tex'), 'utf8');
+  assert.match(normalizedFixtureTex, /\\href\{sms:18900000000\}\{18900000000\}/,
+    'the localized phone is applied even when it is on a separate template line');
+  assert.match(normalizedFixtureTex, /\\href\{mailto:cn@example\.com\}\{cn@example\.com\}/,
+    'the localized email is applied from the same profile override');
   const good = judgeResume(dataDir, synced.added[0].id);
   assert.equal(good.verbatim, true, 'pool bullet verbatim passes the judge');
   assert.equal(good.resumeItemsUseBodyArgument, true, 'resume bullets use the non-bold body argument');
@@ -402,8 +470,18 @@ assert.equal(statSync(libraryPath).mtimeMs, libraryBefore.mtimeMs, 'campaign mus
     assert.equal(opaque.extractable, false, 'a bullet missing from the text layer fails the judge');
     assert.equal(opaque.unextractedLines.length, 1);
   }
-  stageArtifacts(dataDir, synced.added[0].id, { tex, pdf });
-  judgeResume(dataDir, synced.added[0].id); // restore a clean judge for the flow below
+  writeFileSync(tex, normalizedFixtureTex);
+  writeFileSync(pdf, twoPagePdf(pool[0].text, true, 8));
+  const twoPageStage = stageArtifacts(dataDir, synced.added[0].id, { tex, pdf });
+  assert.equal(twoPageStage.status, 'revision_requested', 'a two-page staged PDF never reaches Review');
+  assert.throws(
+    () => approveJob(dataDir, synced.added[0].id),
+    /exactly one page/,
+    'manual approval cannot bypass the shared machine gate'
+  );
+  writeFileSync(pdf, onePagePdf(pool[0].text, true, 8));
+  const restored = stageArtifacts(dataDir, synced.added[0].id, { tex, pdf });
+  assert.equal(restored.status, 'rendered', 'a clean staged PDF returns to Review');
 }
 
 // Saved skill selections replace stale sparse template keywords while the
@@ -480,6 +558,13 @@ assert.equal(coverageFeedbackView.status, 'revision_requested');
 assert.equal(coverageFeedbackView.feedback.length, 1, 'structured feedback reason is idempotent while open');
 assert.equal(coverageFeedbackView.feedback[0].reasonCode, 'page_coverage_insufficient');
 assert.equal(coverageFeedbackView.feedback[0].visibility, 'internal');
+const coverageFeedbackJobDir = join(
+  coverageFeedbackDir, 'campaigns', 'current', 'jobs', coverageFeedbackJob.folder,
+);
+writeFileSync(join(coverageFeedbackJobDir, 'match.json'), JSON.stringify({
+  bullets: [{ text: pool[0].text }],
+  skills: skills.map(skill => ({ name: skill.name })),
+}));
 stageArtifacts(coverageFeedbackDir, coverageFeedbackJob.id, { tex, pdf });
 coverageFeedbackView = campaignView(coverageFeedbackDir).jobs[0];
 assert.equal(coverageFeedbackView.status, 'rendered', 'passing coverage proof delivers the revision back to Review');
@@ -497,9 +582,17 @@ const autoJd = join(autoDir, 'job-description.md');
 const autoMatch = join(autoDir, 'match-report.md');
 writeFileSync(autoJd, '# Job description\n\nGrounded fixture role.\n');
 writeFileSync(autoMatch, '# Match report\n\nEvidence: fixture.\n');
+const writePassingMatch = (dir, job) => {
+  const dirPath = join(dir, 'campaigns', 'current', 'jobs', job.folder);
+  writeFileSync(join(dirPath, 'match.json'), JSON.stringify({
+    bullets: [{ text: pool[0].text }],
+    skills: skills.map(skill => ({ name: skill.name })),
+  }));
+};
 const autoFirst = syncJobs(autoDir, [{
   id: 'auto-1', company: 'Auto Labs', role: 'Engineer', url: 'https://jobs.example/auto-1',
 }]).added[0];
+writePassingMatch(autoDir, autoFirst);
 stageArtifacts(autoDir, autoFirst.id, { jd: autoJd, match: autoMatch, tex, pdf });
 assert.equal(campaignView(autoDir).jobs[0].status, 'rendered');
 assert.equal(campaignView(autoDir).lastExport, null);
@@ -519,6 +612,7 @@ assert.equal(campaignView(autoDir).reviewRequired, false);
 // a failed judge metric must block auto-approval even with review disabled
 const gateDir = mkdtempSync(join(tmpdir(), 'coforce-campaign-gate-'));
 const gateJob = syncJobs(gateDir, [{ id: 'gate-1', company: 'Gate Labs', role: 'Engineer', url: 'https://jobs.example/gate-1' }]).added[0];
+writePassingMatch(gateDir, gateJob);
 stageArtifacts(gateDir, gateJob.id, { jd: autoJd, match: autoMatch, tex, pdf });
 const gateView = campaignView(gateDir).jobs[0];
 const gateJobDir = join(gateDir, 'campaigns', 'current', 'jobs', gateView.folder);
@@ -535,6 +629,7 @@ assert.equal(campaignView(gateDir).jobs[0].status, 'rendered', 'job stays in rev
 const autoSecond = syncJobs(autoDir, [{
   id: 'auto-2', company: 'Auto Labs', role: 'Platform Engineer', url: 'https://jobs.example/auto-2',
 }]).added[0];
+writePassingMatch(autoDir, autoSecond);
 const autoStaged = stageArtifacts(autoDir, autoSecond.id, { jd: autoJd, match: autoMatch, tex, pdf });
 assert.equal(autoStaged.status, 'rendered', 'auto mode still waits for the mandatory llm verdict');
 const autoSecondView = campaignView(autoDir).jobs.find(job => job.id === autoSecond.id);
