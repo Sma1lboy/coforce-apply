@@ -18,7 +18,15 @@ import { execFileSync } from 'node:child_process';
 import { basename, dirname, extname, join, resolve, sep } from 'node:path';
 import { writeJsonAtomic } from '../../../lib/fs-atomic.mjs';
 import { loadConfig } from '../../../lib/config.mjs';
-import { normalizeResumeLanguage, resolveProfileContact } from '../../../lib/profile-contact.mjs';
+import { normalizeResumeLanguage } from '../../../lib/profile-contact.mjs';
+import {
+  assembleResumeTex,
+  escapeResumeText,
+  localizedSkillGroups,
+  localizeResumeTemplate,
+  resumeSectionLabels,
+} from './resume-assembly.mjs';
+import { aggregateLlmJudgeRuns, llmJudgePasses, validateLlmJudge } from './llm-judge.mjs';
 
 export const CAMPAIGN_SCHEMA = '1.0';
 export const REQUIRED_EXPORT_FILES = [
@@ -178,24 +186,9 @@ const resumeLanguageForJob = (dataDir, job, explicitLanguage = null) => {
 const templateForResumeLanguage = (dataDir, template, language) => {
   const profilePath = join(dataDir, 'profile.json');
   if (!existsSync(profilePath)) return template;
-  const profile = readJson(profilePath);
-  const contact = resolveProfileContact(profile, language);
-  const templateContact = template.split(/\r?\n/).find(line => line.includes('mailto:'));
-  if (!templateContact) return template;
-  let localizedContact = templateContact;
-  if (contact.phone) {
-    localizedContact = localizedContact.replace(
-      /(\\small\{)[^|{}]*(?=\|)/,
-      (_, prefix) => `${prefix}${contact.phone}`,
-    );
-  }
-  if (contact.email) {
-    localizedContact = localizedContact.replace(
-      /\\href\{mailto:[^}]+\}\{[^}]+\}/,
-      `\\href{mailto:${contact.email}}{${contact.email}}`,
-    );
-  }
-  return template.replace(templateContact, localizedContact);
+  return localizeResumeTemplate(template, readJson(profilePath), language, {
+    cjkFont: loadConfig(dataDir).resumeCjkFont,
+  });
 };
 
 const slugify = value =>
@@ -421,7 +414,7 @@ export function applyResumeReviewPolicy(dataDir) {
     try {
       llmJudge = readJson(join(dir, 'llm-judge.json'));
     } catch {}
-    if (!llmJudge || llmJudge.pass !== true) continue;
+    if (!llmJudgePasses(llmJudge)) continue;
     job.status = 'approved';
     job.approvedAt = now();
     job.approvalMode = 'automatic';
@@ -928,37 +921,6 @@ const findBinary = names => {
   return null;
 };
 
-const escapeSkillTex = value => String(value)
-  .replace(/\\/g, '\\textbackslash{}')
-  .replace(/([&%#_$])/g, '\\$1');
-
-const consolidatedSkillGroups = skills => {
-  const byLabel = new Map();
-  for (const skill of skills) {
-    const label = String(skill.category || 'Tools & Technologies').trim();
-    if (!byLabel.has(label)) byLabel.set(label, []);
-    byLabel.get(label).push(String(skill.name || '').trim());
-  }
-  const active = [...byLabel].map(([label, names]) => ({ label, names }));
-  const minimum = Math.min(5, skills.length);
-  const sparse = active.filter(group => group.names.length < minimum);
-  if (sparse.length === active.length && active.length > 1) {
-    return [{ label: 'Relevant Skills', names: active.flatMap(group => group.names) }];
-  }
-  if (sparse.length) {
-    const names = sparse.flatMap(group => group.names);
-    active.splice(0, active.length, ...active.filter(group => !sparse.includes(group)));
-    if (names.length >= minimum) {
-      active.push({ label: 'Additional Relevant Skills', names });
-    } else {
-      const target = active.sort((a, b) => a.names.length - b.names.length)[0];
-      target.names.push(...names);
-      target.label = `${target.label} & Additional Skills`;
-    }
-  }
-  return active;
-};
-
 export function syncSelectedSkillsToResume(dataDir, id) {
   const { job } = findJob(dataDir, id);
   const dir = jobDir(dataDir, job);
@@ -970,14 +932,16 @@ export function syncSelectedSkillsToResume(dataDir, id) {
   const skills = Array.isArray(match.skills) ? match.skills : [];
   if (!skills.length) return { updated: false, skills: 0 };
 
-  const groups = consolidatedSkillGroups(skills);
+  const resumeLanguage = resumeLanguageForJob(dataDir, job);
+  const groups = localizedSkillGroups(skills, resumeLanguage);
   const rows = groups.map(group =>
-    `\\resumeSubItem{${escapeSkillTex(group.label)}:}\n  {${group.names.map(escapeSkillTex).join(', ')}}`
+    `\\resumeSubItem{${escapeResumeText(group.label)}:}\n  {${group.names.map(escapeResumeText).join(', ')}}`
   ).join('\n\\vspace{-1mm}\n');
 
   const tex = readFileSync(texPath, 'utf8');
-  const section = tex.match(/\\section\s*\{\s*(?:\\textbf\s*\{\s*)?Skills\s*\}?\s*\}/i);
-  if (!section || section.index === undefined) throw new Error('resume.tex has no Skills section');
+  const skillLabel = resumeSectionLabels(resumeLanguage).skills;
+  const section = sectionMatch(tex, skillLabel);
+  if (!section || section.index === undefined) throw new Error(`resume.tex has no ${skillLabel} section`);
   const startAt = tex.indexOf('\\resumeHeadingSkillStart', section.index + section[0].length);
   const endAt = tex.indexOf('\\resumeHeadingSkillEnd', startAt);
   if (startAt === -1 || endAt === -1) {
@@ -993,6 +957,39 @@ export function syncSelectedSkillsToResume(dataDir, id) {
   };
 }
 
+export function assembleResume(dataDir, id, explicitLanguage = null) {
+  const templatePath = latexTemplatePath(dataDir);
+  if (!templatePath) throw new Error('config.json latexTemplate is missing or unreadable');
+  const profilePath = join(dataDir, 'profile.json');
+  if (!existsSync(profilePath)) throw new Error('profile.json is missing');
+  const { job } = findJob(dataDir, id);
+  const dir = ensureDir(jobDir(dataDir, job));
+  const matchPath = join(dir, 'match.json');
+  if (!existsSync(matchPath)) throw new Error('match.json is missing — select reviewed bullets first');
+  const match = readJson(matchPath);
+  const resumeLanguage = resumeLanguageForJob(dataDir, job, explicitLanguage);
+  const result = assembleResumeTex({
+    template: readFileSync(templatePath, 'utf8'),
+    profile: readJson(profilePath),
+    match: { ...match, resumeLanguage },
+    language: resumeLanguage,
+    cjkFont: loadConfig(dataDir).resumeCjkFont,
+  });
+  writeFileSync(join(dir, 'resume.tex'), result.tex);
+  writeJsonAtomic(matchPath, { ...match, resumeLanguage });
+  removeIfExists(join(dir, 'judge.json'));
+  removeIfExists(join(dir, 'llm-judge.json'));
+  updateJob(dataDir, id, current => {
+    current.resumeLanguage = resumeLanguage;
+    current.status = 'matched';
+    current.approvedAt = null;
+    current.approvalMode = null;
+    current.reviewDeliveryProof = null;
+    current.error = null;
+  });
+  return { ...result, path: join(dir, 'resume.tex') };
+}
+
 export function syncTemplateContractToResume(dataDir, id, explicitLanguage = null) {
   const templatePath = latexTemplatePath(dataDir);
   if (!templatePath) return { updated: false, reason: 'no latex template configured' };
@@ -1006,6 +1003,7 @@ export function syncTemplateContractToResume(dataDir, id, explicitLanguage = nul
     resumeLanguage,
   );
   const source = readFileSync(texPath, 'utf8');
+  const labels = resumeSectionLabels(resumeLanguage);
   const marker = '\\begin{document}';
   const templateBodyStart = template.indexOf(marker);
   const sourceBodyStart = source.indexOf(marker);
@@ -1018,9 +1016,9 @@ export function syncTemplateContractToResume(dataDir, id, explicitLanguage = nul
     /^(\s*)\\resumeItem\{(.*)\}\{\}\s*$/gm,
     '$1\\resumeItem{}{$2}'
   );
-  body = syncSectionLeadingSpacerFromTemplate(template, body, 'Skills');
-  body = syncProjectScaffoldingFromTemplate(template, body);
-  const expectedSpacers = [...new Set(texProjectTransitionSpacers(template))];
+  body = syncSectionLeadingSpacerFromTemplate(template, body, labels.skills);
+  body = syncProjectScaffoldingFromTemplate(template, body, labels.projects);
+  const expectedSpacers = [...new Set(texProjectTransitionSpacers(template, labels.projects))];
   if (expectedSpacers.length === 1) {
     body = body.replace(
       /(\\resumeSubHeadingListEnd\s*\n\s*)\\vspace\{[^}]+\}(\s*\n\s*\\resumeSubHeadingListStart)/g,
@@ -1043,7 +1041,7 @@ export function syncTemplateContractToResume(dataDir, id, explicitLanguage = nul
   }
 
   const next = template.slice(0, templateBodyStart) + body;
-  const metrics = compareTemplateContract(template, next);
+  const metrics = compareTemplateContract(template, next, resumeLanguage);
   const nextBody = next.slice(next.indexOf(marker));
   const resumeItemArguments = texCommandArguments(nextBody, '\\resumeItem', 2);
   const resumeItemsUseBodyArgument = resumeItemArguments.length
@@ -1070,7 +1068,8 @@ export function renderResume(dataDir, id, texSource = null, explicitLanguage = n
   const tex = join(dir, 'resume.tex');
   removeIfExists(join(dir, 'judge.json'));
   removeIfExists(join(dir, 'llm-judge.json'));
-  safeCopy(texSource, tex);
+  if (texSource) safeCopy(texSource, tex);
+  else if (existsSync(join(dir, 'match.json'))) assembleResume(dataDir, id, explicitLanguage);
   if (!existsSync(tex)) throw new Error('resume.tex is missing');
   const resumeLanguage = resumeLanguageForJob(dataDir, job, explicitLanguage);
   if (explicitLanguage) {
@@ -1085,18 +1084,23 @@ export function renderResume(dataDir, id, texSource = null, explicitLanguage = n
   syncTemplateContractToResume(dataDir, id, resumeLanguage);
   syncSelectedSkillsToResume(dataDir, id);
   const latexmk = findBinary(['latexmk']);
+  const xelatex = findBinary(['xelatex']);
   const pdflatex = findBinary(['pdflatex']);
   const tectonic = findBinary(['tectonic']);
   let output = '';
   try {
-    if (latexmk) {
+    if (resumeLanguage === 'zh-CN' && xelatex) {
+      for (let i = 0; i < 2; i += 1) output += execFileSync(xelatex, ['-interaction=nonstopmode', '-halt-on-error', 'resume.tex'], { cwd: dir, encoding: 'utf8', timeout: 120_000, maxBuffer: 20 * 1024 * 1024 });
+    } else if (resumeLanguage === 'zh-CN' && tectonic) {
+      output = execFileSync(tectonic, ['resume.tex', '--outdir', dir], { cwd: dir, encoding: 'utf8', timeout: 120_000, maxBuffer: 20 * 1024 * 1024 });
+    } else if (latexmk) {
       output = execFileSync(latexmk, ['-pdf', '-interaction=nonstopmode', '-halt-on-error', 'resume.tex'], { cwd: dir, encoding: 'utf8', timeout: 120_000, maxBuffer: 20 * 1024 * 1024 });
     } else if (pdflatex) {
       for (let i = 0; i < 2; i += 1) output += execFileSync(pdflatex, ['-interaction=nonstopmode', '-halt-on-error', 'resume.tex'], { cwd: dir, encoding: 'utf8', timeout: 120_000, maxBuffer: 20 * 1024 * 1024 });
     } else if (tectonic) {
       output = execFileSync(tectonic, ['resume.tex', '--outdir', dir], { cwd: dir, encoding: 'utf8', timeout: 120_000, maxBuffer: 20 * 1024 * 1024 });
     } else {
-      throw new Error('No LaTeX compiler found (install latexmk, pdflatex, or tectonic)');
+      throw new Error('No compatible LaTeX compiler found (Chinese requires xelatex or tectonic)');
     }
     const pdf = join(dir, 'resume.pdf');
     if (!existsSync(pdf)) throw new Error('LaTeX compiler did not create resume.pdf');
@@ -1180,6 +1184,23 @@ const flattenForExtraction = value => String(value)
   .toLowerCase()
   .replace(/[^\p{L}\p{N}]+/gu, '');
 
+// The reviewed pool intentionally preserves lightweight LaTeX emphasis such
+// as `\\textbf{...}`. PDF text extraction returns only the visible argument,
+// so compare against that visible text rather than treating the command name
+// as ATS content. Keep this separate from `unescapeTex`: verbatim checking
+// must still compare the byte-stable reviewed source, including its markup.
+const visibleTexText = value => {
+  let text = String(value || '');
+  let previous = null;
+  while (text !== previous) {
+    previous = text;
+    text = text
+      .replace(/\\href\{[^{}]*\}\{([^{}]*)\}/g, '$1')
+      .replace(/\\(?:textbf|textit|emph|underline)\{([^{}]*)\}/g, '$1');
+  }
+  return unescapeTex(text.replace(/[{}]/g, ''));
+};
+
 const texResumeItems = tex => {
   const items = [];
   const needle = '\\resumeItem';
@@ -1233,8 +1254,8 @@ const texCommandArguments = (tex, command, count) => {
   return rows;
 };
 
-const texSkillGroups = tex => {
-  const section = tex.match(/\\section\s*\{\s*(?:\\textbf\s*\{\s*)?Skills\s*\}?\s*\}/i);
+const texSkillGroups = (tex, skillLabel = 'Skills') => {
+  const section = sectionMatch(tex, skillLabel);
   if (!section || section.index === undefined) return [];
   const start = section.index + section[0].length;
   const nextSection = tex.indexOf('\\section', start);
@@ -1251,8 +1272,8 @@ const texSkillGroups = tex => {
     }));
 };
 
-const texProjectTransitionSpacers = tex => {
-  const section = tex.match(/\\section\s*\{\s*(?:\\textbf\s*\{\s*)?Projects\s*\}?\s*\}/i);
+const texProjectTransitionSpacers = (tex, projectLabel = 'Projects') => {
+  const section = sectionMatch(tex, projectLabel);
   if (!section || section.index === undefined) return [];
   const block = tex.slice(section.index + section[0].length);
   return [...block.matchAll(
@@ -1288,11 +1309,9 @@ const syncSectionLeadingSpacerFromTemplate = (template, resume, name) => {
     resume.slice(rendered.end);
 };
 
-const projectSectionRange = tex => {
+const projectSectionRange = (tex, projectLabel = 'Projects') => {
   const source = String(tex);
-  const section = source.match(
-    /\\section\s*\{\s*(?:\\textbf\s*\{\s*)?Projects\s*\}?\s*\}/i
-  );
+  const section = sectionMatch(source, projectLabel);
   if (!section || section.index === undefined) return null;
   const start = section.index + section[0].length;
   const nextSection = source.indexOf('\\section', start);
@@ -1302,26 +1321,26 @@ const projectSectionRange = tex => {
   return { start, end, block: source.slice(start, end) };
 };
 
-const texProjectEntryLeadings = tex => {
-  const range = projectSectionRange(tex);
+const texProjectEntryLeadings = (tex, projectLabel = 'Projects') => {
+  const range = projectSectionRange(tex, projectLabel);
   if (!range) return [];
   return [...range.block.matchAll(
     /\\resumeSubHeadingListStart([\s\S]*?)\\resumeSubheading/g
   )].map(match => match[1]);
 };
 
-const texProjectTail = tex => {
-  const range = projectSectionRange(tex);
+const texProjectTail = (tex, projectLabel = 'Projects') => {
+  const range = projectSectionRange(tex, projectLabel);
   if (!range) return null;
   const command = '\\resumeSubHeadingListEnd';
   const last = range.block.lastIndexOf(command);
   return last === -1 ? null : range.block.slice(last + command.length);
 };
 
-const syncProjectScaffoldingFromTemplate = (template, resume) => {
-  const expectedLeadings = texProjectEntryLeadings(template);
-  const expectedTail = texProjectTail(template);
-  const range = projectSectionRange(resume);
+const syncProjectScaffoldingFromTemplate = (template, resume, projectLabel = 'Projects') => {
+  const expectedLeadings = texProjectEntryLeadings(template, projectLabel);
+  const expectedTail = texProjectTail(template, projectLabel);
+  const range = projectSectionRange(resume, projectLabel);
   if (!range) return resume;
   let entryIndex = 0;
   let block = range.block.replace(
@@ -1358,7 +1377,8 @@ const templateDocumentHeader = tex => {
   return firstSection === -1 ? null : body.slice(0, firstSection);
 };
 
-export const compareTemplateContract = (templateSource, resumeSource) => {
+export const compareTemplateContract = (templateSource, resumeSource, language = 'en-US') => {
+  const labels = resumeSectionLabels(language);
   const marker = '\\begin{document}';
   const templateBodyStart = String(templateSource).indexOf(marker);
   const resumeBodyStart = String(resumeSource).indexOf(marker);
@@ -1375,17 +1395,17 @@ export const compareTemplateContract = (templateSource, resumeSource) => {
     : expectedContactLine === null
       ? null
       : renderedContactLine === expectedContactLine;
-  const expectedSkillsSpacer = sectionLeadingSpacer(templateSource, 'Skills');
-  const renderedSkillsSpacer = sectionLeadingSpacer(resumeSource, 'Skills');
+  const expectedSkillsSpacer = sectionLeadingSpacer(templateSource, labels.skills);
+  const renderedSkillsSpacer = sectionLeadingSpacer(resumeSource, labels.skills);
   const skillsSectionSpacingExact = expectedSkillsSpacer === null
     ? null
     : renderedSkillsSpacer?.value === expectedSkillsSpacer.value;
   const expectedProjectTransitionSpacers = [
-    ...new Set(texProjectTransitionSpacers(templateSource)),
+    ...new Set(texProjectTransitionSpacers(templateSource, labels.projects)),
   ];
-  const renderedProjectTransitionSpacers = texProjectTransitionSpacers(resumeSource);
-  const expectedProjectEntryLeadings = texProjectEntryLeadings(templateSource);
-  const renderedProjectEntryLeadings = texProjectEntryLeadings(resumeSource);
+  const renderedProjectTransitionSpacers = texProjectTransitionSpacers(resumeSource, labels.projects);
+  const expectedProjectEntryLeadings = texProjectEntryLeadings(templateSource, labels.projects);
+  const renderedProjectEntryLeadings = texProjectEntryLeadings(resumeSource, labels.projects);
   const projectEntryScaffoldingExact = expectedProjectEntryLeadings.length
     ? renderedProjectEntryLeadings.every((leading, index) =>
       leading === expectedProjectEntryLeadings[
@@ -1396,8 +1416,8 @@ export const compareTemplateContract = (templateSource, resumeSource) => {
     ? renderedProjectTransitionSpacers.every(spacer =>
       expectedProjectTransitionSpacers.includes(spacer))
     : null;
-  const expectedProjectTail = texProjectTail(templateSource);
-  const renderedProjectTail = texProjectTail(resumeSource);
+  const expectedProjectTail = texProjectTail(templateSource, labels.projects);
+  const renderedProjectTail = texProjectTail(resumeSource, labels.projects);
   const projectTailSpacingExact = expectedProjectTail === null
     ? null
     : renderedProjectTail === expectedProjectTail;
@@ -1413,7 +1433,8 @@ export const compareTemplateContract = (templateSource, resumeSource) => {
   };
 };
 
-export const measureWorkProjectsGap = bbox => {
+export const measureWorkProjectsGap = (bbox, language = 'en-US') => {
+  const projectHeading = resumeSectionLabels(language).projects.replace(/\s+/g, '').toUpperCase();
   const words = [...String(bbox || '').matchAll(
     /<word xMin="([\d.]+)" yMin="([\d.]+)" xMax="([\d.]+)" yMax="([\d.]+)">([^<]*)<\/word>/g
   )].map(match => ({
@@ -1423,12 +1444,13 @@ export const measureWorkProjectsGap = bbox => {
   let headingY = null;
   for (let index = 0; index < words.length; index += 1) {
     const word = words[index];
-    if (word.text === 'PROJECTS') {
+    if (word.text.replace(/\s+/g, '') === projectHeading) {
       headingY = word.yMin;
       break;
     }
     const next = words[index + 1];
     if (
+      projectHeading === 'PROJECTS' &&
       word.text === 'P' &&
       next?.text === 'ROJECTS' &&
       Math.abs(word.yMin - next.yMin) <= 3
@@ -1451,6 +1473,8 @@ export const measureWorkProjectsGap = bbox => {
 export function judgeResume(dataDir, id) {
   const { job } = findJob(dataDir, id);
   const dir = jobDir(dataDir, job);
+  const resumeLanguage = resumeLanguageForJob(dataDir, job);
+  const labels = resumeSectionLabels(resumeLanguage);
   const pdfPath = join(dir, 'resume.pdf');
   const texPath = join(dir, 'resume.tex');
   if (!existsSync(pdfPath) || !existsSync(texPath)) {
@@ -1474,7 +1498,7 @@ export function judgeResume(dataDir, id) {
     const page = bbox.match(/<page width="([\d.]+)" height="([\d.]+)"/);
     const ys = [...bbox.matchAll(/yMax="([\d.]+)"/g)].map(m => Number(m[1]));
     if (page && ys.length) fullness = Math.round((Math.max(...ys) / Number(page[2])) * 1000) / 1000;
-    workProjectsGapPoints = measureWorkProjectsGap(bbox);
+    workProjectsGapPoints = measureWorkProjectsGap(bbox, resumeLanguage);
   }
   const minimumPageCoveragePercent = resumePageCoverageMinimumPercent(dataDir);
   const minimumPageCoverage = minimumPageCoveragePercent / 100;
@@ -1507,7 +1531,7 @@ export function judgeResume(dataDir, id) {
     );
     let cursor = 0;
     for (const item of items) {
-      const needle = flattenForExtraction(item);
+      const needle = flattenForExtraction(visibleTexText(item));
       if (needle.length < 8) continue; // too short to locate without false hits
       const at = flat.indexOf(needle, cursor);
       // searching from `cursor` also catches reading-order scrambles: a bullet
@@ -1524,11 +1548,10 @@ export function judgeResume(dataDir, id) {
   let projectTransitionSpacingExact = null;
   let projectTailSpacingExact = null;
   let expectedProjectTransitionSpacers = [];
-  let renderedProjectTransitionSpacers = texProjectTransitionSpacers(texBody);
+  let renderedProjectTransitionSpacers = texProjectTransitionSpacers(texBody, labels.projects);
   const configuredTemplatePath = latexTemplatePath(dataDir);
   if (configuredTemplatePath) {
     try {
-      const resumeLanguage = resumeLanguageForJob(dataDir, job);
       const templateSource = templateForResumeLanguage(
         dataDir,
         readFileSync(configuredTemplatePath, 'utf8'),
@@ -1543,24 +1566,32 @@ export function judgeResume(dataDir, id) {
         renderedProjectTransitionSpacers,
         projectTransitionSpacingExact,
         projectTailSpacingExact,
-      } = compareTemplateContract(templateSource, texSource));
+      } = compareTemplateContract(templateSource, texSource, resumeLanguage));
     } catch {}
   }
   const matchPath = join(dir, 'match.json');
   let verbatim = null;
   const unknownLines = [];
+  const missingLines = [];
   let skillsVerbatim = null;
-  const renderedSkillGroups = texSkillGroups(bodyStart === -1 ? texSource : texSource.slice(bodyStart));
+  const renderedSkillGroups = texSkillGroups(
+    bodyStart === -1 ? texSource : texSource.slice(bodyStart),
+    labels.skills,
+  );
   const renderedSkills = renderedSkillGroups.flatMap(group => group.names);
   const unknownSkills = [];
   const missingSkills = [];
   if (existsSync(matchPath)) {
     const match = readJson(matchPath);
-    if (items.length) {
-      const allowed = new Set((match.bullets || [])
-        .map(bullet => bullet.text.replace(/\s+/g, ' ').trim()));
+    const selectedLines = (match.bullets || []).map(bullet => String(
+      resumeLanguage === 'zh-CN' ? bullet.textZh || '' : bullet.text || '',
+    ).replace(/\s+/g, ' ').trim());
+    if (selectedLines.length || items.length) {
+      const allowed = new Set(selectedLines);
       for (const item of items) if (!allowed.has(item)) unknownLines.push(item);
-      verbatim = unknownLines.length === 0;
+      const renderedSet = new Set(items);
+      for (const line of selectedLines) if (!line || !renderedSet.has(line)) missingLines.push(line || '<missing textZh>');
+      verbatim = unknownLines.length === 0 && missingLines.length === 0;
     }
     const selectedSkills = (match.skills || []).map(skill => skill.name.replace(/\s+/g, ' ').trim());
     const allowedSkills = new Set(selectedSkills.map(skill => skill.toLowerCase()));
@@ -1586,7 +1617,7 @@ export function judgeResume(dataDir, id) {
   }
   const judge = {
     schemaVersion: CAMPAIGN_SCHEMA,
-    resumeLanguage: resumeLanguageForJob(dataDir, job),
+    resumeLanguage,
     judgedAt: now(),
     pageCount,
     onePage,
@@ -1610,6 +1641,7 @@ export function judgeResume(dataDir, id) {
     itemCount: items.length,
     verbatim,
     unknownLines,
+    missingLines,
     extractable,
     unextractedLines,
     renderedSkillCount: renderedSkills.length,
@@ -1624,6 +1656,24 @@ export function judgeResume(dataDir, id) {
   };
   writeJsonAtomic(join(dir, 'judge.json'), judge);
   return judge;
+}
+
+export function recordLlmJudge(dataDir, id, sourcePaths) {
+  const paths = (Array.isArray(sourcePaths) ? sourcePaths : [sourcePaths]).filter(Boolean);
+  if (!paths.length || paths.some(sourcePath => !existsSync(sourcePath))) {
+    throw new Error('one or more validated LLM judge JSON files are required');
+  }
+  const { job } = findJob(dataDir, id);
+  const machine = currentResumeJudge(dataDir, job);
+  const requiredMachinePasses = ['onePage', 'fullPage', 'verbatim', 'skillsVerbatim', 'extractable'];
+  const failed = requiredMachinePasses.filter(key => machine[key] !== true);
+  if (failed.length) throw new Error(`machine resume gate must pass before LLM review: ${failed.join(', ')}`);
+  const records = paths.map(readJson);
+  const verdict = records.length === 1
+    ? validateLlmJudge(records[0])
+    : aggregateLlmJudgeRuns(records);
+  writeJsonAtomic(join(jobDir(dataDir, job), 'llm-judge.json'), verdict);
+  return verdict;
 }
 
 export function addFeedback(dataDir, id, text, reasonCode = null) {
@@ -1981,33 +2031,45 @@ export function campaignView(dataDir) {
       const machineJudge = artifacts['judge.json']
         ? readJson(join(dir, 'judge.json'))
         : null;
-      const llmJudgeRecord = artifacts['llm-judge.json']
+      const rawLlmJudgeRecord = artifacts['llm-judge.json']
         ? readJson(join(dir, 'llm-judge.json'))
         : null;
+      let llmJudgeRecord = null;
+      let llmJudgeError = null;
+      if (rawLlmJudgeRecord) {
+        try {
+          llmJudgeRecord = validateLlmJudge(rawLlmJudgeRecord);
+        } catch (error) {
+          llmJudgeError = String(error.message || error);
+        }
+      }
       const verdicts = llmJudgeRecord?.verdicts || [];
       const medianTotal = Number.isFinite(Number(llmJudgeRecord?.medianTotal))
         ? Number(llmJudgeRecord.medianTotal)
         : null;
       const representativeVerdict = verdicts.find(verdict =>
         Number(verdict?.total) === medianTotal) || verdicts[0] || null;
-      const llmJudge = llmJudgeRecord ? {
-        judgedAt: llmJudgeRecord.judgedAt || null,
-        runs: Number(llmJudgeRecord.runs) || verdicts.length,
+      const llmJudge = rawLlmJudgeRecord ? {
+        valid: Boolean(llmJudgeRecord),
+        validationError: llmJudgeError,
+        judgedAt: llmJudgeRecord?.judgedAt || null,
+        runs: Number(llmJudgeRecord?.runs) || verdicts.length,
         runTotals: verdicts
           .map(verdict => Number(verdict?.total))
           .filter(Number.isFinite),
         medianTotal,
-        pass: llmJudgeRecord.pass === true,
-        // the spec's JD fit became a scored dimension; verdicts recorded under
-        // the older free-text `jd_fit_note` must keep rendering in Review
+        pass: llmJudgeRecord?.pass === true,
         jdFitNote: representativeVerdict?.jd_fit?.note
           || representativeVerdict?.jd_fit_note
           || null,
         jdFitScore: Number.isFinite(Number(representativeVerdict?.jd_fit?.score))
           ? Number(representativeVerdict.jd_fit.score)
           : null,
-        gate: llmJudgeRecord.gate || null,
-        fixes: (llmJudgeRecord.fixes || []).slice(0, 3),
+        gate: llmJudgeRecord?.gate || null,
+        fixes: (llmJudgeRecord?.fixes || [])
+          .map(item => typeof item === 'string' ? item : item?.fix)
+          .filter(Boolean)
+          .slice(0, 3),
       } : null;
       return { ...job, artifacts, match, machineJudge, llmJudge };
     }),

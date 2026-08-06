@@ -7,7 +7,11 @@ import { tmpdir } from 'node:os';
 import { dirname, join, resolve } from 'node:path';
 import {
   addFeedback,
+  assembleResume,
+  bulletPool,
   judgeResume,
+  recordLlmJudge,
+  renderResume,
   selectBullets,
   applyResumeReviewPolicy,
   approveJob,
@@ -26,6 +30,7 @@ import {
   syncTemplateContractToResume,
   syncJobs,
 } from '../.agents/skills/campaign/scripts/campaign-lib.mjs';
+import { aggregateLlmJudgeRuns, LLM_JUDGE_SCHEMA, validateLlmJudge } from '../.agents/skills/campaign/scripts/llm-judge.mjs';
 import {
   buildExperienceIndex,
   experiencePaths,
@@ -35,6 +40,47 @@ import { resolveProfileContact } from '../.agents/lib/profile-contact.mjs';
 import { onePagePdf } from './pdf-fixture.mjs';
 
 const dataDir = process.env.COFORCE_CAMPAIGN_DIR || mkdtempSync(join(tmpdir(), 'coforce-campaign-'));
+const llmVerdict = ({ total = 90, presentation = 18, jdFit = 8, deductions = 8, actionableDeductions = 2, criticalFixes = [] } = {}) => {
+  const pass = presentation >= 16 && jdFit >= 7 && actionableDeductions <= 3 && criticalFixes.length === 0;
+  return {
+    schemaVersion: LLM_JUDGE_SCHEMA,
+    judgedAt: '2026-08-06T00:00:00.000Z',
+    runs: 1,
+    medianTotal: total,
+    gate: { presentation, jdFit, actionableDeductions, criticalFixes },
+    pass,
+    fixes: [],
+    verdicts: [{
+      substance: {},
+      presentation: { score: presentation, max: 20, notes: 'fixture' },
+      jd_fit: { score: jdFit, max: 10, note: 'fixture' },
+      bonus: { total: 0, breakdown: [] },
+      deductions: { total: deductions, reasons: [] },
+      actionable_deductions: { total: actionableDeductions, reasons: [] },
+      total,
+      key_strengths: [],
+      fixes: [],
+    }],
+  };
+};
+assert.equal(validateLlmJudge(llmVerdict()).pass, true);
+{
+  const runs = [
+    llmVerdict({ total: 70, presentation: 14, jdFit: 5, actionableDeductions: 0 }),
+    llmVerdict({ total: 72, presentation: 15, jdFit: 6, actionableDeductions: 1 }),
+    llmVerdict({ total: 90, presentation: 18, jdFit: 8, actionableDeductions: 2 }),
+  ];
+  const aggregated = aggregateLlmJudgeRuns(runs);
+  assert.equal(aggregated.runs, 3);
+  assert.equal(aggregated.medianTotal, 72);
+  assert.deepEqual(aggregated.gate, {
+    presentation: 15,
+    jdFit: 6,
+    actionableDeductions: 1,
+    criticalFixes: [],
+  });
+  assert.equal(aggregated.pass, false);
+}
 const jobs = [
   { id: 'app-1', company: 'Acme Labs', role: 'Backend Engineer', url: 'https://jobs.example/acme', source: 'fixture' },
   { id: 'app-2', company: 'Orbit AI', role: 'Agent Engineer', url: 'https://jobs.example/orbit', source: 'fixture' },
@@ -94,14 +140,26 @@ writeFileSync(join(dataDir, 'profile.json'), JSON.stringify({
     },
   ],
   experience: [{
-    company: 'Product Inc', title: 'Backend Engineer',
+    company: 'Product Inc', title: 'Backend Engineer', date: '2025 - Present', location: 'Remote',
+    localized: {
+      'zh-CN': { company: '产品公司', title: '后端工程师', date: '2025年 - 至今', location: '远程' },
+    },
     description: [
       { text: 'Built reliable TypeScript agent API retries with observability and regression tests', textZh: '构建具备可观测性和回归测试的可靠 TypeScript Agent API 重试机制', source: 'https://github.com/example/product/pull/42', verifiedAt: '2026-07-01' },
       { text: 'Migrated data storage schema with zero-downtime migration tooling', textZh: null, source: 'https://github.com/example/product/commit/abc', verifiedAt: '2026-07-01' },
     ],
   }],
   projects: [{
-    name: 'CoForce', description: [{ text: 'Designed a two-gate apply pipeline with a verified bullet pool' }],
+    name: 'CoForce', role: 'Open Source Project', dateRange: '2026', url: 'https://github.com/example/coforce',
+    localized: { 'zh-CN': { name: 'CoForce', role: '开源项目', dateRange: '2026年' } },
+    description: [{
+      text: 'Designed a two-gate apply pipeline with a verified bullet pool',
+      textZh: '设计具备审核门和可信经历池的双阶段申请流程',
+    }],
+  }],
+  education: [{
+    institution: 'Example University', degree: 'B.S. Computer Science', date: '2022 - 2026', location: 'Example City',
+    localized: { 'zh-CN': { institution: '示例大学', degree: '计算机科学学士', date: '2022年 - 2026年', location: '示例市' } },
   }],
 }, null, 2));
 const fixtureProfile = JSON.parse(readFileSync(join(dataDir, 'profile.json'), 'utf8'));
@@ -274,6 +332,70 @@ assert.throws(
 assert.equal(existsSync(ghLog), false, 'selection must never invoke gh');
 assert.equal(statSync(libraryPath).mtimeMs, libraryBefore.mtimeMs, 'campaign must not rewrite experience sources');
 
+// Real render E2E: the same deterministic assembler and machine judge must
+// compile both languages, then recover every selected bullet from the PDF text
+// layer. CI installs Tectonic + Noto CJK; developer machines without a compiler
+// still run the rest of the dependency-free contract harness.
+let hasTectonic = true;
+try {
+  execFileSync('/usr/bin/which', ['tectonic'], { stdio: 'ignore' });
+} catch {
+  hasTectonic = false;
+}
+if (hasTectonic) {
+  const realDir = mkdtempSync(join(tmpdir(), 'coforce-real-resume-'));
+  writeFileSync(join(realDir, 'profile.json'), JSON.stringify(fixtureProfile, null, 2));
+  writeFileSync(join(realDir, 'config.json'), JSON.stringify({
+    latexTemplate: resolve('harness/fixtures/resume-template.tex'),
+    resumeCjkFont: process.platform === 'darwin' ? 'Songti SC' : 'Noto Serif CJK SC',
+    resumePageCoverageMinimumPercent: 0,
+    requireResumeReview: true,
+  }, null, 2));
+  const realJobs = syncJobs(realDir, [
+    { id: 'real-en', company: 'Render Labs', role: 'Agent Engineer', url: 'https://jobs.example/real-en' },
+    { id: 'real-zh', company: '渲染实验室', role: '智能体工程师', url: 'https://jobs.example/real-zh' },
+  ]).added;
+  const realPool = bulletPool(realDir);
+  const realSkills = skillPool(realDir);
+  for (const [index, job] of realJobs.entries()) {
+    const language = index === 0 ? 'en-US' : 'zh-CN';
+    await hydrateJob(realDir, job.id, {
+      text: language === 'zh-CN'
+        ? '负责智能体后端、可靠交付、测试和可观测性。'.repeat(40)
+        : 'Build reliable agent backends, delivery systems, tests, and observability. '.repeat(20),
+      source: 'fixture',
+    });
+    selectBullets(
+      realDir,
+      job.id,
+      [realPool[0].id, realPool[2].id],
+      realSkills.map(skill => skill.id),
+      'backend',
+      language,
+    );
+    const assembled = assembleResume(realDir, job.id, language);
+    assert.equal(assembled.language, language);
+    assert.equal(assembled.bulletCount, 2);
+    const rendered = renderResume(realDir, job.id, null, language);
+    assert.equal(rendered.status, 'rendered');
+    const machine = judgeResume(realDir, job.id);
+    assert.equal(machine.onePage, true, `${language} real PDF is one page`);
+    assert.equal(machine.verbatim, true, `${language} real PDF includes every selected bullet verbatim`);
+    assert.equal(machine.skillsVerbatim, true, `${language} real PDF includes every selected skill once`);
+    assert.equal(machine.extractable, true, `${language} real PDF preserves ATS text order`);
+    const folder = campaignView(realDir).jobs.find(item => item.id === job.id).folder;
+    const pdfPath = join(realDir, 'campaigns', 'current', 'jobs', folder, 'resume.pdf');
+    const extracted = execFileSync('pdftotext', [pdfPath, '-'], { encoding: 'utf8' });
+    assert.match(extracted, language === 'zh-CN' ? /工作经历/ : /Working Experience/);
+    const verdictPath = join(realDir, `${job.id}-llm-judge.json`);
+    writeFileSync(verdictPath, JSON.stringify(llmVerdict(), null, 2));
+    assert.equal(recordLlmJudge(realDir, job.id, verdictPath).schemaVersion, LLM_JUDGE_SCHEMA);
+  }
+  console.log('campaign: real English + Chinese LaTeX/PDF/text E2E ✓');
+} else {
+  console.log('SKIP: tectonic not installed (CI runs the real bilingual PDF E2E)');
+}
+
 // judge: verbatim metric against the selection, and the auto-approve gate
 {
   const jobView = campaignView(dataDir).jobs.find(item => item.id === synced.added[0].id);
@@ -307,11 +429,16 @@ assert.equal(statSync(libraryPath).mtimeMs, libraryBefore.mtimeMs, 'campaign mus
     fixtureTemplate
       .replace('\\textbf{#1}#2', '#1#2')
       .replace('test@example.com', 'visa status')
+      .replace('Skills', '专业技能')
+      .replace('Projects', '项目经历')
       .replace('-8mm', '-6mm')
       .replaceAll('-9mm', '-6mm')
       .replace('\\resumeSubHeadingListStart\n\\resumeSubheading{First}',
         '\\resumeSubHeadingListStart\n\\vspace{-4mm}\n\\resumeSubheading{First}')
-      .replace('\\resumeItem{}{template placeholder}', `\\resumeItem{${pool[0].text}}{}`);
+      .replace(
+        '\\resumeItem{}{template placeholder}',
+        `\\resumeItem{${pool[0].textZh}}{}\n\\resumeItem{}{${pool[2].textZh}}`,
+      );
   writeFileSync(join(jobTexDir, 'resume.tex'), driftedResume);
   const normalizedTemplate = syncTemplateContractToResume(dataDir, synced.added[0].id);
   assert.equal(normalizedTemplate.updated, true);
@@ -324,7 +451,7 @@ assert.equal(statSync(libraryPath).mtimeMs, libraryBefore.mtimeMs, 'campaign mus
   assert.equal(normalizedTemplate.resumeItemsUseBodyArgument, true);
   assert.match(
     readFileSync(join(jobTexDir, 'resume.tex'), 'utf8'),
-    /\\small\{18900000000\|\\href\{mailto:cn@example\.com\}\{cn@example\.com\}\}\n\\vspace\{-8mm\}\n\\section\{\\textbf\{Skills\}\}/,
+    /\\small\{18900000000\|\\href\{mailto:cn@example\.com\}\{cn@example\.com\}\}\n\\vspace\{-8mm\}\n\\section\{\\textbf\{专业技能\}\}/,
     'config.json is the only template source and its contact is localized for the selected resume language'
   );
   const good = judgeResume(dataDir, synced.added[0].id);
@@ -333,7 +460,7 @@ assert.equal(statSync(libraryPath).mtimeMs, libraryBefore.mtimeMs, 'campaign mus
   assert.equal(good.skillsVerbatim, true, 'selected skills rendered verbatim pass the judge');
   assert.equal(good.renderedSkillGroupCount, 1);
   assert.equal(good.renderedSkillCount, 3);
-  assert.equal(good.itemCount, 1);
+  assert.equal(good.itemCount, 2);
   if (good.pageCount !== null) assert.equal(good.onePage, true, 'fixture pdf is one page');
   if (good.fullness !== null) assert.equal(good.fullPage, true, 'fixture pdf fills the page');
   assert.equal(good.minimumPageCoveragePercent, 93, 'page coverage defaults to 93%');
@@ -362,54 +489,56 @@ assert.equal(statSync(libraryPath).mtimeMs, libraryBefore.mtimeMs, 'campaign mus
     ...configured,
     resumePageCoverageMinimumPercent: 93,
   }));
-  judgeResume(dataDir, synced.added[0].id);
-  writeFileSync(join(jobTexDir, 'resume.tex'),
+  const englishJob = campaignView(dataDir).jobs.find(item => item.id === synced.added[1].id);
+  const englishJobTexDir = join(dataDir, 'campaigns', 'current', 'jobs', englishJob.folder);
+  judgeResume(dataDir, englishJob.id);
+  writeFileSync(join(englishJobTexDir, 'resume.tex'),
     `\\documentclass{article}\\begin{document}\\newcommand{\\resumeItem}[2]{#2}\n` +
     `\\section{\\textbf{Skills}}\\resumeSubItem{Languages, Frameworks, Backend \\& Data:}{TypeScript, Node.js, Python}\n` +
     `\\resumeItem{}{${pool[0].text}}\n\\end{document}\n`);
   // a one-page resume that leaves the bottom half empty must FAIL the judge
-  writeFileSync(join(jobTexDir, 'resume.pdf'), onePagePdf('sparse fixture', false));
-  const sparse = judgeResume(dataDir, synced.added[0].id);
+  writeFileSync(join(englishJobTexDir, 'resume.pdf'), onePagePdf('sparse fixture', false));
+  const sparse = judgeResume(dataDir, englishJob.id);
   if (sparse.fullness !== null) {
     assert.equal(sparse.fullPage, false, 'a half-empty page fails the fullness metric');
   }
-  writeFileSync(join(jobTexDir, 'resume.pdf'), onePagePdf('CoForce campaign fixture'));
-  writeFileSync(join(jobTexDir, 'resume.tex'),
+  writeFileSync(join(englishJobTexDir, 'resume.pdf'), onePagePdf('CoForce campaign fixture'));
+  writeFileSync(join(englishJobTexDir, 'resume.tex'),
     '\\documentclass{article}\\begin{document}\\newcommand{\\resumeItem}[2]{#2}\n' +
     '\\section{\\textbf{Skills}}\\resumeSubItem{Programming Languages:}{TypeScript, InventedDB}\\resumeSubItem{Backend \\& APIs:}{Node.js}\n' +
     '\\resumeItem{}{Invented a claim that is not in the pool}\n\\end{document}\n');
-  const bad = judgeResume(dataDir, synced.added[0].id);
+  const bad = judgeResume(dataDir, englishJob.id);
   assert.equal(bad.verbatim, false, 'out-of-pool resume line fails the judge');
   assert.equal(bad.skillsVerbatim, false, 'out-of-pool resume skill fails the judge');
   assert.deepEqual(bad.unknownSkills, ['InventedDB']);
   assert.equal(bad.unknownLines.length, 1);
   // ATS parseability: every ATS starts from the PDF text layer, so a bullet
   // that does not survive extraction, in order, is a bullet no screener sees.
-  writeFileSync(join(jobTexDir, 'resume.tex'),
+  writeFileSync(join(englishJobTexDir, 'resume.tex'),
     '\\documentclass{article}\\begin{document}\\newcommand{\\resumeItem}[2]{#2}\n' +
     `\\resumeItem{}{${pool[0].text}}\n\\end{document}\n`);
-  writeFileSync(join(jobTexDir, 'resume.pdf'), onePagePdf(pool[0].text, true, 12));
-  const extracted = judgeResume(dataDir, synced.added[0].id);
+  writeFileSync(join(englishJobTexDir, 'resume.pdf'), onePagePdf(pool[0].text, true, 12));
+  const extracted = judgeResume(dataDir, englishJob.id);
   if (extracted.extractable !== null) {
     assert.equal(extracted.extractable, true, 'a bullet present in the PDF text layer extracts');
     assert.deepEqual(extracted.unextractedLines, []);
   }
   // an ATS-hostile render: the page reads fine to a human, the text layer does
   // not carry the bullet at all (outlined glyphs, scrambled columns)
-  writeFileSync(join(jobTexDir, 'resume.pdf'), onePagePdf('glyphs without a text layer'));
-  const opaque = judgeResume(dataDir, synced.added[0].id);
+  writeFileSync(join(englishJobTexDir, 'resume.pdf'), onePagePdf('glyphs without a text layer'));
+  const opaque = judgeResume(dataDir, englishJob.id);
   if (opaque.extractable !== null) {
     assert.equal(opaque.extractable, false, 'a bullet missing from the text layer fails the judge');
     assert.equal(opaque.unextractedLines.length, 1);
   }
-  stageArtifacts(dataDir, synced.added[0].id, { tex, pdf });
-  judgeResume(dataDir, synced.added[0].id); // restore a clean judge for the flow below
+  stageArtifacts(dataDir, englishJob.id, { tex, pdf });
+  judgeResume(dataDir, englishJob.id); // restore a clean judge for the flow below
 }
 
 // Saved skill selections replace stale sparse template keywords while the
 // surrounding template body remains intact.
 {
-  const jobView = campaignView(dataDir).jobs.find(item => item.id === synced.added[0].id);
+  const jobView = campaignView(dataDir).jobs.find(item => item.id === synced.added[1].id);
   const jobTexDir = join(dataDir, 'campaigns', 'current', 'jobs', jobView.folder);
   const resumeTex = join(jobTexDir, 'resume.tex');
   writeFileSync(resumeTex, [
@@ -431,6 +560,7 @@ assert.equal(statSync(libraryPath).mtimeMs, libraryBefore.mtimeMs, 'campaign mus
   assert.match(syncedTex, /Relevant Skills:.*TypeScript, Node\.js, Python/s);
   assert.doesNotMatch(syncedTex, /SparseSkill/);
   assert.match(syncedTex, /\\section\{Projects\}\nKeep this body/);
+  stageArtifacts(dataDir, jobView.id, { tex, pdf });
 }
 
 const first = synced.added[0];
@@ -510,6 +640,11 @@ const preVerdict = applyResumeReviewPolicy(autoDir);
 assert.equal(preVerdict.autoApproved, 0, 'no recorded llm verdict, no automatic approval');
 writeFileSync(join(autoDir, 'campaigns', 'current', 'jobs', autoView.folder, 'llm-judge.json'),
   JSON.stringify({ judgedAt: 'fixture', runs: 1, medianTotal: 92, pass: true, fixes: [] }));
+const staleVerdict = applyResumeReviewPolicy(autoDir);
+assert.equal(staleVerdict.autoApproved, 0, 'legacy LLM judge schema cannot auto-approve');
+assert.equal(campaignView(autoDir).jobs[0].llmJudge.valid, false, 'Review exposes stale judge artifacts');
+writeFileSync(join(autoDir, 'campaigns', 'current', 'jobs', autoView.folder, 'llm-judge.json'),
+  JSON.stringify(llmVerdict({ total: 92 })));
 const reconciled = applyResumeReviewPolicy(autoDir);
 assert.equal(reconciled.autoApproved, 1, 'disabling review reconciles a complete rendered resume');
 assert.ok(reconciled.exported?.path, 'disabling review auto-exports a completed campaign');
@@ -527,7 +662,7 @@ writeFileSync(join(gateJobDir, 'resume.tex'),
   '\\documentclass{article}\\begin{document}\\newcommand{\\resumeItem}[2]{#2}\n\\resumeItem{}{Fabricated line}\n\\end{document}\n');
 writeFileSync(join(gateDir, 'config.json'), JSON.stringify({ requireResumeReview: false }));
 writeFileSync(join(gateJobDir, 'llm-judge.json'),
-  JSON.stringify({ judgedAt: 'fixture', runs: 1, medianTotal: 95, pass: true, fixes: [] }));
+  JSON.stringify(llmVerdict({ total: 95 })));
 const gated = applyResumeReviewPolicy(gateDir);
 assert.equal(gated.autoApproved, 0, 'failed verbatim metric blocks auto-approval even with a passing llm verdict');
 assert.equal(campaignView(gateDir).jobs[0].status, 'rendered', 'job stays in review instead of shipping');
@@ -539,7 +674,7 @@ const autoStaged = stageArtifacts(autoDir, autoSecond.id, { jd: autoJd, match: a
 assert.equal(autoStaged.status, 'rendered', 'auto mode still waits for the mandatory llm verdict');
 const autoSecondView = campaignView(autoDir).jobs.find(job => job.id === autoSecond.id);
 writeFileSync(join(autoDir, 'campaigns', 'current', 'jobs', autoSecondView.folder, 'llm-judge.json'),
-  JSON.stringify({ judgedAt: 'fixture', runs: 1, medianTotal: 90, pass: true, fixes: [] }));
+  JSON.stringify(llmVerdict({ total: 90 })));
 applyResumeReviewPolicy(autoDir);
 const autoSecondDone = campaignView(autoDir).jobs.find(job => job.id === autoSecond.id);
 assert.equal(autoSecondDone.status, 'approved', 'verdict recorded → reconcile approves');

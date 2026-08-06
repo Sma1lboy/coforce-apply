@@ -93,9 +93,12 @@ work-mode, salary) in the match report.
 
 ### 4. Assemble and render
 
-Tailoring is selection, ordering, and cutting:
+Tailoring is selection, ordering, and cutting. The deterministic assembler
+rebuilds the body from profile metadata plus `match.json`; project-specific
+names, dates, ordering, and keyword weights never live in campaign code:
 
-- Render bullet English text verbatim, apart from LaTeX escaping.
+- Render English `text` for `en-US` and reviewed `textZh` for `zh-CN`, verbatim.
+  A selected Chinese bullet without `textZh` is a hard Module 1 gap.
 - Render each selected skill name exactly once. Group by source-owned category;
   sparse categories may use a neutral combined label.
 - Never retain unselected template skills.
@@ -105,9 +108,17 @@ Tailoring is selection, ordering, and cutting:
 - For feedback, update the same resume rather than creating parallel drafts.
 
 ```sh
+node "<campaign-skill>/scripts/campaign.mjs" assemble --id <job-id> [--language <en-US|zh-CN>]
 node "<campaign-skill>/scripts/campaign.mjs" render --id <job-id>
 node "<campaign-skill>/scripts/campaign.mjs" judge --id <job-id>
 ```
+
+`render` runs the assembler automatically whenever `match.json` exists. Entry
+metadata comes from profile fields, including optional `role`, `url`, `demo`,
+and `localized[language]` overrides. Metadata may fall back to the canonical
+entry; bullets never fall back because mixing languages is not acceptable.
+Chinese rendering uses `config.resumeCjkFont` when set, otherwise `Songti SC`
+on macOS or `Noto Serif CJK SC` elsewhere, and requires XeLaTeX or Tectonic.
 
 Machine review must pass:
 
@@ -130,9 +141,18 @@ Render the latest PDF to PNG and inspect it for collisions, clipping, awkward
 wraps, and inconsistent spacing. Machine checks do not replace visual review.
 
 Run the context-free LLM judge from `references/resume-judge.md` in a fresh
-agent using only the JD and resume. Save the verdict in `llm-judge.json`; the
-generator must not read the rubric. Run it once — median-of-3 only before acting
-on a fail or an automatic approval.
+agent using only the JD and resume. The generator must not read the rubric. Run
+it once — median-of-3 only before acting on a fail or an automatic approval.
+Record it only through the schema-validating command; legacy or hand-written
+verdict files remain visible as stale and cannot auto-approve:
+
+```sh
+node "<campaign-skill>/scripts/campaign.mjs" record-judge --id <job-id> --file <verdict.json>
+# A failed first run must be repeated twice; pass all three files and the CLI
+# validates each run, computes numeric medians, and records one envelope.
+node "<campaign-skill>/scripts/campaign.mjs" record-judge --id <job-id> \
+  --file <run-1.json> --file <run-2.json> --file <run-3.json>
+```
 
 The gate is only what a re-render can change (presentation, JD fit, deductions,
 critical fixes); the rubric's `total` measures the candidate's evidence, so it
