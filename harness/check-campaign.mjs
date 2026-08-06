@@ -31,6 +31,7 @@ import {
   experiencePaths,
   upsertSource,
 } from '../.agents/skills/experience/scripts/experience-lib.mjs';
+import { resolveProfileContact } from '../.agents/lib/profile-contact.mjs';
 import { onePagePdf } from './pdf-fixture.mjs';
 
 const dataDir = process.env.COFORCE_CAMPAIGN_DIR || mkdtempSync(join(tmpdir(), 'coforce-campaign-'));
@@ -62,6 +63,11 @@ mkdirSync(dirname(libraryPath), { recursive: true });
 upsertSource(dataDir, { repo: 'example/product', authors: ['candidate'], project: 'Product' });
 writeFileSync(join(dataDir, 'profile.json'), JSON.stringify({
   name: 'Candidate',
+  email: 'test@example.com',
+  phone: '614-000-0000',
+  localizedContacts: {
+    'zh-CN': { email: 'cn@example.com', phone: '18900000000' },
+  },
   skills: ['TypeScript', 'Node.js', 'Python'],
   resumeSkillPolicy: {
     status: 'approved',
@@ -98,6 +104,13 @@ writeFileSync(join(dataDir, 'profile.json'), JSON.stringify({
     name: 'CoForce', description: [{ text: 'Designed a two-gate apply pipeline with a verified bullet pool' }],
   }],
 }, null, 2));
+const fixtureProfile = JSON.parse(readFileSync(join(dataDir, 'profile.json'), 'utf8'));
+assert.deepEqual(resolveProfileContact(fixtureProfile, 'zh'), {
+  language: 'zh-CN', email: 'cn@example.com', phone: '18900000000',
+});
+assert.deepEqual(resolveProfileContact(fixtureProfile, 'en-US'), {
+  language: 'en-US', email: 'test@example.com', phone: '614-000-0000',
+});
 writeFileSync(libraryPath, JSON.stringify({
   github_logins: ['candidate'],
   sources: [{ repo: 'example/product', authors: ['candidate'], project: 'Product' }],
@@ -196,7 +209,12 @@ assert.equal(skillReview(dataDir).status, 'approved');
   );
   writeFileSync(profilePath, JSON.stringify(approvedProfile, null, 2));
 }
-for (const job of synced.added) {
+writeFileSync(
+  join(dataDir, 'campaigns', 'current', 'jobs', synced.added[0].folder, 'job-description.md'),
+  '负责智能体平台、前向部署与客户交付，构建可靠后端服务并完善测试与可观测性。'.repeat(4),
+);
+for (const [jobIndex, job] of synced.added.entries()) {
+  const resumeLanguage = jobIndex === 0 ? 'zh-CN' : 'en-US';
   execFileSync(process.execPath, [campaignCli, 'select', '--data-dir', dataDir, '--id', job.id,
     '--bullets', `${pool[0].id},${pool[2].id}`,
     '--skills', skills.map(skill => skill.id).join(','),
@@ -215,6 +233,12 @@ for (const job of synced.added) {
   assert.equal(matched.match.skills[0].source, 'https://github.com/example/product/pull/42');
   assert.equal(matched.selectedSkillPack, 'backend');
   assert.equal(matched.match.selectedRolePack, 'backend');
+  assert.deepEqual(matched.match.experienceSnapshot, {
+    generatedAt: index.generatedAt,
+    sourceFingerprint: index.sourceFingerprint,
+  });
+  assert.equal(matched.resumeLanguage, resumeLanguage);
+  assert.equal(matched.match.resumeLanguage, resumeLanguage);
   assert.deepEqual(matched.match.skillComposition, {
     total: 3,
     baseline: 1,
@@ -257,7 +281,7 @@ assert.equal(statSync(libraryPath).mtimeMs, libraryBefore.mtimeMs, 'campaign mus
   const fixtureTemplatePath = join(dataDir, 'fixture-template.tex');
   const fixtureTemplate =
     `\\documentclass{article}\n\\newcommand{\\resumeItem}[2]{\\textbf{#1}#2}\n\\begin{document}\n` +
-    `contact|\\href{mailto:test@example.com}{test@example.com}\n` +
+    `\\small{614-000-0000|\\href{mailto:test@example.com}{test@example.com}}\n` +
     `\\vspace{-8mm}\n` +
     `\\section{\\textbf{Skills}}\\resumeSubItem{Languages, Frameworks, Backend \\& Data:}{TypeScript, Node.js, Python}\n` +
     `\\section{\\textbf{Projects}}\n` +
@@ -300,8 +324,8 @@ assert.equal(statSync(libraryPath).mtimeMs, libraryBefore.mtimeMs, 'campaign mus
   assert.equal(normalizedTemplate.resumeItemsUseBodyArgument, true);
   assert.match(
     readFileSync(join(jobTexDir, 'resume.tex'), 'utf8'),
-    /test@example\.com\}\n\\vspace\{-8mm\}\n\\section\{\\textbf\{Skills\}\}/,
-    'config.json is the only template source even when a conflicting legacy config remains'
+    /\\small\{18900000000\|\\href\{mailto:cn@example\.com\}\{cn@example\.com\}\}\n\\vspace\{-8mm\}\n\\section\{\\textbf\{Skills\}\}/,
+    'config.json is the only template source and its contact is localized for the selected resume language'
   );
   const good = judgeResume(dataDir, synced.added[0].id);
   assert.equal(good.verbatim, true, 'pool bullet verbatim passes the judge');

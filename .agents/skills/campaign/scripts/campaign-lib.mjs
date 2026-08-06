@@ -18,6 +18,7 @@ import { execFileSync } from 'node:child_process';
 import { basename, dirname, extname, join, resolve, sep } from 'node:path';
 import { writeJsonAtomic } from '../../../lib/fs-atomic.mjs';
 import { loadConfig } from '../../../lib/config.mjs';
+import { normalizeResumeLanguage, resolveProfileContact } from '../../../lib/profile-contact.mjs';
 
 export const CAMPAIGN_SCHEMA = '1.0';
 export const REQUIRED_EXPORT_FILES = [
@@ -153,6 +154,48 @@ export const resumeReviewRequired = dataDir =>
 const latexTemplatePath = dataDir => {
   const templatePath = loadConfig(dataDir).latexTemplate;
   return templatePath && existsSync(templatePath) ? templatePath : null;
+};
+
+const resumeLanguageForJob = (dataDir, job, explicitLanguage = null) => {
+  const matchPath = join(jobDir(dataDir, job), 'match.json');
+  let matchLanguage = null;
+  if (existsSync(matchPath)) {
+    try {
+      matchLanguage = readJson(matchPath).resumeLanguage;
+    } catch {}
+  }
+  let inferredLanguage = 'en-US';
+  const jdPath = join(jobDir(dataDir, job), 'job-description.md');
+  if (existsSync(jdPath)) {
+    const chineseCharacters = readFileSync(jdPath, 'utf8').match(/[\u3400-\u9fff]/g)?.length || 0;
+    if (chineseCharacters >= 10) inferredLanguage = 'zh-CN';
+  }
+  return normalizeResumeLanguage(
+    explicitLanguage || matchLanguage || job.resumeLanguage || inferredLanguage,
+  );
+};
+
+const templateForResumeLanguage = (dataDir, template, language) => {
+  const profilePath = join(dataDir, 'profile.json');
+  if (!existsSync(profilePath)) return template;
+  const profile = readJson(profilePath);
+  const contact = resolveProfileContact(profile, language);
+  const templateContact = template.split(/\r?\n/).find(line => line.includes('mailto:'));
+  if (!templateContact) return template;
+  let localizedContact = templateContact;
+  if (contact.phone) {
+    localizedContact = localizedContact.replace(
+      /(\\small\{)[^|{}]*(?=\|)/,
+      (_, prefix) => `${prefix}${contact.phone}`,
+    );
+  }
+  if (contact.email) {
+    localizedContact = localizedContact.replace(
+      /\\href\{mailto:[^}]+\}\{[^}]+\}/,
+      `\\href{mailto:${contact.email}}{${contact.email}}`,
+    );
+  }
+  return template.replace(templateContact, localizedContact);
 };
 
 const slugify = value =>
@@ -666,7 +709,14 @@ export function skillReview(dataDir) {
   };
 }
 
-export function selectBullets(dataDir, id, bulletIds, selectedSkills = [], selectedRolePack = '') {
+export function selectBullets(
+  dataDir,
+  id,
+  bulletIds,
+  selectedSkills = [],
+  selectedRolePack = '',
+  resumeLanguage = null,
+) {
   const ids = [...new Set((bulletIds || []).map(value => String(value).trim()).filter(Boolean))];
   if (!ids.length) throw new Error('no bullet ids given');
   const pool = bulletPool(dataDir);
@@ -707,6 +757,15 @@ export function selectBullets(dataDir, id, bulletIds, selectedSkills = [], selec
     throw new Error(`selection omits mandatory skills for baseline + ${rolePackName}: ${missingRequired.join(', ')}`);
   }
   const skills = skillIds.map(item => skillsById.get(item));
+  const normalizedResumeLanguage = resumeLanguageForJob(dataDir, job, resumeLanguage);
+  const experienceIndexPath = join(dataDir, 'experience', 'experience-index.json');
+  const experienceIndex = existsSync(experienceIndexPath) ? readJson(experienceIndexPath) : null;
+  const experienceSnapshot = experienceIndex
+    ? {
+        generatedAt: experienceIndex.generatedAt,
+        sourceFingerprint: experienceIndex.sourceFingerprint,
+      }
+    : null;
   const composition = {
     total: skills.length,
     baseline: skills.filter(skill => skill.baseline).length,
@@ -718,9 +777,12 @@ export function selectBullets(dataDir, id, bulletIds, selectedSkills = [], selec
     `# Selection Report — ${job.role} at ${job.company}`,
     '',
     `- Job: ${job.url}`,
+    `- Resume language: **${normalizedResumeLanguage}**`,
     `- Verified pool: ${pool.length} bullets from profile.json`,
     `- Selected: **${bullets.length}**`,
     `- Eligible skill pool: ${availableSkills.length} skills from resume/coursework plus the local Tier 0 experience index`,
+    `- Tier 0 snapshot: **${experienceSnapshot?.sourceFingerprint || 'not available'}**` +
+      `${experienceSnapshot?.generatedAt ? ` · ${experienceSnapshot.generatedAt}` : ''}`,
     `- Selected skills: **${skills.length}**`,
     `- Skill policy: **${composition.baseline} baseline + ${composition.rolePack} ${rolePackName} pack + ${composition.jdExtras} JD extras**`,
     '',
@@ -756,6 +818,7 @@ export function selectBullets(dataDir, id, bulletIds, selectedSkills = [], selec
     current.evidenceIds = ids;
     current.selectedSkillIds = skillIds;
     current.selectedSkillPack = rolePackName;
+    current.resumeLanguage = normalizedResumeLanguage;
     current.error = null;
     current.approvedAt = null;
     current.approvalMode = null;
@@ -775,7 +838,9 @@ export function selectBullets(dataDir, id, bulletIds, selectedSkills = [], selec
       reviewedAt: review.reviewedAt,
       policy: review.policy,
     },
+    experienceSnapshot,
     selectedRolePack: rolePackName,
+    resumeLanguage: normalizedResumeLanguage,
     skillComposition: composition,
     bullets,
     skills,
@@ -928,13 +993,18 @@ export function syncSelectedSkillsToResume(dataDir, id) {
   };
 }
 
-export function syncTemplateContractToResume(dataDir, id) {
+export function syncTemplateContractToResume(dataDir, id, explicitLanguage = null) {
   const templatePath = latexTemplatePath(dataDir);
   if (!templatePath) return { updated: false, reason: 'no latex template configured' };
   const { job } = findJob(dataDir, id);
   const texPath = join(jobDir(dataDir, job), 'resume.tex');
   if (!existsSync(texPath)) throw new Error('resume.tex is missing');
-  const template = readFileSync(templatePath, 'utf8');
+  const resumeLanguage = resumeLanguageForJob(dataDir, job, explicitLanguage);
+  const template = templateForResumeLanguage(
+    dataDir,
+    readFileSync(templatePath, 'utf8'),
+    resumeLanguage,
+  );
   const source = readFileSync(texPath, 'utf8');
   const marker = '\\begin{document}';
   const templateBodyStart = template.indexOf(marker);
@@ -991,10 +1061,10 @@ export function syncTemplateContractToResume(dataDir, id) {
     throw new Error('resume.tex could not be normalized to the LaTeX template contract');
   }
   if (next !== source) writeFileSync(texPath, next);
-  return { updated: next !== source, ...metrics, resumeItemsUseBodyArgument };
+  return { updated: next !== source, resumeLanguage, ...metrics, resumeItemsUseBodyArgument };
 }
 
-export function renderResume(dataDir, id, texSource = null) {
+export function renderResume(dataDir, id, texSource = null, explicitLanguage = null) {
   const { job } = findJob(dataDir, id);
   const dir = ensureDir(jobDir(dataDir, job));
   const tex = join(dir, 'resume.tex');
@@ -1002,7 +1072,17 @@ export function renderResume(dataDir, id, texSource = null) {
   removeIfExists(join(dir, 'llm-judge.json'));
   safeCopy(texSource, tex);
   if (!existsSync(tex)) throw new Error('resume.tex is missing');
-  syncTemplateContractToResume(dataDir, id);
+  const resumeLanguage = resumeLanguageForJob(dataDir, job, explicitLanguage);
+  if (explicitLanguage) {
+    updateJob(dataDir, id, current => {
+      current.resumeLanguage = resumeLanguage;
+    });
+    const matchPath = join(dir, 'match.json');
+    if (existsSync(matchPath)) {
+      writeJsonAtomic(matchPath, { ...readJson(matchPath), resumeLanguage });
+    }
+  }
+  syncTemplateContractToResume(dataDir, id, resumeLanguage);
   syncSelectedSkillsToResume(dataDir, id);
   const latexmk = findBinary(['latexmk']);
   const pdflatex = findBinary(['pdflatex']);
@@ -1448,7 +1528,12 @@ export function judgeResume(dataDir, id) {
   const configuredTemplatePath = latexTemplatePath(dataDir);
   if (configuredTemplatePath) {
     try {
-      const templateSource = readFileSync(configuredTemplatePath, 'utf8');
+      const resumeLanguage = resumeLanguageForJob(dataDir, job);
+      const templateSource = templateForResumeLanguage(
+        dataDir,
+        readFileSync(configuredTemplatePath, 'utf8'),
+        resumeLanguage,
+      );
       ({
         templatePreambleExact,
         templateContactHeaderExact,
@@ -1501,6 +1586,7 @@ export function judgeResume(dataDir, id) {
   }
   const judge = {
     schemaVersion: CAMPAIGN_SCHEMA,
+    resumeLanguage: resumeLanguageForJob(dataDir, job),
     judgedAt: now(),
     pageCount,
     onePage,

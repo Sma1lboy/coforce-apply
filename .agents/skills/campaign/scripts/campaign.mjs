@@ -72,6 +72,7 @@ async function main() {
       need('--bullets').split(','),
       option('--skills', '').split(',').filter(Boolean),
       option('--skill-pack', ''),
+      option('--language'),
     ), null, 2));
     return;
   }
@@ -86,7 +87,12 @@ async function main() {
     return;
   }
   if (command === 'render') {
-    console.log(JSON.stringify(renderResume(dataDir, need('--id'), option('--tex')), null, 2));
+    console.log(JSON.stringify(renderResume(
+      dataDir,
+      need('--id'),
+      option('--tex'),
+      option('--language'),
+    ), null, 2));
     return;
   }
   if (command === 'feedback') {

@@ -457,6 +457,10 @@ export default function Profile({ state, onChanged }) {
             <Field label="Title" value={p.title} onChange={v => set({ title: v })} />
             <Field label="Email" value={p.email} onChange={v => set({ email: v })} />
             <Field label="Phone" value={p.phone} onChange={v => set({ phone: v })} />
+            <Field label="Chinese Resume Email" value={p.localizedContacts?.['zh-CN']?.email}
+              onChange={v => set({ localizedContacts: { ...(p.localizedContacts || {}), 'zh-CN': { ...(p.localizedContacts?.['zh-CN'] || {}), email: v } } })} />
+            <Field label="Chinese Resume Phone" value={p.localizedContacts?.['zh-CN']?.phone}
+              onChange={v => set({ localizedContacts: { ...(p.localizedContacts || {}), 'zh-CN': { ...(p.localizedContacts?.['zh-CN'] || {}), phone: v } } })} />
             <Field label="Location" value={p.location} onChange={v => set({ location: v })} />
             <Field label="LinkedIn (handle)" value={p.linkedin} onChange={v => set({ linkedin: v })} />
             <Field label="GitHub (handle)" value={p.github} onChange={v => set({ github: v })} />

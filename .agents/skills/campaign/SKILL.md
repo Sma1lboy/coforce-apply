@@ -76,11 +76,17 @@ regenerate rounds rediscovering it. A gap is Module 1 work (one more repo throug
 node "<campaign-skill>/scripts/campaign.mjs" select --id <job-id> \
   --bullets <bullet-ids> \
   --skills <skill-ids> \
-  --skill-pack <approved-pack>
+  --skill-pack <approved-pack> \
+  [--language <en-US|zh-CN>]
 ```
 
 The command rejects pool violations and missing policy members, writes
 `match.json` plus `match-report.md`, and invalidates prior judges.
+The command detects the resume language from the JD (`zh-CN` for Chinese text,
+otherwise `en-US`); `--language` is an explicit override. The selected language
+is persisted with the match. Contact details use
+`profile.localizedContacts[language]` when present and otherwise fall back to
+the profile's top-level `email` and `phone`.
 
 Also flag hard preference conflicts from config (sponsorship, location,
 work-mode, salary) in the match report.

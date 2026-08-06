@@ -8,7 +8,8 @@ description: Maintain the user's local career background (resume metadata) in ~/
 Single source of truth: `~/.coforce/profile.json` (personal data — never in any
 repo). The authoritative schema is the shape below. Never invent fields.
 
-Shape (all fields optional): `name`, `title`, `email`, `phone`, `location`,
+Shape (all fields optional): `name`, `title`, `email`, `phone`,
+`localizedContacts: Record<language, {email?, phone?}>`, `location`,
 `linkedin`, `github`, `website`, `summary`, `skills[]`, `courses[]`,
 `verifiedSkills[] {name, category?, source?, evidenceIds[]?, verifiedAt?}`,
 `resumeSkillPolicy {status: "review_requested" | "approved", baseline: string[],
@@ -48,6 +49,11 @@ to a JD — set it when the user signals importance, otherwise omit.
 bullet, added skill), write back. Preserve fields you didn't touch. When adding
 description bullets, follow STAR: action verb + what + measurable result where
 the user can supply one — ask for the metric once, don't block on it.
+
+Top-level `email` and `phone` are the default contact (normally the English/US
+resume). Put language-specific overrides such as Chinese contact details under
+`localizedContacts["zh-CN"]`; renderers resolve an exact language override,
+then a same-language override, then fall back to the top-level values.
 
 **Supplement** (user drops new material — a work-experience story, an award,
 a certificate, a publication, a pasted LinkedIn section): the user should
