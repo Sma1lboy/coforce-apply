@@ -1,4 +1,4 @@
-# Resume Judge v1 — one spec, run context-free
+# Resume Judge v2.1 — one spec, run context-free
 
 Unified judge for every rendered resume: our craft rubric + the employer-side
 screening rubric (adapted from HackerRank's hiring-agent, MIT © 2025
@@ -65,14 +65,31 @@ already show `onePage: true`, `fullPage: true`, `verbatim: true`,
 > project names; −2 to −5 skills listed but never evidenced in any bullet,
 > or JD keyword-stuffing without substance.
 >
-> Output JSON only:
+> Output JSON only. In addition to employer-side `deductions`, include
+> `actionable_deductions:{total,reasons[]}` using the boundary below:
 > {substance:{open_source,self_projects,production,technical_skills — each
 > {score,max,evidence}}, presentation:{score,max:20,notes},
 > jd_fit:{score,max:10,note}, bonus:{total,breakdown},
 > deductions:{total,reasons[]},
+> actionable_deductions:{total,reasons[]},
 > total (= substance + presentation + bonus − deductions, cap 130 — jd_fit is
 > NOT part of it), key_strengths[≤5],
 > fixes[≤3 — each {fix, severity:"critical"|"normal"}]}
+
+`deductions.total` remains the employer-side estimate above. Separately compute
+`gate.actionableDeductions`: only the portion a new selection/assembly can fix
+today from the supplied resume evidence (for example, omitted existing links,
+generic headings, unsupported selected skills, or keyword stuffing). Do not
+include missing real-world evidence, adoption, or a live demo that the resume
+does not claim exists. Those are upstream advice, not document-delivery gates.
+Also do not count "skill listed but not evidenced in a bullet" as actionable:
+the isolated judge cannot see reviewed coursework/profile attestations or know
+which skills an approved Role Pack makes mandatory. Keep that penalty in
+`deductions.total` and surface it as normal upstream/policy advice instead.
+Likewise, severity `critical` is reserved for a blocker fixable by reselecting,
+reordering, cutting, or exposing an already-present link. A missing capability
+or demo is a normal pool-gap fix: never invent it and never make it a delivery
+critical.
 
 ## Pass bar, recording, and the regenerate loop
 
@@ -87,13 +104,14 @@ subagent(s) return:
   ```
   pass =  presentation.score >= 16   (of 20)
       &&  jd_fit.score       >= 7    (of 10)
-      &&  deductions.total   <= 3
-      &&  no fix with severity "critical"
+      &&  gate.actionableDeductions <= 3
+      &&  no document-fixable fix with severity "critical"
   ```
 
   Tune these numbers in this file, never per-resume.
 
-- **`total` is advice, never a gate.** Report it as an employer-side estimate
+- **`total` and `deductions.total` are advice, never a gate.** Report the total
+  as an employer-side estimate
   alongside the biggest lever ("a screener scores this ~62/130; the lever is not
   the resume — it is an upstream contribution or an internship"). A junior with
   no open-source history and no production experience tops out near 60–80 by
@@ -112,10 +130,17 @@ subagent(s) return:
   FAIL (a spurious fail burns a whole regenerate cycle) or before an automatic
   approval (`requireResumeReview: false` — no human reads it after).
 
-- **Record the verdict** to the job folder as `llm-judge.json`:
-  `{judgedAt, runs, medianTotal, gate:{presentation, jdFit, deductions,
-  criticalFixes}, pass, fixes[], verdicts[]}` — automatic approval is code-gated
-  on `pass: true` (a resume with no recorded verdict cannot auto-approve), and
+- **Record the verdict** through `campaign.mjs record-judge`, never by writing
+  the artifact directly. Pass one `--file` for an initial pass, or repeat
+  `--file` three times after an initial fail; the CLI owns median aggregation.
+  The current schema is:
+  `{schemaVersion:"2.1", judgedAt, runs, medianTotal, gate:{presentation, jdFit, actionableDeductions,
+  criticalFixes}, pass, fixes[], verdicts[]}` — each verdict carries its own
+  `actionable_deductions`; the gate dimensions and `medianTotal` are numeric
+  medians across verdicts, and `gate.criticalFixes` exactly lists the critical
+  entries in the envelope's `{fix,severity}` fixes. Automatic approval is code-gated
+  on a valid current schema plus `pass: true` (a resume with no recorded verdict
+  cannot auto-approve), and
   the Review tab reads it for humans. `gate` is what makes a failure legible: it
   says which dimension blocked, not just that one did.
 - **Fail → regenerate from the feedback**: apply `fixes` (reselect / reorder /

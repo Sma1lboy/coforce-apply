@@ -106,6 +106,10 @@ fallbacks and are never modified in place. Replacing the template is another
 explicit import into the same managed path, followed by re-rendering affected
 resumes.
 
+For Chinese resumes, optionally record a system-installed font name in
+`resumeCjkFont`. The default is `Songti SC` on macOS and `Noto Serif CJK SC`
+elsewhere; setup should only override it when the default is unavailable.
+
 Then ask once: whether
 each generated resume must wait for manual review (`requireResumeReview`,
 default `true`; `false` enables automatic approval and ZIP export after

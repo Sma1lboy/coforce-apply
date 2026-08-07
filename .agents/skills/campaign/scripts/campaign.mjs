@@ -6,6 +6,7 @@ import { dataHome } from '../../../lib/data-home.mjs';
 import { join, resolve } from 'node:path';
 import {
   addFeedback,
+  assembleResume,
   approveJob,
   applyResumeReviewPolicy,
   campaignView,
@@ -16,6 +17,7 @@ import {
   skillReview,
   hydrateJob,
   judgeResume,
+  recordLlmJudge,
   renderResume,
   selectBullets,
   stageArtifacts,
@@ -28,6 +30,9 @@ const option = (name, fallback = null) => {
   const index = argv.indexOf(name);
   return index === -1 ? fallback : argv[index + 1];
 };
+const options = name => argv
+  .map((value, index) => value === name ? argv[index + 1] : null)
+  .filter(Boolean);
 const dataDir = resolve(option('--data-dir', dataHome()));
 const need = (name, value = option(name)) => {
   if (!value) throw new Error(`${name} is required`);
@@ -84,6 +89,22 @@ async function main() {
   }
   if (command === 'judge') {
     console.log(JSON.stringify(judgeResume(dataDir, need('--id')), null, 2));
+    return;
+  }
+  if (command === 'assemble') {
+    console.log(JSON.stringify(assembleResume(
+      dataDir,
+      need('--id'),
+      option('--language'),
+    ), null, 2));
+    return;
+  }
+  if (command === 'record-judge') {
+    console.log(JSON.stringify(recordLlmJudge(
+      dataDir,
+      need('--id'),
+      options('--file').map(file => resolve(file)),
+    ), null, 2));
     return;
   }
   if (command === 'render') {

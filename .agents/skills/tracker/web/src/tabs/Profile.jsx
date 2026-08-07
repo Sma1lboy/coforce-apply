@@ -143,7 +143,7 @@ const policyShape = review => ({
   rolePacks: clone(review?.rolePacks || {}),
 });
 
-function SkillPolicyReview({ setProfile, onChanged }) {
+function SkillPolicyReview({ setProfile, onChanged, profileRevision }) {
   const [payload, setPayload] = useState(null);
   const [draft, setDraft] = useState(policyShape());
   const [newPack, setNewPack] = useState('');
@@ -152,6 +152,9 @@ function SkillPolicyReview({ setProfile, onChanged }) {
 
   useEffect(() => {
     let active = true;
+    setPayload(null);
+    setMessage(profileRevision ? '' : 'Save the profile to load its skill inventory.');
+    if (!profileRevision) return () => { active = false; };
     api.skillPolicy()
       .then(next => {
         if (!active) return;
@@ -160,7 +163,7 @@ function SkillPolicyReview({ setProfile, onChanged }) {
       })
       .catch(error => active && setMessage(`Load failed: ${error.message}`));
     return () => { active = false; };
-  }, []);
+  }, [profileRevision]);
 
   const packNames = Object.keys(draft.rolePacks);
   const skills = payload?.skills || [];
@@ -347,6 +350,13 @@ function SkillPolicyReview({ setProfile, onChanged }) {
 export default function Profile({ state, onChanged }) {
   const agentName = 'Claude';
   const [p, setP] = useState(clone(state.profile));
+  const profileRevision = state.profile && Object.keys(state.profile).length
+    ? JSON.stringify({
+        skills: state.profile.skills || [],
+        verifiedSkills: state.profile.verifiedSkills || [],
+        resumeSkillPolicy: state.profile.resumeSkillPolicy || null,
+      })
+    : null;
   const [status, setStatus] = useState('');
   const [importOpen, setImportOpen] = useState(false);
   const [addOpen, setAddOpen] = useState(false);
@@ -489,7 +499,11 @@ export default function Profile({ state, onChanged }) {
                 }
               }} />
           </div>
-          <SkillPolicyReview setProfile={setP} onChanged={onChanged} />
+          <SkillPolicyReview
+            setProfile={setP}
+            onChanged={onChanged}
+            profileRevision={profileRevision}
+          />
           <div className="h3">Experience evidence enrichments</div>
           <div className="text-[11px] text-dim mb-2">Optional stronger provenance from Tier 0. These extend and enrich the resume inventory; they are not an eligibility gate.</div>
           <div className="flex flex-col gap-1.5">
@@ -508,8 +522,8 @@ export default function Profile({ state, onChanged }) {
             empty={{ company: '', title: '', date: '', location: '', description: [{ text: '', textZh: null }] }}
             fields={[['Company', 'company'], ['Title', 'title'], ['Date', 'date'], ['Location', 'location']]} />
           <SectionCards title="Projects" keyName="projects" addLabel="+ Add project"
-            empty={{ name: '', technologies: '', dateRange: '', description: [{ text: '', textZh: null }] }}
-            fields={[['Name', 'name'], ['Technologies', 'technologies'], ['Date range', 'dateRange', true]]} />
+            empty={{ name: '', role: '', url: '', technologies: '', dateRange: '', description: [{ text: '', textZh: null }] }}
+            fields={[['Name', 'name'], ['Role label', 'role'], ['Repository URL', 'url', true], ['Technologies', 'technologies'], ['Date range', 'dateRange']]} />
           <SectionCards title="Education" keyName="education" addLabel="+ Add education"
             empty={{ institution: '', degree: '', date: '', location: '' }}
             fields={[['Institution', 'institution'], ['Degree', 'degree'], ['Date', 'date'], ['Location', 'location']]} />

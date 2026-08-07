@@ -14,9 +14,9 @@ Shape (all fields optional): `name`, `title`, `email`, `phone`,
 `verifiedSkills[] {name, category?, source?, evidenceIds[]?, verifiedAt?}`,
 `resumeSkillPolicy {status: "review_requested" | "approved", baseline: string[],
 rolePacks: Record<string, string[]>, reviewedAt?: string | null}`,
-`experience[] {company, title, date, location?, description[{text, textZh?, weight?, source?, verifiedAt?}], weight?}`,
+`experience[] {company, title, date, location?, url?, localized?: Record<language, partial entry metadata>, description[{text, textZh?, weight?, source?, verifiedAt?}], weight?}`,
 `education[] {institution, degree, date, location?, relevantCourses?}`,
-`projects[] {name, description[{text, textZh?, weight?, source?, verifiedAt?}], technologies?, dateRange?, weight?}`,
+`projects[] {name, role?, url?, demo?, localized?: Record<language, partial entry metadata>, description[{text, textZh?, weight?, source?, verifiedAt?}], technologies?, dateRange?, weight?}`,
 `certifications[] {name, issuer, date}`, `languages[] {language, proficiency}`,
 `customSections[] {title, weight?, entries[{heading?, subheading?, date?, description?[{text, textZh?, weight?, source?, verifiedAt?}]}]}`
 — user-defined resume sections (Awards, Publications, Leadership, Open Source…)
@@ -114,6 +114,9 @@ experience entries may carry `url`. The resume assembly renders these as
 links on the heading line, and the top-level `website` field joins the
 contact header. Employer-side screeners deduct hard for unlinked projects —
 a resume should be born with its links, not have them patched in review.
+Language-specific heading metadata belongs in `localized[language]`; this may
+translate names, roles, dates, degrees, and locations without duplicating the
+entry or changing content-hash bullet ids.
 
 ## The profile is the verified bullet pool
 
@@ -123,6 +126,6 @@ the repo/PR/commit it derives from) and `verifiedAt`
 (ISO date the user approved it into the profile). Nothing enters the profile
 without explicit user approval — which is exactly why downstream resume
 generation (the campaign skill) is allowed to select ONLY from these bullets,
-verbatim. English `text` remains the value consumed by resume rendering and
-verbatim checks; editors and downstream data files must preserve `textZh` and
-all other optional fields on save.
+verbatim. English resumes consume `text`; Chinese resumes require and consume
+`textZh`. Editors and downstream data files must preserve both values and all
+other optional fields on save.

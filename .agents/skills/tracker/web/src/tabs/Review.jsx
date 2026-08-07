@@ -33,6 +33,7 @@ const experienceLabel = experience => {
 
 const qaStatus = judge => {
   if (!judge) return ['Not scored', 'text-faint border-rule2'];
+  if (judge.valid === false) return ['Stale result', 'text-bad border-bad/50'];
   return judge.pass
     ? ['Pass', 'text-ok border-ok/50']
     : ['Needs review', 'text-warn border-warn/50'];
@@ -290,7 +291,7 @@ export default function Review({ state, onChanged }) {
               <div className="flex items-end justify-between gap-3">
                 <div>
                   <span className="font-display text-3xl text-accentsoft">{selected.llmJudge.medianTotal ?? '—'}</span>
-                  <span className="text-[10px] text-dim ml-1">/ 130 median</span>
+                  <span className="text-[10px] text-dim ml-1">/ 130 evidence estimate</span>
                 </div>
                 <span className={`border rounded-full px-2 py-1 text-[9px] uppercase tracking-wide ${qaClass}`}>{qaLabel}</span>
               </div>
@@ -305,6 +306,18 @@ export default function Review({ state, onChanged }) {
                 <div className="text-[10px] text-dim mt-2.5">
                   Machine gate · {machine.pageCount ?? '—'} page
                   {machine.verbatim === true && machine.skillsVerbatim === true ? ' · grounded ✓' : ''}
+                </div>
+              )}
+              {selected.llmJudge.valid === false && (
+                <div className="text-[10px] text-bad mt-2.5">
+                  Stale judge artifact · re-run the current context-isolated review.
+                </div>
+              )}
+              {selected.llmJudge.gate && (
+                <div className="text-[10px] text-dim mt-2.5">
+                  Delivery gate · presentation {selected.llmJudge.gate.presentation}/20
+                  {' · '}JD fit {selected.llmJudge.gate.jdFit}/10
+                  {' · '}actionable deductions {selected.llmJudge.gate.actionableDeductions}
                 </div>
               )}
               {selected.llmJudge.jdFitNote && (

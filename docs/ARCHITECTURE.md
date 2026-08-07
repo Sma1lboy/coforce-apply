@@ -48,7 +48,7 @@ flowchart TB
   subgraph CAP[共享能力模块层 —— 只实现一次,两个面都是入口]
     C1[意图收集/编辑 · intern↔fulltime · H1B]
     C3[发现入队 · hunt]
-    C4[匹配+渲染 · campaign-lib]
+    C4[匹配+双语确定性组装+渲染 · campaign-lib]
     C5[审批 · feedback/approve]
     C6[投递执行 ⛔ 确认门]
     C7[追踪状态机]
@@ -211,7 +211,12 @@ stateDiagram-v2
 6. **两模块简历管线**:Module 1 生成(JD-free、人审入池),Module 2 严格
    verbatim 选池(出池 id 结构性拒绝);改写必须回到 Module 1 的审核门。
 7. **harness 是契约守卫**(`npm run harness`,CI 同款):决定性、无外网、
-   覆盖投递生命周期 —— 动契约必须先让 harness 表达出来。
+   覆盖投递生命周期，并在 CI 真实编译中英文 LaTeX→PDF、核对 ATS 文本层
+   —— 动契约必须先让 harness 表达出来。
+8. **简历正文只有一条组装路径**：profile metadata + `match.json` 进入
+   language-aware assembler；`text`/`textZh`、模板、machine judge 不允许
+   各自分叉。LLM verdict 由版本化 schema 校验后落盘，旧 artifact 可见但
+   不能触发自动批准。
 
 (当年评审提出的 6 项优化 —— 操作契约成文、数据契约版本化、adapter 收敛、
 board.mjs 拆分 + P0 安全、CI、合后小修 —— 已全部落地;代码级 review 明细

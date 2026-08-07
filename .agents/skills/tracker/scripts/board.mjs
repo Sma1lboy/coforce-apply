@@ -203,6 +203,28 @@ const loadProfile = () => {
 
 const normalizedSkillKey = value => String(value || '').trim().toLowerCase();
 
+const emptySkillPolicyPayload = () => ({
+  review: {
+    schemaVersion: '1.0',
+    status: 'review_requested',
+    declaredStatus: 'review_requested',
+    reviewedAt: null,
+    policy: {
+      baseline: 'mandatory',
+      rolePack: 'mandatory-selected-pack',
+      jdExtras: 'dynamic-from-eligible-pool',
+      classifier: 'human',
+    },
+    counts: { total: 0, baseline: 0, rolePacks: 0, rolePackMemberships: 0, jdOnly: 0 },
+    baseline: [],
+    rolePacks: {},
+    jdOnly: [],
+    unknown: [],
+    reasons: ['save a profile before reviewing the skill policy'],
+  },
+  skills: [],
+});
+
 const normalizeSkillPolicyInput = value => {
   if (!value || typeof value !== 'object' || Array.isArray(value)) {
     throw new Error('expected a JSON object');
@@ -628,10 +650,12 @@ function loadApps() {
     }
     if (req.url === '/api/skills/policy' && req.method === 'GET') {
       res.writeHead(200, { 'content-type': 'application/json' });
-      res.end(JSON.stringify({
-        review: skillReview(dataDir),
-        skills: skillPool(dataDir),
-      }));
+      const profile = loadProfile();
+      res.end(JSON.stringify(
+        profile && Object.keys(profile).length
+          ? { review: skillReview(dataDir), skills: skillPool(dataDir) }
+          : emptySkillPolicyPayload()
+      ));
       return;
     }
     if (req.url === '/api/skills/policy' && req.method === 'POST') {

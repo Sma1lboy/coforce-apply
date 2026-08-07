@@ -10,12 +10,14 @@ import {
   existsSync,
   cpSync,
   mkdirSync,
+  mkdtempSync,
   readFileSync,
   readdirSync,
   writeFileSync,
 } from 'node:fs';
 import { strict as assert } from 'node:assert';
 import { dirname, join } from 'node:path';
+import { tmpdir } from 'node:os';
 import { fileURLToPath } from 'node:url';
 import { onePagePdf } from './pdf-fixture.mjs';
 
@@ -309,8 +311,7 @@ try {
   // fresh workspace: a data home with no applications.json is an empty board,
   // not a crash (board.mjs must never invent or overwrite data it cannot read)
   {
-    const freshHome = join(outDir, 'fresh-home');
-    mkdirSync(freshHome, { recursive: true });
+    const freshHome = mkdtempSync(join(tmpdir(), 'coforce-board-fresh-'));
     const fresh = spawn(
       process.execPath,
       ['.agents/skills/tracker/scripts/board.mjs', join(freshHome, 'applications.json'), '--serve', '0'],
@@ -330,6 +331,25 @@ try {
       const freshState = await (await fetch(`http://localhost:${freshPort}/api/state`)).json();
       assert.deepEqual(freshState.apps, [], 'missing applications.json → empty board');
       assert.equal(freshState.prefs, null, 'no settings → the welcome wizard opens');
+      const freshSkillPolicyResponse = await fetch(`http://localhost:${freshPort}/api/skills/policy`);
+      assert.equal(freshSkillPolicyResponse.status, 200, 'fresh profile skill policy is readable');
+      const freshSkillPolicy = await freshSkillPolicyResponse.json();
+      assert.equal(freshSkillPolicy.review.status, 'review_requested');
+      assert.deepEqual(freshSkillPolicy.skills, [], 'fresh profile starts with an empty skill inventory');
+      const freshProfileSave = await fetch(`http://localhost:${freshPort}/api/profile`, {
+        method: 'POST',
+        headers: { 'content-type': 'application/json' },
+        body: JSON.stringify({ name: 'Fresh Candidate', skills: ['Node.js'] }),
+      });
+      assert.equal(freshProfileSave.status, 204, 'first profile save succeeds without restarting the board');
+      const refreshedSkillPolicy = await (
+        await fetch(`http://localhost:${freshPort}/api/skills/policy`)
+      ).json();
+      assert.deepEqual(
+        refreshedSkillPolicy.skills.map(skill => skill.name),
+        ['Node.js'],
+        'skill inventory becomes available immediately after the first profile save'
+      );
       assert.equal(
         existsSync(join(freshHome, 'applications.json')),
         false,
@@ -409,19 +429,23 @@ try {
       minimumPageCoveragePercent: 93,
       onePage: true,
       fullPage: true,
+      resumeItemsUseBodyArgument: true,
       verbatim: true,
       skillsVerbatim: true,
+      extractable: true,
     }),
     'llm-judge.json': JSON.stringify({
+      schemaVersion: '2.1',
       judgedAt: '2026-07-26T00:00:00.000Z',
       runs: 3,
       medianTotal: 87,
+      gate: { presentation: 18, jdFit: 8, actionableDeductions: 2, criticalFixes: [] },
       pass: true,
-      fixes: ['Add one stronger result metric.'],
+      fixes: [{ fix: 'Add one stronger result metric.', severity: 'normal' }],
       verdicts: [
-        { total: 84, jd_fit_note: 'Good adjacent fit.' },
-        { total: 87, jd_fit_note: 'Strong direct fit; improve proof of impact.' },
-        { total: 90, jd_fit_note: 'Strong direct fit.' },
+        { total: 84, presentation: { score: 17 }, jd_fit: { score: 7, note: 'Good adjacent fit.' }, deductions: { total: 8 }, actionable_deductions: { total: 3 }, fixes: [] },
+        { total: 87, presentation: { score: 18 }, jd_fit: { score: 8, note: 'Strong direct fit; improve proof of impact.' }, deductions: { total: 7 }, actionable_deductions: { total: 2 }, fixes: [] },
+        { total: 90, presentation: { score: 19 }, jd_fit: { score: 9, note: 'Strong direct fit.' }, deductions: { total: 6 }, actionable_deductions: { total: 1 }, fixes: [] },
       ],
     }),
   })) writeFileSync(join(campaignDir, name), content);
@@ -431,6 +455,7 @@ try {
   assert.equal(judgedJob.machineJudge.fullPage, undefined, 'Human API hides the coverage verdict');
   assert.equal(judgedJob.reviewDeliveryProof, undefined, 'Human API hides internal delivery proof');
   assert.equal(judgedJob.llmJudge.medianTotal, 87, 'campaign API exposes the LLM judge median');
+  assert.equal(judgedJob.llmJudge.valid, true, 'campaign API validates the current LLM judge schema');
   assert.equal(
     judgedJob.llmJudge.jdFitNote,
     'Strong direct fit; improve proof of impact.',

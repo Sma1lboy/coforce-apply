@@ -49,7 +49,10 @@ GitHub evidence layer holds its attribution/pagination/writer guardrails and
 the experience index rebuilds offline; config.json migrates off the legacy
 settings pair without losing keys and refuses to overwrite a corrupt file;
 the campaign pipeline selects verbatim pool bullets and exports the approved
-ZIP; the board generator renders all 5 status columns and fixture cards from
+ZIP; when Tectonic is present (always in CI), it also assembles and compiles one
+English and one Chinese resume through the real LaTeX→PDF→`pdftotext` path,
+requiring localized contacts, complete selected bullets/skills, and ATS reading
+order; the board generator renders all 5 status columns and fixture cards from
 `harness/fixtures/applications.json`, rejects a never-apply company at
 `/api/queue`,
 and the console's Chrome-backed apply lifecycle runs consent gate → fill
