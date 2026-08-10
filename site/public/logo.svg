@@ -1,0 +1,18 @@
+<svg xmlns="http://www.w3.org/2000/svg" viewBox="6 6 52 52">
+  <!-- CoForce mark: a C whose aperture is blocked by a contrast block — the
+       confirmation gate, and the C of CoForce. Construction (geometric stroke
+       plus a block) is kobe's, which is why the two read as siblings.
+       viewBox is cropped to the glyph's bounding box so the mark carries its
+       own optical size; the file is the favicon, so it also carries a dark
+       variant rather than vanishing in a dark browser chrome. -->
+  <style>
+    .arc { stroke: #17181b }
+    .gate { fill: #234f8e }
+    @media (prefers-color-scheme: dark) {
+      .arc { stroke: #f0f2f4 }
+      .gate { fill: #81a6dd }
+    }
+  </style>
+  <path class="arc" d="M47.32 19.14 A20 20 0 1 0 47.32 44.86" fill="none" stroke-width="7" stroke-linecap="round"/>
+  <rect class="gate" x="42" y="25.5" width="13" height="13" rx="2"/>
+</svg>

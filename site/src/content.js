@@ -38,6 +38,21 @@ export const pipeline = [
   { verb: 'track', cmd: '/tracker', note: 'a local board, every status change keeps its history' },
 ];
 
+// The full skill set, verbatim from the router table in CLAUDE.md — the badge
+// carousel under the pipeline says "skill-first" by showing the actual skills,
+// not four of them.
+export const skillSet = [
+  { cmd: '/coforce', note: 'routes by pipeline state' },
+  { cmd: '/setup', note: 'onboarding' },
+  { cmd: '/profile', note: 'your record' },
+  { cmd: '/experience', note: 'repos into bullets' },
+  { cmd: '/start', note: 'run a cycle' },
+  { cmd: '/campaign', note: 'batch resumes' },
+  { cmd: '/tailor', note: 'one JD, one resume' },
+  { cmd: '/apply', note: 'fill, never submit alone' },
+  { cmd: '/tracker', note: 'the board' },
+];
+
 export const firstRun = {
   command: '/tailor https://job-posting-url',
   promise: 'One job description in, a one-page PDF out.',

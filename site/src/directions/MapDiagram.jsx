@@ -6,12 +6,31 @@
  * motion: reveal, path-draw, carrier, ticker — all disabled under prefers-reduced-motion
  * contrast: pass · divider language: bleed-colour block + negative space, no card anywhere
  */
-import { useState } from 'react';
+import { useEffect, useState } from 'react';
 import {
-  product, install, firstRun, heroFacts, pipeline, supplyRail, demandRail, crossing, gate,
-  lane, tracking, ironLaws, requirements, dataHome, shots,
+  product, install, firstRun, heroFacts, pipeline, skillSet, supplyRail, demandRail, crossing,
+  gate, lane, tracking, ironLaws, requirements, dataHome, shots,
 } from '../content.js';
 import { useInView } from '../useInView.js';
+
+// The mark. Same geometry as public/logo.svg — that file is the favicon, this
+// is the one that sits in the page, and they must not drift. Two tones: the arc
+// takes the surrounding ink, the gate is always the accent, because the gate is
+// the whole point.
+function Mark({ size = 17 }) {
+  return (
+    <svg width={size} height={size} viewBox="6 6 52 52" aria-hidden="true">
+      <path
+        d="M47.32 19.14 A20 20 0 1 0 47.32 44.86"
+        fill="none"
+        stroke="var(--color-ink)"
+        strokeWidth="7"
+        strokeLinecap="round"
+      />
+      <rect x="42" y="25.5" width="13" height="13" rx="2" fill="var(--color-accent)" />
+    </svg>
+  );
+}
 
 function Tag({ children, tone = 'dim', n }) {
   return (
@@ -29,8 +48,28 @@ function Tag({ children, tone = 'dim', n }) {
 // the first thing typed into Claude under `›`. Display splits the one-liner for
 // readability; copy hands back the one-liner exactly, because the split is
 // presentation and the command is the contract.
+// The line you actually type into Claude types itself, once its block is on
+// screen. It is the page's second piece of text motion and the only one that is
+// also literally true: the two shell lines above it get pasted, this one gets
+// typed. Reduced motion lands it whole.
+function useTyped(text, start) {
+  const [n, setN] = useState(0);
+  useEffect(() => {
+    if (!start || n >= text.length) return;
+    if (window.matchMedia('(prefers-reduced-motion: reduce)').matches) {
+      setN(text.length);
+      return;
+    }
+    const id = setTimeout(() => setN(n + 1), 38);
+    return () => clearTimeout(id);
+  }, [start, n, text]);
+  return text.slice(0, n);
+}
+
 function InstallBlock() {
   const [copied, setCopied] = useState(false);
+  const [blockRef, blockIn] = useInView({ threshold: 0.4 });
+  const typed = useTyped(firstRun.command, blockIn);
   const [cloneLine, ...runRest] = install.split(' && ');
   const copy = () => {
     navigator.clipboard?.writeText(install).then(() => {
@@ -40,6 +79,7 @@ function InstallBlock() {
   };
   return (
     <div
+      ref={blockRef}
       className="cmd border-l-2 pl-[var(--space-sm)]"
       style={{ borderColor: 'var(--color-accent)' }}
     >
@@ -54,7 +94,9 @@ function InstallBlock() {
       <pre className="m-0 overflow-x-auto font-body text-xs leading-[2]" style={{ color: 'var(--color-ink)' }}>
         <span className="cmd__prompt">$ </span>{cloneLine}{'\n'}
         <span className="cmd__prompt">$ </span>{runRest.join(' && ')}{'\n'}
-        <span className="cmd__prompt">› </span>{firstRun.command}
+        <span className="cmd__prompt">› </span>
+        <span className="sr-only">{firstRun.command}</span>
+        <span aria-hidden="true">{typed}<span className="cmd__caret" /></span>
       </pre>
     </div>
   );
@@ -107,7 +149,10 @@ export default function MapDiagram() {
             className="flex flex-wrap items-center justify-between gap-[var(--space-sm)] py-[var(--space-sm)] font-body text-2xs font-medium uppercase tracking-[0.2em]"
             aria-label="Top"
           >
-            <span style={{ color: 'var(--color-accent)' }}>◆ {product.name}</span>
+            <span className="flex items-center gap-[7px]" style={{ color: 'var(--color-accent)' }}>
+              <Mark />
+              {product.name}
+            </span>
             <span className="flex items-center gap-[var(--space-sm)]" style={{ color: 'var(--color-faint)' }}>
               <span>{product.license}</span>
               <a className="ghbtn" href={product.repo}>github ↗</a>
@@ -127,8 +172,8 @@ export default function MapDiagram() {
                 className="mt-[var(--space-md)] text-hero leading-[0.92]"
                 style={{ letterSpacing: '-0.035em' }}
               >
-                <span className="intro block" style={{ '--i': 1 }}>Your job hunt</span>
-                <span className="intro stroked block" style={{ '--i': 2 }}>on autopilot.</span>
+                <span className="line"><span style={{ '--i': 1 }}>Your job hunt</span></span>
+                <span className="line"><span className="stroked" style={{ '--i': 2 }}>on autopilot.</span></span>
               </h1>
               <p
                 className="intro mt-[var(--space-md)] mb-0 max-w-[46ch] font-text text-read-lg leading-[1.5]"
@@ -168,10 +213,13 @@ export default function MapDiagram() {
       <main className="mx-auto max-w-[var(--page-max)] px-[var(--page-gutter)] pb-[var(--space-3xl)]">
       {/* The operating cycle in four commands — the concrete answer to "what
           does this thing actually do", before any diagram. */}
-      <div className="grid grid-cols-2 gap-x-[var(--space-lg)] gap-y-[var(--space-md)] pt-[var(--space-xl)] pb-[var(--space-lg)] lg:grid-cols-4">
+      <div
+        className="intro grid grid-cols-2 gap-x-[var(--space-lg)] gap-y-[var(--space-md)] pt-[var(--space-xl)] pb-[var(--space-lg)] lg:grid-cols-4"
+        style={{ '--i': 6 }}
+      >
         {pipeline.map((step, i) => (
-          <div key={step.verb} className="intro min-w-0" style={{ '--i': i + 6 }}>
-            <p className="m-0 font-display text-h3 leading-tight">
+          <div key={step.verb} className="min-w-0">
+            <p className="cycle__verb m-0 font-display text-h3 leading-tight" style={{ '--ci': i }}>
               {step.verb}
               {i < pipeline.length - 1 && (
                 <span aria-hidden="true" style={{ color: 'var(--color-accent)' }}> →</span>
@@ -183,6 +231,22 @@ export default function MapDiagram() {
             <p className="m-0 mt-[var(--space-2xs)] font-body text-xs leading-relaxed" style={{ color: 'var(--color-faint)' }}>
               {step.note}
             </p>
+          </div>
+        ))}
+      </div>
+
+      {/* The badge carousel: every skill in the router table, scrolling. Two
+          rows drifting opposite ways, no entrance stagger — the motion is the
+          continuous flow itself, nothing pops in one by one. */}
+      <div className="marquee marquee--badges" aria-hidden="true">
+        {[0, 1].map(row => (
+          <div key={row} className={`marquee__row marquee__row--badges${row ? ' marquee__row--reverse' : ''}`}>
+            {[...skillSet, ...skillSet].map((s, i) => (
+              <span className="badge" key={`${s.cmd}-${i}`}>
+                <b>{s.cmd}</b>
+                <span>{s.note}</span>
+              </span>
+            ))}
           </div>
         ))}
       </div>
@@ -200,7 +264,7 @@ export default function MapDiagram() {
         {/* The board is a wide strip and the resume is a tall page — side by side
             in one row, the short column left a dead third of the fold empty. The
             strip takes its own row; the page sits beside its caption. */}
-        <figure className="rise m-0 mt-[var(--space-md)]" style={{ '--i': 1 }}>
+        <figure className="rise m-0 mt-[var(--space-md)]">
           <h3 className="font-display text-h3 leading-snug">{shots[0].title}</h3>
           <img
             src={shots[0].src}
@@ -222,7 +286,6 @@ export default function MapDiagram() {
             and bottom-aligning the text left the top half of the column dead. */}
         <figure
           className="rise m-0 mt-[var(--space-xl)] grid gap-[var(--space-lg)] lg:grid-cols-[minmax(0,0.58fr)_minmax(0,1fr)] lg:items-center"
-          style={{ '--i': 2 }}
         >
           <img
             src={shots[1].src}
@@ -292,8 +355,8 @@ export default function MapDiagram() {
             </div>
 
             <ol className="mt-[var(--space-lg)] grid list-none gap-[var(--space-md)] p-0 sm:grid-cols-3">
-              {crossing.out.map((item, i) => (
-                <li key={item.step} className="rise min-w-0" style={{ '--i': i + 3 }}>
+              {crossing.out.map(item => (
+                <li key={item.step} className="rise min-w-0">
                   <p className="m-0 font-display text-lg font-semibold" style={{ color: 'var(--color-ink)' }}>
                     {item.step}
                   </p>
@@ -339,7 +402,7 @@ export default function MapDiagram() {
               <li
                 key={item.law}
                 className="rise min-w-0 border-t pt-[var(--space-sm)]"
-                style={{ borderColor: 'var(--color-rule-2)', '--i': i + 1 }}
+                style={{ borderColor: 'var(--color-rule-2)' }}
               >
                 <span className="font-body text-2xs" style={{ color: 'var(--color-accent)' }}>
                   {String(i + 1).padStart(2, '0')}
@@ -380,8 +443,8 @@ export default function MapDiagram() {
         </div>
 
         <div className="mt-[var(--space-xl)] grid gap-[var(--space-lg)] lg:grid-cols-3">
-          {tracking.map((item, i) => (
-            <div key={item.heading} className="rise min-w-0" style={{ '--i': i + 1 }}>
+          {tracking.map(item => (
+            <div key={item.heading} className="rise min-w-0">
               <h3 className="font-display text-h3 leading-snug">{item.heading}</h3>
               <p
                 className="mt-[var(--space-2xs)] mb-0 font-text text-read leading-[1.55]"

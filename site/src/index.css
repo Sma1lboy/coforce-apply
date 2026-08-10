@@ -215,33 +215,94 @@ body::before {
 
 .is-in .stroked--fill { background-position: 0 0; }
 
-/* Load-in choreography for the hero. Everything above the fold enters once,
- * staggered by --i, without waiting for an IntersectionObserver — the hero is
- * always in view on load. */
-@keyframes intro {
-  from { opacity: 0; transform: translateY(22px); }
-  to   { opacity: 1; transform: none; }
+/* Entrances wipe; they do not pop. An earlier pass faded each item up on its
+ * own delay, which turned every group into four things arriving one after
+ * another — read as stutter, not choreography. Now a moving bottom edge
+ * uncovers the block while it slides its last few pixels into place, so there
+ * is no frame where something simply appears, and a GROUP shares one delay: the
+ * markup staggers only where the sequence is the point (the headline's two
+ * lines), never across peers in a list.
+ *
+ * The inset bleeds -40% on the three static edges so nothing clips a stroke,
+ * a text-stroke or the screenshots' hover shadow; only the bottom animates. */
+@keyframes wipe {
+  from { clip-path: inset(-40% -40% 100% -40%); transform: translateY(12px); }
+  to   { clip-path: inset(-40% -40% -40% -40%); transform: none; }
 }
 
 .intro {
-  opacity: 0;
-  animation: intro 780ms var(--ease-out) calc(var(--i, 0) * 110ms) both;
+  animation: wipe 880ms var(--ease-out) calc(var(--i, 0) * 55ms) both;
 }
 
-/* Scroll reveal. One class, one transition, staggered by a custom property the
- * markup sets per item — no animation library for what a transition does. */
 .rise {
-  opacity: 0;
-  transform: translateY(18px);
+  clip-path: inset(-40% -40% 100% -40%);
+  transform: translateY(12px);
   transition:
-    opacity 620ms var(--ease-out) calc(var(--i, 0) * 70ms),
-    transform 620ms var(--ease-out) calc(var(--i, 0) * 70ms);
+    clip-path 820ms var(--ease-out) calc(var(--i, 0) * 55ms),
+    transform 820ms var(--ease-out) calc(var(--i, 0) * 55ms);
 }
 
 .is-in .rise,
 .rise.is-in {
-  opacity: 1;
+  clip-path: inset(-40% -40% -40% -40%);
   transform: none;
+}
+
+/* ── Text motion ─────────────────────────────────────────────────────────────
+ * The headline is the page's one piece of real typesetting motion: each line
+ * rises from behind its own baseline edge, the way a line gets set, rather than
+ * fading in as a block. The mask has to be a separate element — overflow on the
+ * span itself would crop the -webkit-text-stroke of the drawn line. */
+.line {
+  display: block;
+  overflow: clip;
+  /* Descenders (the j of "job", the p of "autopilot") sit below the 0.92
+   * line box, so the mask is opened downward and the leading given straight
+   * back as negative margin. The travel below has to clear this padding too,
+   * or the tops of the glyphs peek under the mask before they start. */
+  padding-bottom: 0.2em;
+  margin-bottom: -0.2em;
+}
+
+.line > span {
+  display: block;
+  animation: line-up 1000ms var(--ease-out) calc(var(--i, 0) * 130ms) both;
+}
+
+@keyframes line-up {
+  from { transform: translateY(135%); }
+  to   { transform: none; }
+}
+
+/* The command you actually type types itself. The caret is the only thing that
+ * keeps blinking after it lands — the line is a prompt, so it should look like
+ * one is waiting at it. */
+.cmd__caret {
+  display: inline-block;
+  width: 0.58em;
+  height: 1.05em;
+  vertical-align: text-bottom;
+  background: var(--color-accent);
+  animation: caret 1.1s steps(1) infinite;
+}
+
+@keyframes caret {
+  0%, 50% { opacity: 1; }
+  50.01%, 100% { opacity: 0; }
+}
+
+/* The cycle is a cycle. The accent walks discover → tailor → apply → track and
+ * starts over, so the row carries motion permanently instead of arriving once
+ * and going dead. Colour only — nothing moves, so it reads at the edge of
+ * vision rather than pulling the eye off the prose. */
+.cycle__verb {
+  animation: cycle-lit 8s linear calc(var(--ci, 0) * 2s) infinite;
+}
+
+@keyframes cycle-lit {
+  0%           { color: var(--color-ink); }
+  6%, 22%      { color: var(--color-accent); }
+  30%, 100%    { color: var(--color-ink); }
 }
 
 /* ── Map/Diagram ─────────────────────────────────────────────────────────────
@@ -451,6 +512,60 @@ body::before {
   color: var(--color-accent-soft);
 }
 
+/* Badge carousel — the skill set as scrolling chips. Same marquee mechanics as
+ * the data-home ticker, opposite direction and no rules, so the two strips read
+ * as siblings rather than copies. */
+.marquee--badges {
+  border-block: 0;
+  padding-block: var(--space-2xs);
+  margin-bottom: var(--space-lg);
+  display: grid;
+  row-gap: var(--space-xs);
+}
+
+.marquee__row--badges {
+  gap: var(--space-sm);
+  animation-duration: 34s;
+}
+
+/* The second row runs the other way, starts mid-cycle, and is offset even when
+ * it is not moving. Both rows carry the same nine badges, so without all three
+ * they line up column-for-column and read as one row rendered twice — which is
+ * exactly what a reduced-motion reader would see, since the animation there
+ * ends immediately and hands the position back to this base transform. */
+.marquee__row--reverse {
+  transform: translateX(-27%);
+  animation-direction: reverse;
+  animation-duration: 41s;
+  animation-delay: -19s;
+}
+
+.badge {
+  display: inline-flex;
+  align-items: baseline;
+  gap: 8px;
+  border: 1px solid var(--color-rule-2);
+  border-radius: var(--radius-chip);
+  padding: 5px 14px;
+  font-family: var(--font-body);
+  font-size: var(--text-xs);
+  white-space: nowrap;
+  color: var(--color-faint);
+  transition:
+    border-color var(--dur-short) var(--ease-out),
+    background-color var(--dur-short) var(--ease-out);
+}
+
+.badge b {
+  font-weight: 500;
+  color: var(--color-accent-soft);
+}
+
+.badge:hover {
+  border-color: var(--color-accent-line);
+  background: var(--color-accent-wash);
+}
+
 .track__fallback {
   margin-top: var(--space-md);
   padding-left: var(--space-sm);
@@ -612,6 +727,12 @@ body::before {
      * twitches. One iteration ends them instantly at a resting state. */
     animation-iteration-count: 1 !important;
     transition-duration: 0.01ms !important;
+    /* Delays have to go too, not just durations. The entrances stagger by --i,
+     * and a zero-duration animation that still waits out its delay leaves the
+     * reader looking at a blank hero for a third of a second — the wait is the
+     * part that reads as broken once the motion it was pacing is gone. */
+    animation-delay: 0.01ms !important;
+    transition-delay: 0.01ms !important;
     scroll-behavior: auto !important;
   }
 }
