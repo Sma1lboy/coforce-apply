@@ -91,6 +91,52 @@ reordering, cutting, or exposing an already-present link. A missing capability
 or demo is a normal pool-gap fix: never invent it and never make it a delivery
 critical.
 
+## Bullet craft (0–20) — added to the prompt, never to the gate
+
+The rubric above scores *which* bullets were chosen and how they are arranged.
+It is blind to how a bullet is **written**, so a pool full of well-selected,
+badly-written material passes clean. Add this block to the prompt, and add
+`bullet_craft:{score,max:20,tells[]}` to the output JSON.
+
+> **Bullet craft (0–20)** — judge the writing, not the achievement. Deduct per
+> distinct tell, not per occurrence; quote the offending fragment in `tells`.
+>
+> - **Trailing impact clause (−2 each, max −6)**: the bullet states its fact,
+>   then hangs a participial tail explaining why it mattered — "…, letting the
+>   team ship faster", "…, so new agents launch without boilerplate",
+>   "…, modularizing the platform". Reads as self-explanation. A declarative
+>   clause or a clean stop scores full.
+> - **Outcome without mechanism (−3)**: the bullet is a number and nothing else
+>   — "165 releases in three months", "130k lines across 8 packages". Volume is
+>   activity; the machine that produced it is capability. Full marks name the
+>   mechanism and use the number as its evidence.
+> - **One idea split across two bullets (−3)**: mechanism in one, its own output
+>   in the next. The reader sees two bullets on one subject and discounts both.
+> - **Unsourced precision (−2 each, max −4)**: a percentage with no stated basis
+>   ("improving efficiency by 35%"). Round, unattributable gains read as
+>   decoration. A number tied to a named measurement does not.
+> - **Duty framing (−3)**: "Contributed to", "Responsible for", "Actively
+>   participated in", "Helped with" — describes attendance, not authorship.
+> - **Filler adjectives (−2)**: "scalable", "advanced", "robust", "efficient",
+>   "seamless" used as praise rather than as a claim the bullet then supports.
+> - **Rule-of-three padding (−1)**: three-item lists where the third item exists
+>   for rhythm.
+>
+> Score 20 minus deductions, floor 0.
+
+**It does not gate.** Bullet wording is Module 1 material — a re-render cannot
+touch it, and `campaign.mjs` rejects out-of-pool text by design. Gating on it
+would reproduce exactly the category error described below: a bar the
+regenerate loop is structurally unable to clear, burning three rounds before
+escalating. Report `bullet_craft` alongside `total`, and route its `tells` to
+Module 1 with the offending bullet ids.
+
+Three of these are cheaper to measure than to judge and belong in
+`campaign.mjs judge` beside `verbatim` and `extractable`, not in this prompt:
+first- and third-person pronouns (zero tolerance), bullets per entry (flag ≥6),
+and the filler-adjective list. Measure what is measurable; judge only what needs
+a reader.
+
 ## Pass bar, recording, and the regenerate loop
 
 **Every rendered resume takes this review — no exceptions.** After the judge

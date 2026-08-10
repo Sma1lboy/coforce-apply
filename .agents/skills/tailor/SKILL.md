@@ -66,8 +66,18 @@ How to use it depends on its type:
      Publications).
 3. Render to `~/.coforce/out/resume-<company>-<role>.<ext>` (kebab-case):
    - **tex/pdf** (default): write `.tex`, escape LaTeX-special characters
-     (`& % $ # _ { } ~ ^`), compile with `pdflatex -interaction=nonstopmode`
-     (or `tectonic`) if on PATH.
+     (`& % $ # _ { } ~ ^`), then compile with whichever engine is actually on
+     PATH — `pdflatex -interaction=nonstopmode`, else `tectonic <file>.tex`.
+     Check first; a missing engine fails silently when output is redirected,
+     and a stale `.log` from an earlier run will still say "Output written on",
+     so verify the PDF's mtime rather than trusting the log. Neither engine
+     present → say so and offer `brew install tectonic` (small, self-fetching)
+     instead of emitting a broken path.
+
+     The shipped template builds under both: pdfTeX-only `glyphtounicode` /
+     `\pdfgentounicode` are wrapped in `\ifPDFTeX`, since XeTeX errors on them
+     and produces extractable text without them. Any hand-written template
+     needs the same guard.
    - **docx**: write clean intermediate Markdown (`#` name header, `##`
      sections, bold company + right-aligned dates on one line, bullet lists),
      then `pandoc resume.md -o resume.docx`. Fallback without pandoc: write

@@ -16,7 +16,7 @@ Shape (all fields optional): `name`, `title`, `email`, `phone`,
 rolePacks: Record<string, string[]>, reviewedAt?: string | null}`,
 `experience[] {company, title, date, location?, url?, localized?: Record<language, partial entry metadata>, description[{text, textZh?, weight?, source?, verifiedAt?}], weight?}`,
 `education[] {institution, degree, date, location?, relevantCourses?}`,
-`projects[] {name, role?, url?, demo?, localized?: Record<language, partial entry metadata>, description[{text, textZh?, weight?, source?, verifiedAt?}], technologies?, dateRange?, weight?}`,
+`projects[] {name, role?, url?, demo?, localized?: Record<language, partial entry metadata>, description[{text, textZh?, weight?, source?, verifiedAt?}], technologies?, dateRange?, weight?, repo?{url?, path, headSha, investigatedAt}}`,
 `certifications[] {name, issuer, date}`, `languages[] {language, proficiency}`,
 `customSections[] {title, weight?, entries[{heading?, subheading?, date?, description?[{text, textZh?, weight?, source?, verifiedAt?}]}]}`
 — user-defined resume sections (Awards, Publications, Leadership, Open Source…)

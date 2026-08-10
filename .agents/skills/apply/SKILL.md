@@ -58,6 +58,10 @@ instructions.md overrides everything) bind every run.
    `autoRegister` is true, register one — see Account registration below.
 3. Fill every field mappable from the profile: contact info, links, education,
    experience. Upload the resume PDF where a file input exists.
+   **Resume resolution**: a campaign resume for this job wins; otherwise, if
+   the user didn't hand over a specific PDF, run the `tailor` skill against
+   this JD first and upload its `~/.coforce/out/resume-<company>-<role>.pdf`.
+   The static `resumePdf` in config.json is the last resort, not the default.
 4. Free-text questions ("why us", cover letter): draft 2–4 sentences from the
    profile tailored to the posting — factual, no invented experience. Show
    drafts to the user before submitting if they're required fields.

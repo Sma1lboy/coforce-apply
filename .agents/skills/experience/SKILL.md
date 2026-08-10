@@ -155,15 +155,47 @@ the user can approve into the pool. Input: a git repository — local path or
 GitHub URL. Output: 3–6 bullets grounded in commits, diffs and code, never in
 the README's marketing copy.
 
-1. **Locate**: local path → use directly. GitHub URL → clone shallowly into
-   the scratchpad (`git clone --depth 50`).
+1. **Locate — keep the checkout, do not throw it away.** Local path → use
+   directly and record it. GitHub URL → resolve to the ref cache at
+   `~/.coforce/experience/refs/<owner>/<repo>`: clone it shallowly the first
+   time (`git clone --depth 50`), and on every later visit `git fetch --depth 50`
+   the existing checkout instead of re-cloning. Record the resolved path and
+   `HEAD` sha back onto the project (step 5) so the next session — generating
+   for a new JD, answering "what did I actually build there", checking whether a
+   bullet still matches the code — investigates immediately instead of asking
+   the user to paste the URL again.
+
+   The cache is regenerable and safe to delete; it is never committed. A repo
+   already recorded on a project needs no URL from the user at all: refresh it
+   and go.
 2. **Scope to the user**: `git log --author=<user> --stat` (author name from
    `git config user.name`/`user.email`, or ask). If the user authored the whole
    repo, the scope is the whole repo.
-3. **Evidence pass**: from their commits and the key source files, identify
-   3–6 concrete contributions — architecture decisions, features, performance
-   or reliability work, tooling. Note tech stack and scale signals (LOC, users,
-   throughput, CI time) only where actually observable.
+3. **Evidence pass — read the source, not just the log.** From their commits
+   *and* the code itself, identify 3–6 concrete contributions: architecture
+   decisions, features, performance or reliability work, tooling.
+
+   Commits record what changed; they almost never record what the thing **is**.
+   The load-bearing facts hide in five places, and a pass that skips them
+   produces bullets that would equally describe any repo:
+
+   - **Module header comments and docstrings.** A well-kept file states its own
+     contract at the top — the data model, the invariant, why a design was
+     chosen over the obvious one. Usually the highest-yield read in the repo.
+   - **CI workflows** (`.github/workflows`): which gates a change must clear,
+     and whether an agent or bot is wired into review or release.
+   - **Task-runner scripts** (`package.json`, `Makefile`, `justfile`): the real
+     surface of the dev harness — test tiers, e2e, visual, release, capture.
+   - **Type and schema definitions**: the domain vocabulary in the author's own
+     words. Use their nouns in the bullet, not your paraphrase of them.
+   - **Anything the repo ships *for agents***: a `SKILL.md`, an MCP server, a
+     headless API, a plugin SDK. When the project is something other agents
+     drive, that protocol — how work is dispatched, how outcomes are reported,
+     what happens on timeout — is the most differentiating fact in the whole
+     repo, and it is never in the commit log.
+
+   Note tech stack and scale signals (LOC, users, throughput, CI time) only
+   where actually observable.
 4. **Write bullets**, each STAR-compressed into one line:
    - Action verb + the concrete thing built + how (tech) + outcome.
    - Metrics come from evidence or from the user — ask once for numbers
@@ -211,9 +243,15 @@ the README's marketing copy.
      entry opening with the same verb. Graders check all four mechanically and a
      reader feels them instantly.
 5. **Merge on confirmation**: append to `~/.coforce/profile.json` `projects[]`
-   as `{name, url, description: [{text, source, verifiedAt}...], technologies,
-   dateRange}` (dateRange from first/last commit dates). Schema rules live in
-   the `profile` skill.
+   as `{name, url, repo, description: [{text, source, verifiedAt}...],
+   technologies, dateRange}` (dateRange from first/last commit dates). Schema
+   rules live in the `profile` skill.
+
+   `repo` is `{url?, path, headSha, investigatedAt}` — the checkout from step 1.
+   It is what makes the project re-investigable: a later session refreshes that
+   path and re-reads the code without a round trip through the user. When
+   `headSha` has moved since `investigatedAt`, say so before reusing the
+   bullets — the repo has changed and the evidence behind them may have too.
 
 Rules: no fabricated metrics, users, or impact. Bullets describe what the USER
 did, not what the project is.

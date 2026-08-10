@@ -19,7 +19,11 @@
 \usepackage{fancyhdr}
 \usepackage[english]{babel}
 \usepackage{tabularx}
-\input{glyphtounicode}
+% glyphtounicode / \pdfgentounicode are pdfTeX-only and make the PDF's text
+% extractable for ATS. XeTeX (tectonic) emits Unicode-mapped text natively and
+% errors on them, so guard both — the template must build on either engine.
+\usepackage{iftex}
+\ifPDFTeX\input{glyphtounicode}\fi
 
 \pagestyle{fancy}
 \fancyhf{}
@@ -43,7 +47,7 @@
 \vspace{-4pt}\scshape\raggedright\large
 }{}{0em}{}[\color{black}\titlerule \vspace{-5pt}]
 
-\pdfgentounicode=1
+\ifPDFTeX\pdfgentounicode=1\fi
 
 \newcommand{\resumeItem}[1]{
 \item\small{
