@@ -83,6 +83,29 @@ export const resumePageCoverageMinimumPercent = dataDir => {
   }
 };
 
+// "Is this verdict about these artifacts?" is a question about content, not
+// about the clock. Freshness used to be `judge.mtime >= newest input mtime`,
+// which answers "yes" whenever the timestamps merely TIE — and on a filesystem
+// where two consecutive writes land on the same millisecond (measurably: every
+// time, on tmpfs) rewriting resume.tex right after judge.json did not
+// invalidate anything, so a stale verdict was reused and gates were evaluated
+// against artifacts they had never seen. Timestamps also lie after a git
+// checkout or a `cp -p`. A fingerprint of the inputs cannot.
+const JUDGE_INPUTS = ['resume.pdf', 'resume.tex', 'match.json'];
+
+// Exported so a fixture (or any tool) that hands the judge a pre-made verdict
+// has to say which artifacts it is a verdict ABOUT, rather than asserting a
+// passing grade next to files nobody graded.
+export const judgeInputsFingerprint = dir => {
+  const hash = createHash('sha256');
+  for (const name of JUDGE_INPUTS) {
+    const path = join(dir, name);
+    hash.update(name);
+    hash.update(existsSync(path) ? readFileSync(path) : Buffer.alloc(0));
+  }
+  return hash.digest('hex').slice(0, 16);
+};
+
 const currentResumeJudge = (dataDir, job) => {
   const dir = jobDir(dataDir, job);
   const path = join(dir, 'judge.json');
@@ -90,14 +113,12 @@ const currentResumeJudge = (dataDir, job) => {
   if (existsSync(path)) {
     try {
       const saved = readJson(path);
-      const judgeModifiedAt = statSync(path).mtimeMs;
-      const newestInputModifiedAt = ['resume.pdf', 'resume.tex', 'match.json']
-        .map(name => join(dir, name))
-        .filter(existsSync)
-        .reduce((latest, input) => Math.max(latest, statSync(input).mtimeMs), 0);
+      // A verdict written before this field existed cannot prove what it judged,
+      // so it is stale by definition.
       if (
         saved.minimumPageCoveragePercent === minimumPageCoveragePercent &&
-        judgeModifiedAt >= newestInputModifiedAt
+        saved.inputsFingerprint &&
+        saved.inputsFingerprint === judgeInputsFingerprint(dir)
       ) return saved;
     } catch {}
   }
@@ -1062,7 +1083,7 @@ export function syncTemplateContractToResume(dataDir, id, explicitLanguage = nul
 
   const next = template.slice(0, templateBodyStart) + body;
   const metrics = compareTemplateContract(template, next, resumeLanguage);
-  const nextBody = next.slice(next.indexOf(marker));
+  const nextBody = stripTexComments(next.slice(next.indexOf(marker)));
   const resumeItemArguments = texCommandArguments(nextBody, '\\resumeItem', 2);
   const resumeItemsUseBodyArgument = resumeItemArguments.length
     ? resumeItemArguments.every(([label, value]) => !label.trim() && value.trim())
@@ -1228,6 +1249,18 @@ const visibleTexText = value => {
   }
   return unescapeTex(text.replace(/[{}]/g, ''));
 };
+
+// A LaTeX comment runs from an unescaped % to the end of its line. The scanners
+// below read the document as text, so without this a macro call written inside
+// a comment counts as a real one: a template that documented its own contract
+// in a comment failed the bullet-shape gate with nothing to point at.
+const stripTexComments = tex => String(tex)
+  .split('\n')
+  .map(line => {
+    const comment = line.match(/(^|[^\\])%/);
+    return comment ? line.slice(0, comment.index + comment[1].length) : line;
+  })
+  .join('\n');
 
 const texResumeItems = tex => {
   const items = [];
@@ -1539,7 +1572,7 @@ export function judgeResume(dataDir, id) {
   // \resumeItem{#1} and are not resume content
   const texSource = readFileSync(texPath, 'utf8');
   const bodyStart = texSource.indexOf('\\begin{document}');
-  const texBody = bodyStart === -1 ? texSource : texSource.slice(bodyStart);
+  const texBody = stripTexComments(bodyStart === -1 ? texSource : texSource.slice(bodyStart));
   const items = texResumeItems(texBody).map(unescapeTex);
   const resumeItemArguments = texCommandArguments(texBody, '\\resumeItem', 2);
   const resumeItemsUseBodyArgument = resumeItemArguments.length
@@ -1647,6 +1680,8 @@ export function judgeResume(dataDir, id) {
     schemaVersion: CAMPAIGN_SCHEMA,
     resumeLanguage,
     judgedAt: now(),
+    // what this verdict is about — see currentResumeJudge
+    inputsFingerprint: judgeInputsFingerprint(dir),
     pageCount,
     onePage,
     fullness,

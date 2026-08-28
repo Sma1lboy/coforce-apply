@@ -20,6 +20,7 @@ import { dirname, join } from 'node:path';
 import { tmpdir } from 'node:os';
 import { fileURLToPath } from 'node:url';
 import { onePagePdf } from './pdf-fixture.mjs';
+import { judgeInputsFingerprint } from '../.agents/skills/campaign/scripts/campaign-lib.mjs';
 
 const here = dirname(fileURLToPath(import.meta.url));
 const root = join(here, '..');
@@ -422,6 +423,9 @@ try {
     'job-description.md': '# Fixture JD\n',
     'job.json': JSON.stringify({ id: campaignJob.id }),
     'match-report.md': '# Grounded match\n',
+    // A verdict is only trusted for the artifacts it was computed from, so this
+    // pre-made one has to name them — see judgeInputsFingerprint. Written after
+    // the files above land, hence the second loop below.
     'judge.json': JSON.stringify({
       pageCount: 1,
       fullness: 0.94,
@@ -449,6 +453,12 @@ try {
       ],
     }),
   })) writeFileSync(join(campaignDir, name), content);
+  // Bind the pre-made verdict to the artifacts it sits beside; without this the
+  // judge treats it as a grade nobody computed and re-judges from scratch.
+  writeFileSync(join(campaignDir, 'judge.json'), JSON.stringify({
+    ...JSON.parse(readFileSync(join(campaignDir, 'judge.json'), 'utf8')),
+    inputsFingerprint: judgeInputsFingerprint(campaignDir),
+  }));
   const judgedCampaign = await (await fetch(`${base}/api/campaign`)).json();
   const judgedJob = judgedCampaign.jobs.find(item => item.id === campaignJob.id);
   assert.equal(judgedJob.machineJudge.pageCount, 1, 'campaign API exposes the machine gate summary');
