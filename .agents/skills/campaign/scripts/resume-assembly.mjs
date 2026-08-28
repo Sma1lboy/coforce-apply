@@ -117,7 +117,11 @@ const bulletText = (bullet, language) => {
 
 const itemList = (bullets, language) => [
   '    \\resumeItemListStart',
-  ...bullets.map(bullet => `      \\resumeItem{}{${bulletText(bullet, language)}}`),
+  // The bullet body is the one field that reached LaTeX unescaped: a reviewed
+  // bullet saying "cut p99 latency by 62%" commented out its own closing brace.
+  // judgeResume's unescapeTex is the exact inverse, so verbatim still compares
+  // the reviewed source.
+  ...bullets.map(bullet => `      \\resumeItem{}{${escapeTex(bulletText(bullet, language))}}`),
   '    \\resumeItemListEnd',
 ].join('\n');
 

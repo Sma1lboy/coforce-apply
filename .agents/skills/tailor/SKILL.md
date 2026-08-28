@@ -37,8 +37,12 @@ the Review tab. Do not also write a duplicate resume under `~/.coforce/out/`.
    several, ask once which to use.
 3. Default: `assets/resume_template.tex` inside this skill's base directory —
    Jake's-resume style (letterpaper 11pt, `\resumeSubheading` macros, section
-   order Education → Experience → Projects → Skills). Keep its macros and
-   spacing intact; only fill the placeholder slots.
+   order Education → Skills → Working Experience → Projects). Keep its macros
+   and spacing intact; only fill the placeholder slots. Bullets take two
+   arguments — `\resumeItem{}{<bullet>}`, the first being an optional bold
+   label — and so does `\resumeSubItem{<label>:}{<values>}` in Skills. The
+   campaign path shares this template and machine-checks that shape, so the
+   one-argument form silently fails to compile.
 
 How to use it depends on its type:
 - **`.tex` / `.html`** — a fillable template: keep its packages, layout, and
@@ -60,7 +64,8 @@ How to use it depends on its type:
    - Summary: 2–3 sentences positioning the user for THIS role, facts only.
    - Custom sections (`customSections[]`: Awards, Publications, Leadership…):
      include after Education as `\section{<title>}` — entries use
-     `\resumeSubheading` (heading/date/subheading) with `\resumeItem` bullets.
+     `\resumeSubheading` (heading/date/subheading) with `\resumeItem{}{…}`
+     bullets.
      Include only when JD-relevant or high-`weight`; they are the FIRST cut in
      the one-page gate unless the JD asks for them (e.g. research roles keep
      Publications).

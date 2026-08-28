@@ -63,7 +63,7 @@ function buildTex(profile) {
       `{${esc(e.title || '')}}{${esc(e.location || '')}}`,
       `{${esc(e.company)}}{${esc(e.date || '')}}`,
       '\\resumeItemListStart');
-    for (const d of e.description) out.push(`\\resumeItem{${esc(textOf(d))}}`);
+    for (const d of e.description) out.push(`\\resumeItem{}{${esc(textOf(d))}}`);
     out.push('\\resumeItemListEnd');
   }
   out.push('\\resumeSubHeadingListEnd');
@@ -75,7 +75,7 @@ function buildTex(profile) {
         `{\\textbf{${esc(p.name)}} $|$ \\emph{${esc(p.technologies || '')}}}` +
           `{\\small\\textit{${esc(p.dateRange || '')}}}`,
         '\\resumeItemListStart');
-      for (const d of p.description) out.push(`\\resumeItem{${esc(textOf(d))}}`);
+      for (const d of p.description) out.push(`\\resumeItem{}{${esc(textOf(d))}}`);
       out.push('\\resumeItemListEnd');
     }
     out.push('\\resumeSubHeadingListEnd');
