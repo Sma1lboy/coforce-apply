@@ -113,9 +113,8 @@
 % straight out of this file, then emits a resume shaped to match. Sections are
 % Education / Skills / Working Experience / Projects, in that order; every
 % bullet takes the two-argument form: an optional bold label first, then the
-% bullet body. Each section shows one literal entry as the example — the
-% machine gate scans this body as LaTeX source, so do not spell a macro call
-% out inside a comment here, and do not wrap the entries in loops.
+% bullet body. Each section shows one literal entry as the example, and the
+% entries must not be wrapped in loops: the scaffolding is measured literally.
 \section{\textbf{Education}}
 \vspace{-0.4mm}
 \resumeSubHeadingListStart
