@@ -1,0 +1,41 @@
+{
+  "github_logins": ["johndoe"],
+  "sources": [
+    {
+      "repo": "johndoe/streamline",
+      "authors": ["johndoe"],
+      "project": "Streamline",
+      "tags": ["backend", "platform"]
+    }
+  ],
+  "entries": [
+    {
+      "id": "streamline:pr:johndoe/streamline:128",
+      "project_id": "streamline",
+      "project_name": "Streamline",
+      "repository": "johndoe/streamline",
+      "author": "johndoe",
+      "artifact": "pull_request",
+      "title": "Batch the ingest writer behind a bounded queue",
+      "body": "Replaced per-event writes with a bounded batching queue; p99 ingest latency dropped from 840ms to 190ms under replay load.",
+      "status": "merged",
+      "tags": ["tech:typescript", "tech:postgresql", "work:backend"],
+      "files": ["src/ingest/queue.ts", "src/ingest/writer.ts"],
+      "sources": [{ "type": "pull_request", "url": "https://github.com/johndoe/streamline/pull/128" }]
+    },
+    {
+      "id": "streamline:pr:johndoe/streamline:141",
+      "project_id": "streamline",
+      "project_name": "Streamline",
+      "repository": "johndoe/streamline",
+      "author": "johndoe",
+      "artifact": "pull_request",
+      "title": "Ship the deploy pipeline as one reproducible job",
+      "body": "Collapsed four hand-run scripts into a single CI job with cached layers; release time went from 22 minutes to 6.",
+      "status": "merged",
+      "tags": ["tech:docker", "work:ci-cd"],
+      "files": [".github/workflows/release.yml", "Dockerfile"],
+      "sources": [{ "type": "pull_request", "url": "https://github.com/johndoe/streamline/pull/141" }]
+    }
+  ]
+}

@@ -1,0 +1,10 @@
+{
+  "repositories": [
+    {
+      "repo": "johndoe/streamline",
+      "authors": ["johndoe"],
+      "project": "Streamline",
+      "tags": ["backend", "platform"]
+    }
+  ]
+}
