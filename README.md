@@ -11,10 +11,11 @@ your own Chrome, and tracks everything locally. All of your data stays on your
 machine.
 
 <p align="center">
-  <img src="docs/assets/demo.gif" alt="One recorded cycle: setup writes the data home, /experience builds the Tier 0 index, /start tracks postings, /campaign selects bullets verbatim from the verified pool" width="880">
-  <br><em>One full cycle, recorded against the real scripts in a sandbox —
-  <code>npm run record:setup</code> asserts every step, so this demo cannot drift
-  from the code.</em>
+  <img src="docs/assets/console-demo.gif" alt="The local console: Discover lists fresh postings, Review shows the rendered resume beside the verbatim bullets it selected, Board tracks every application, Profile holds your reviewed record" width="900">
+  <br><em>The local console at <code>localhost:4517</code> — discover, review the
+  rendered PDF against the evidence behind it, track, and keep your record.
+  Recorded by driving the real console in a browser
+  (<code>npm run record:console</code>), not mocked up.</em>
 </p>
 
 ```
@@ -133,13 +134,21 @@ wording always goes back through Module 1's review gate.
 That is why the tool cannot invent experience to fit a posting, and it is the
 one design rule everything else follows.
 
+<p align="center">
+  <img src="docs/assets/demo.gif" alt="A recorded cycle in the terminal: the Tier 0 index builds offline, hunt dedups postings, the campaign selects bullets verbatim from the verified pool, and a fabricated bullet id is rejected" width="880">
+  <br><em>The same cycle underneath, where the rule is visible: a bullet id that
+  is not in the pool is rejected outright. Recorded against the real scripts in
+  a sandbox by <code>npm run record:setup</code>, which asserts the state after
+  every step — so this demo cannot drift from the code.</em>
+</p>
+
 ## The console
 
 `http://localhost:4517`, served by the tracker skill — a local workspace over
 `~/.coforce/`, in your system's light or dark theme.
 
 <p align="center">
-  <img src="docs/assets/console-review.png" alt="The Review tab: a rendered resume PDF beside the verbatim bullets selected for it" width="880">
+  <img src="docs/assets/console-discover.png" alt="The Discover tab: postings from your job sources, filtered by level and direction, each with a Build resume button" width="880">
 </p>
 
 **Discover** lists fresh postings from your sources with one-click *Build
@@ -185,7 +194,11 @@ operator would have to satisfy to slot back in.)
 - `npm run board` — the console (API + prebuilt React app) on :4517
 - `npm run hunt` — one discovery pass (`--track` to record)
 - `npm run sandbox` — a seeded throwaway data home + the real console on :4519
-- `npm run record:setup` — re-record the README demo: the driver runs the real
+- `npm run record:console` — re-record the README hero: seeds a throwaway data
+  home, starts the real console on it, drives the real UI in a browser, and
+  writes both the GIF and the 2x stills the docs embed. Needs
+  `npm i --no-save playwright pngjs gifenc && npx playwright install chromium`.
+- `npm run record:setup` — re-record the terminal demo: the driver runs the real
   pipeline in a sandbox and asserts the state after every step, so a stale claim
   fails the recording instead of shipping.
 - `npm run record:demo` — re-render `docs/assets/demo.gif` and `demo.svg` from

@@ -19,6 +19,7 @@
 import { existsSync, mkdirSync, readFileSync, writeFileSync } from 'node:fs';
 import { dirname, join, resolve } from 'node:path';
 import { fileURLToPath } from 'node:url';
+import { describeGif, encodeGif } from './gif.mjs';
 
 const here = dirname(fileURLToPath(import.meta.url));
 
@@ -142,23 +143,13 @@ export function renderAnimatedSvg(capture) {
 // ---- output 2: GIF (optional dev dependencies) ------------------------------
 async function renderGif(capture, outPath, scale) {
   let Resvg;
-  let gifenc;
   try {
     ({ Resvg } = await import('@resvg/resvg-js'));
-    gifenc = await import('gifenc');
   } catch {
     return { ok: false, reason: 'needs `npm i --no-save @resvg/resvg-js gifenc`' };
   }
-  const { GIFEncoder, quantize, applyPalette } = gifenc.default || gifenc;
-  const { width, height } = frameGeometry(capture);
+  const { width } = frameGeometry(capture);
   const outWidth = Math.round(width * scale);
-  const durations = frameDurations(capture.frames);
-  const encoder = GIFEncoder();
-  // The palette is built once, from the busiest frame, and reused: a shared
-  // global palette is both smaller and free of the frame-to-frame colour
-  // shimmer you get from per-frame quantisation.
-  const busiest = capture.frames.reduce((best, frame) =>
-    (frame.lines.join('').length > best.lines.join('').length ? frame : best), capture.frames[0]);
   const rasterise = frame => {
     const png = new Resvg(frameSvg(capture, frame), {
       fitTo: { mode: 'width', value: outWidth },
@@ -166,20 +157,15 @@ async function renderGif(capture, outPath, scale) {
     }).render();
     return { data: new Uint8Array(png.pixels), width: png.width, height: png.height };
   };
-  const reference = rasterise(busiest);
-  const palette = quantize(reference.data, 64, { format: 'rgba4444' });
-  for (const [index, frame] of capture.frames.entries()) {
-    const raster = rasterise(frame);
-    encoder.writeFrame(applyPalette(raster.data, palette, 'rgba4444'), raster.width, raster.height, {
-      palette: index === 0 ? palette : undefined,
-      delay: durations[index],
-      repeat: 0,
-    });
-  }
-  encoder.finish();
-  const bytes = Buffer.from(encoder.bytes());
-  writeFileSync(outPath, bytes);
-  return { ok: true, bytes: bytes.length, width: outWidth, height: Math.round(height * scale) };
+  // the busiest frame carries the most colours, so it makes the best palette
+  const busiest = capture.frames.reduce((best, frame) =>
+    (frame.lines.join('').length > best.lines.join('').length ? frame : best), capture.frames[0]);
+  return encodeGif({
+    frames: capture.frames.map(rasterise),
+    delays: frameDurations(capture.frames),
+    outPath,
+    paletteFrame: rasterise(busiest),
+  });
 }
 
 // ---- cli -------------------------------------------------------------------
@@ -207,8 +193,6 @@ if (isMain) {
   console.log(`render-demo: ${capture.frames.length} frames, ${seconds}s loop`);
   console.log(`  svg : ${svgPath}`);
 
-  const gif = await renderGif(capture, join(outDir, 'demo.gif'), scale);
-  console.log(gif.ok
-    ? `  gif : ${join(outDir, 'demo.gif')} (${(gif.bytes / 1e6).toFixed(2)} MB, ${gif.width}×${gif.height})`
-    : `  gif : skipped — ${gif.reason}`);
+  const gifPath = join(outDir, 'demo.gif');
+  console.log(`  gif : ${describeGif(await renderGif(capture, gifPath, scale), gifPath)}`);
 }

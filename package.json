@@ -18,6 +18,7 @@
     "sandbox": "node harness/sandbox.mjs",
     "record:setup": "node harness/record-setup.mjs",
     "record:demo": "node harness/render-demo.mjs",
+    "record:console": "node harness/record-console.mjs",
     "record:session": "node harness/record-session.mjs"
   }
 }

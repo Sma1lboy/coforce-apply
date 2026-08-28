@@ -144,10 +144,15 @@ checkout, or `.agents/skills/tracker/scripts/start_web.sh`). It is a local
 workspace over `~/.coforce/` — nothing is uploaded anywhere. It follows your
 system light/dark preference.
 
+<img src="assets/console-demo.gif" alt="A walk through the console: Discover, Review, Board, Profile, Instructions" width="900">
+
 **Discover** — postings pulled from your configured GitHub job lists
 (speedyapply, vanshb03, jobright-ai out of the box), classified by level and
 direction, filterable, with one-click **Build resume →**. Never-apply companies
-and already-tracked jobs are filtered out server-side.
+and already-tracked jobs are filtered out server-side — the counter line tells
+you exactly how many were dropped for each reason.
+
+<img src="assets/console-discover.png" alt="The Discover tab: postings filtered by level and direction, each with a Build resume button" width="900">
 
 **Review** — the resume workspace: a zoomable PDF proof in the middle, the job
 and its selected evidence on the right, the campaign's jobs and the export gate
