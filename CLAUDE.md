@@ -78,3 +78,8 @@ stay in sync with it:
 - Architecture & design invariants: `docs/ARCHITECTURE.md` (living mermaid
   doc — edit incrementally, never redraw; review-round history on the share
   server series `coforce-arch`). CoForce merge plan: `docs/MIGRATION.md`.
+- User-facing docs: `docs/INSTALL.md` (prerequisites, the three install modes,
+  update/uninstall), `docs/USAGE.md` (worked run, command reference, console
+  tour, troubleshooting, FAQ), `docs/DATA.md` (the canonical data-home file
+  table — README and PRIVACY.md link here rather than restating it; keep
+  `site/src/content.js` in step). README stays skimmable; depth goes in these.

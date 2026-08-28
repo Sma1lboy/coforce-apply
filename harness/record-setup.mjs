@@ -1,18 +1,24 @@
 #!/usr/bin/env node
-// Setup-flow recording harness, kobe-quicklook style: a scripted driver runs
-// the REAL pipeline commands in a throwaway sandbox, snapshots the terminal as
-// timestamped text frames, and asserts the sandbox state after every step —
-// the capture IS the verification. Outputs:
+// Demo recorder: a scripted driver runs the REAL pipeline commands in a
+// throwaway sandbox, snapshots the terminal as timestamped text frames, and
+// asserts the sandbox state after every step — the capture IS the
+// verification, so the README demo can never drift from what the code does.
+// Outputs:
 //
-//   harness/out/setup-recording/frames.json   — kobe-compatible capture doc
-//   harness/out/setup-recording/replay.html   — self-contained animated replay
-//   harness/out/setup-recording/setup-demo.mp4 — via qlmanage+ffmpeg (macOS;
-//                                                skipped gracefully elsewhere)
+//   harness/out/setup-recording/frames.json  — the capture document
+//   harness/out/setup-recording/replay.html  — self-contained animated replay
+//   harness/out/setup-recording/demo.svg     — animated SVG (always)
+//   harness/out/setup-recording/demo.gif     — README hero, when the two
+//                                              dev-only render deps are present
 //
 //   npm run record:setup
+//   npm run record:demo    # re-render the asset without re-running the pipeline
+//
+// Rendering lives in render-demo.mjs — this file only decides what happens and
+// in what order.
 import { strict as assert } from 'node:assert';
 import { execFileSync } from 'node:child_process';
-import { existsSync, mkdirSync, readFileSync, writeFileSync } from 'node:fs';
+import { mkdirSync, readFileSync, writeFileSync } from 'node:fs';
 import { dirname, join } from 'node:path';
 import { fileURLToPath } from 'node:url';
 import { seedSandbox } from './sandbox.mjs';
@@ -22,10 +28,11 @@ const outDir = join(here, 'out', 'setup-recording');
 mkdirSync(outDir, { recursive: true });
 const home = seedSandbox(join(outDir, 'coforce'));
 const campaignCli = join(here, '../.agents/skills/campaign/scripts/campaign.mjs');
+const experienceCli = join(here, '../.agents/skills/experience/scripts/experience.mjs');
 const huntCli = join(here, '../.agents/skills/start/scripts/hunt.mjs');
 
-const COLS = 100;
-const ROWS = 32;
+const COLS = 92;
+const ROWS = 26;
 const start = Date.now();
 const term = [];
 const frames = [];
@@ -37,48 +44,77 @@ const snapshot = () => {
   if (last && JSON.stringify(last.lines) === JSON.stringify(visible)) return;
   frames.push({ t: Date.now() - start, lines: visible });
 };
+// Nothing about this machine belongs in a committed asset: the sandbox path
+// and the checkout path are rewritten to the paths a reader would actually see.
+const repoRoot = join(here, '..');
+const redact = line => line
+  .replaceAll(home, '~/.coforce')
+  .replaceAll(repoRoot, '.');
 const print = (...lines) => {
   for (const line of lines) {
-    term.push(line);
+    term.push(redact(line));
     snapshot();
   }
 };
-const sh = (bin, args, env = {}) => {
-  print(`$ ${[bin.split('/').at(-1), ...args.map(a => (a.startsWith('/') ? a.split('/').at(-1) : a))].join(' ')}`);
-  const out = execFileSync(process.execPath, [bin, ...args], {
-    encoding: 'utf8',
-    env: { ...process.env, ...env },
-  });
-  print(...out.trim().split('\n').slice(0, 14).map(l => `  ${l}`));
+// Commands are shown the way a reader would type them: no sandbox paths.
+const HIDDEN_FLAGS = ['--data-dir', '--apps', '--instructions', '--config'];
+const shown = args => args
+  .map(arg => (arg.startsWith('/') ? arg.split('/').at(-1) : arg))
+  // a comma list of eight content hashes is noise, not information
+  .map(arg => (arg.split(',').length > 2 ? `${arg.split(',').slice(0, 2).join(',')},…` : arg))
+  .filter((_, index, all) => !HIDDEN_FLAGS.includes(all[index - 1]))
+  .filter(arg => !HIDDEN_FLAGS.includes(arg));
+const compact = out => {
+  // every CLI here prints JSON; a pretty-printed object sliced at N lines is
+  // unreadable, one compact line is what a reader actually parses
+  try {
+    const value = JSON.parse(out);
+    return [JSON.stringify(Array.isArray(value) ? { items: value.length } : value)];
+  } catch {
+    return out.trim().split('\n');
+  }
+};
+const sh = (bin, args, { lines = 1 } = {}) => {
+  print(`$ ${[bin.split('/').at(-1), ...shown(args)].join(' ')}`);
+  const out = execFileSync(process.execPath, [bin, ...args], { encoding: 'utf8' });
+  print(...compact(out).slice(0, lines).map(line => `  ${line}`));
   return out;
 };
+const json = (bin, args) => JSON.parse(execFileSync(process.execPath, [bin, ...args], { encoding: 'utf8' }));
 const say = (who, text) => print(`${who === 'user' ? '›' : '◆'} ${text}`);
 const gap = () => print('');
 
 // ---- Act 1: onboarding writes the data home ---------------------------------
-print('━━ CoForce Apply — setup, recorded in a sandbox ━━', '');
+print('▌ CoForce Apply — one full cycle, recorded in a sandbox', '');
 say('user', 'claude');
-say('agent', 'Claude Code v2 — /setup');
+say('agent', 'Claude Code · /setup');
 gap();
-say('agent', 'Stage 1 · Profile — imported from your resume (21 verified bullets).');
-assert.equal(JSON.parse(readFileSync(join(home, 'profile.json'), 'utf8')).name, 'John Doe');
-say('agent', `profile.json ✓  (name: John Doe, experience ×2, projects ×1)`);
-gap();
-say('agent', 'Stage 2 · Settings — level? sponsorship? work mode? locations? consents?');
-say('user', 'internship · need sponsorship (F-1 OPT) · any mode · US Remote / Bay Area');
+const profile = JSON.parse(readFileSync(join(home, 'profile.json'), 'utf8'));
+assert.equal(profile.name, 'John Doe');
+say('agent', 'Stage 1 · Profile — imported from the resume you already have.');
+say('agent', `  profile.json ✓  ${profile.name} · ${profile.experience.length} roles · every bullet reviewed by you`);
 const config = JSON.parse(readFileSync(join(home, 'config.json'), 'utf8'));
 assert.equal(config.needsSponsorship, true);
 assert.equal(config.version, 2);
 assert.equal(config.headlessApply, false);
-say('agent', 'config.json ✓  (intent + consents in one file — every skill reads this)');
-gap();
-say('agent', 'Stage 3 · Standing instructions written.');
+say('agent', 'Stage 2 · Intent + consents — level, sponsorship, work mode, locations.');
+say('agent', `  config.json ✓  ${config.level} · ${config.workAuthorization} · ${config.locations.join(' / ')}`);
 assert.ok(readFileSync(join(home, 'instructions.md'), 'utf8').includes('never-apply'));
-say('agent', 'instructions.md ✓ (never-apply list respected everywhere)');
+say('agent', 'Stage 3 · Standing instructions.');
+say('agent', '  instructions.md ✓  your never-apply list, honoured by every skill and script');
 gap();
 
-// ---- Act 2: discover → tracker (real hunt run) ------------------------------
-print('━━ /start — discover real postings ━━', '');
+// ---- Act 2: Module 1 — your real work becomes evidence ----------------------
+print('▌ /experience — your GitHub work becomes verified evidence', '');
+const index = JSON.parse(sh(experienceCli, ['build', '--data-dir', home]));
+assert.equal(index.status, 'ready');
+assert.equal(index.tier, 0);
+say('agent', `Tier 0 index: ${index.counts.entries} entries · ${index.counts.skills} skills · `
+  + `${index.counts.repositories} repo — built offline, zero GitHub calls`);
+gap();
+
+// ---- Act 3: discover → tracker (a real hunt run) ----------------------------
+print('▌ /start — discover, dedup, track', '');
 sh(huntCli, [
   '--track',
   '--source-file', join(here, 'fixtures/source-jobs.md'),
@@ -87,46 +123,62 @@ sh(huntCli, [
   '--config', join(home, 'config.json'),
 ]);
 const apps = JSON.parse(readFileSync(join(home, 'applications.json'), 'utf8'));
-assert.ok(apps.filter(a => a.status === 'pending').length >= 2, 'hunt tracked pending jobs');
-say('agent', `tracked ${apps.length} postings as pending (deduped, never-apply filtered)`);
+assert.ok(apps.filter(app => app.status === 'pending').length >= 2, 'hunt tracked pending jobs');
+say('agent', `${apps.length} postings tracked as pending — deduped by URL and company·role,`);
+say('agent', '  never-apply companies dropped before they ever reach you');
 gap();
 
-// ---- Act 3: campaign — pool → strict selection → render gates ---------------
-print('━━ /campaign — verified pool → strict selection ━━', '');
+// ---- Act 4: Module 2 — strict selection out of the verified pool ------------
+print('▌ /campaign — verified pool in, verbatim selection out', '');
 sh(campaignCli, ['sync', '--data-dir', home, '--apps', join(home, 'applications.json')]);
-const pool = JSON.parse(sh(campaignCli, ['pool', '--data-dir', home]));
+const pool = json(campaignCli, ['pool', '--data-dir', home]);
 assert.ok(pool.length >= 5, 'verified pool from profile bullets');
-say('agent', `pool: ${pool.length} verified bullets — selection may ONLY use these ids`);
-const jobs = JSON.parse(execFileSync(process.execPath, [campaignCli, 'show', '--data-dir', home], { encoding: 'utf8' })).jobs;
-const job = jobs[0];
+say('agent', `pool: ${pool.length} reviewed bullets. A resume may use ONLY these ids.`);
+const review = json(campaignCli, ['skill-review', '--data-dir', home]);
+assert.equal(review.status, 'approved');
+say('agent', `skills: baseline [${review.baseline.join(', ')}] + role packs `
+  + `[${Object.keys(review.rolePacks).join(', ')}]`);
+say('agent', '  every one approved by you in the console — none of them inferred from the JD');
+const skills = json(campaignCli, ['skills', '--data-dir', home]);
+const job = json(campaignCli, ['show', '--data-dir', home]).jobs[0];
 const jdPath = join(outDir, 'jd.txt');
 writeFileSync(jdPath, `Software Engineer Intern. ${'TypeScript, React, Java, Spring Boot microservices, CI/CD, testing. '.repeat(10)}`);
 sh(campaignCli, ['hydrate', '--data-dir', home, '--id', job.id, '--file', jdPath]);
-const picks = pool.slice(0, Math.min(8, pool.length)).map(b => b.id);
-sh(campaignCli, ['select', '--data-dir', home, '--id', job.id, '--bullets', picks.join(',')]);
-say('agent', `selected ${picks.length} bullets — out-of-pool ids are structurally rejected:`);
+const picks = pool.slice(0, Math.min(8, pool.length)).map(bullet => bullet.id);
+const eligible = skills.filter(skill => skill.baseline || skill.rolePacks.includes('backend')).map(skill => skill.id);
+sh(campaignCli, ['select', '--data-dir', home, '--id', job.id,
+  '--bullets', picks.join(','), '--skills', eligible.join(','), '--skill-pack', 'backend']);
+say('agent', `${picks.length} bullets + ${eligible.length} approved skills selected, every one verbatim.`);
+say('agent', 'A bullet the agent invented instead of selecting is structurally impossible:');
 let rejected = false;
 try {
-  execFileSync(process.execPath, [campaignCli, 'select', '--data-dir', home, '--id', job.id, '--bullets', 'deadbeef'], { encoding: 'utf8', stdio: 'pipe' });
-} catch (err) {
+  execFileSync(process.execPath, [campaignCli, 'select', '--data-dir', home, '--id', job.id,
+    '--bullets', 'deadbeef'], { encoding: 'utf8', stdio: 'pipe' });
+} catch (error) {
   rejected = true;
-  print(`  ✗ ${String(err.stderr || '').trim().split('\n')[0]}`);
+  print(`  ✗ ${String(error.stderr || '').trim().split('\n')[0]}`);
 }
 assert.ok(rejected, 'fabricated id must be rejected');
 gap();
 
-// stage fixture artifacts (no LaTeX dependency in the recording), judge gates
-const view = JSON.parse(execFileSync(process.execPath, [campaignCli, 'show', '--data-dir', home], { encoding: 'utf8' })).jobs.find(j => j.id === job.id);
+// ---- Act 5: the machine gates in front of your review -----------------------
+const view = json(campaignCli, ['show', '--data-dir', home]).jobs.find(entry => entry.id === job.id);
 const jobDir = join(home, 'campaigns', 'current', 'jobs', view.folder);
 writeFileSync(join(jobDir, 'resume.tex'), '\\documentclass{article}\\begin{document}\\newcommand{\\resumeItem}[1]{#1}\n'
-  + picks.map(id => `\\resumeItem{${pool.find(b => b.id === id).text}}`).join('\n')
+  + picks.map(id => `\\resumeItem{${pool.find(bullet => bullet.id === id).text}}`).join('\n')
   + '\n\\end{document}\n');
 copyFixturePdf(join(jobDir, 'resume.pdf'));
-const judge = JSON.parse(sh(campaignCli, ['judge', '--data-dir', home, '--id', job.id]));
+print('▌ machine gates → your review → the submit gate', '');
+const judge = json(campaignCli, ['judge', '--data-dir', home, '--id', job.id]);
 assert.equal(judge.verbatim, true, 'every resume line is a pool bullet, verbatim');
-say('agent', `judge: onePage=${judge.onePage} fullPage=${judge.fullPage} verbatim=${judge.verbatim} — llm review next, then human Review, then the ⛔ submit gate`);
+say('agent', `onePage=${judge.onePage}  fullPage=${judge.fullPage}  verbatim=${judge.verbatim}`
+  + `  — machine checks first, then the LLM judge`);
+say('agent', 'Review the PDF in the console, approve it, export every approved job as one ZIP.');
 gap();
-print('━━ done — console: npm run sandbox → http://127.0.0.1:4519 ━━');
+say('agent', '/apply drives your own visible Chrome — and ALWAYS stops before the final');
+say('agent', '  submit. The last click is yours, in every mode.');
+gap();
+print('▌ console: http://localhost:4517 · your data never leaves ~/.coforce');
 snapshot();
 
 function copyFixturePdf(target) {
@@ -154,48 +206,24 @@ function copyFixturePdf(target) {
 }
 
 // ---- outputs ----------------------------------------------------------------
-const capture = { cols: COLS, rows: ROWS, frames, meta: { theme: 'coforce-hallmark' } };
+const capture = {
+  cols: COLS,
+  rows: ROWS,
+  frames,
+  meta: { theme: 'coforce-hallmark', title: 'coforce apply — /setup → /start → /campaign' },
+};
 writeFileSync(join(outDir, 'frames.json'), `${JSON.stringify(capture, null, 2)}\n`);
 
-const esc = s => s.replaceAll('&', '&amp;').replaceAll('<', '&lt;').replaceAll('>', '&gt;');
 writeFileSync(join(outDir, 'replay.html'), `<!doctype html><html><head><meta charset="utf-8">
-<title>CoForce setup — sandbox replay</title>
+<title>CoForce — sandbox replay</title>
 <style>body{background:#181310;color:#f2e7dd;font:13px/1.5 "JetBrains Mono",ui-monospace,monospace;display:grid;place-items:center;min-height:100vh;margin:0}
-pre{background:#221a15;border:1px solid #4a382d;border-radius:12px;padding:22px 26px;width:${COLS}ch;min-height:${ROWS + 2}em;white-space:pre-wrap}
+pre{background:#221a15;border:1px solid #3a2c24;border-radius:12px;padding:22px 26px;width:${COLS}ch;min-height:${ROWS + 2}em;white-space:pre-wrap}
 .h{color:#d97b57;font-weight:700}</style></head><body><pre id="t"></pre>
 <script>const F=${JSON.stringify(frames)};const t=document.getElementById('t');let i=0;
 const tick=()=>{if(i>=F.length){setTimeout(()=>{i=0;tick();},4000);return;}
 t.innerHTML=F[i].lines.map(l=>l.startsWith('━━')?'<span class="h">'+l.replace(/</g,'&lt;')+'</span>':l.replace(/</g,'&lt;')).join('\\n');
 const next=F[i+1];const wait=next?Math.min(Math.max(next.t-F[i].t,120),1400):2500;i+=1;setTimeout(tick,wait);};tick();</script></body></html>\n`);
-
-let video = 'skipped (needs qlmanage + ffmpeg, macOS)';
-try {
-  execFileSync('which', ['qlmanage'], { stdio: 'pipe' });
-  execFileSync('which', ['ffmpeg'], { stdio: 'pipe' });
-  const framesDir = join(outDir, 'png');
-  mkdirSync(framesDir, { recursive: true });
-  const concat = [];
-  frames.forEach((frame, index) => {
-    const svg = join(framesDir, `f${String(index).padStart(3, '0')}.svg`);
-    const lines = frame.lines.map((line, row) =>
-      `<text x="24" y="${34 + row * 19}" fill="${line.startsWith('━━') ? '#d97b57' : line.startsWith('$') ? '#d9b06b' : '#f2e7dd'}">${esc(line)}</text>`).join('');
-    // fixed 16:9 canvas fully painted — no letterbox surprises from the renderer
-    writeFileSync(svg, `<svg xmlns="http://www.w3.org/2000/svg" width="1344" height="756" font-family="Menlo, monospace" font-size="14"><rect width="1344" height="756" fill="#181310"/>${lines}</svg>`);
-    execFileSync('qlmanage', ['-t', '-s', '1344', '-o', framesDir, svg], { stdio: 'pipe' });
-    const next = frames[index + 1];
-    const dur = next ? Math.min(Math.max((next.t - frame.t) / 1000, 0.25), 1.6) : 3;
-    concat.push(`file '${svg}.png'`, `duration ${dur.toFixed(2)}`);
-  });
-  concat.push(concat.at(-2)); // concat demuxer needs the last file repeated
-  writeFileSync(join(framesDir, 'concat.txt'), `${concat.join('\n')}\n`);
-  execFileSync('ffmpeg', ['-y', '-f', 'concat', '-safe', '0', '-i', join(framesDir, 'concat.txt'),
-    '-vf', 'scale=1344:756,format=yuv420p', '-r', '30', join(outDir, 'setup-demo.mp4')], { stdio: 'pipe' });
-  video = join(outDir, 'setup-demo.mp4');
-} catch (err) {
-  video = `skipped (${String(err.message).split('\n')[0]})`;
-}
-
 console.log(`record-setup: ${frames.length} frames captured, all step assertions passed ✓`);
 console.log(`  frames : ${join(outDir, 'frames.json')}`);
 console.log(`  replay : ${join(outDir, 'replay.html')}`);
-console.log(`  video  : ${video}`);
+console.log('  render : node harness/render-demo.mjs');

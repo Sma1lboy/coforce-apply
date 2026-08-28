@@ -16,6 +16,9 @@ by default, or `<checkout>/.coforce/` in private-fork mode, or wherever
   archives
 - `out/` — generated resumes, ZIPs, and apply-run logs
 
+The complete file-by-file table, and what is safe to delete, is in
+[docs/DATA.md](docs/DATA.md).
+
 ATS account passwords are generated locally and stored in the macOS Keychain,
 never in a file. `accounts.json` holds metadata only (host, email, Keychain
 service name).

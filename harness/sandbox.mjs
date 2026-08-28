@@ -6,7 +6,7 @@
 //   node harness/sandbox.mjs --seed-only <dir>   # just build a sandbox dir
 //
 // The recording harness (record-setup.mjs) reuses seedSandbox().
-import { copyFileSync, mkdirSync, writeFileSync } from 'node:fs';
+import { copyFileSync, mkdirSync, readFileSync, writeFileSync } from 'node:fs';
 import { spawn } from 'node:child_process';
 import { dirname, join, resolve } from 'node:path';
 import { fileURLToPath } from 'node:url';
@@ -16,8 +16,27 @@ const here = dirname(fileURLToPath(import.meta.url));
 export function seedSandbox(root) {
   const home = resolve(root);
   mkdirSync(home, { recursive: true });
-  copyFileSync(join(here, 'fixtures/profile.json'), join(home, 'profile.json'));
+  // The shared fixture deliberately ships WITHOUT a resume skill policy — one
+  // board check asserts an unpoliced profile stays behind the review gate — so
+  // the sandbox adds the approved policy here, as a user would in the console.
+  const profile = JSON.parse(readFileSync(join(here, 'fixtures/profile.json'), 'utf8'));
+  profile.resumeSkillPolicy = {
+    status: 'approved',
+    reviewedAt: '2026-07-01T00:00:00.000Z',
+    baseline: ['TypeScript', 'Python', 'CI/CD'],
+    rolePacks: {
+      backend: ['Node.js', 'PostgreSQL', 'Docker'],
+      fullstack: ['React', 'GraphQL', 'JavaScript'],
+    },
+  };
+  writeFileSync(join(home, 'profile.json'), `${JSON.stringify(profile, null, 2)}\n`);
   copyFileSync(join(here, 'fixtures/instructions.md'), join(home, 'instructions.md'));
+  // Tier 0: the cached GitHub evidence a real `/experience refresh` would have
+  // left behind, so the sandbox can run the offline `experience build` leg.
+  const evidence = join(home, 'experience', 'github-evidence', 'library');
+  mkdirSync(evidence, { recursive: true });
+  copyFileSync(join(here, 'fixtures/experience-sources.json'), join(home, 'experience/sources.json'));
+  copyFileSync(join(here, 'fixtures/experience-library.json'), join(evidence, 'library.json'));
   writeFileSync(join(home, 'applications.json'), '[]\n');
   writeFileSync(join(home, 'config.json'), `${JSON.stringify({
     version: 2,
