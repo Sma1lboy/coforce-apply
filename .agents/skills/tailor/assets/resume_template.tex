@@ -49,9 +49,12 @@
 
 \ifPDFTeX\pdfgentounicode=1\fi
 
-\newcommand{\resumeItem}[1]{
+% Two arguments, per the campaign contract: an optional bold label and the
+% bullet body. The assembler always emits \resumeItem{}{...}; the empty-label
+% test keeps that case byte-identical to a plain bullet, with no stray indent.
+\newcommand{\resumeItem}[2]{
 \item\small{
-{#1 \vspace{-1pt}}
+{\ifx\relax#1\relax\else\textbf{#1}\hspace{0.5mm}\fi#2 \vspace{-1pt}}
 }
 }
 
@@ -77,7 +80,7 @@
 \end{tabular*}\vspace{-5pt}
 }
 
-\newcommand{\resumeSubItem}[1]{\resumeItem{#1}\vspace{-4pt}}
+\newcommand{\resumeSubItem}[2]{\resumeItem{#1}{#2}\vspace{-4pt}}
 
 \renewcommand\labelitemii{$\vcenter{\hbox{\tiny$\bullet$}}$}
 
@@ -85,6 +88,13 @@
 \newcommand{\resumeSubHeadingListEnd}{\end{itemize}}
 \newcommand{\resumeItemListStart}{\begin{itemize}}
 \newcommand{\resumeItemListEnd}{\end{itemize}\vspace{-5pt}}
+
+% The Skills section is a label-less list of "Category: a, b, c" rows, and the
+% transition into Projects has to stay tight enough for the gap the machine
+% gate measures between the last work line and the Projects heading.
+\newcommand{\resumeHeadingSkillStart}{\begin{itemize}[leftmargin=0.15in, label={}]}
+\newcommand{\resumeHeadingSkillEnd}{\end{itemize}\vspace{-5pt}}
+\newcommand{\resumeSectionTransition}{\vspace{-9mm}}
 
 \begin{document}
 
@@ -97,48 +107,72 @@
 \href{https://github.com/{github}}{\underline{github.com/{github}}}
 \end{center}
 
-\section{Education}
+% Section order, spacing and scaffolding are contract, not decoration: the
+% campaign assembler reads the \vspace before each \section, the indent between
+% \resumeSubHeadingListStart and \resumeSubheading, and the Projects tail
+% straight out of this file, then emits a resume shaped to match. Sections are
+% Education / Skills / Working Experience / Projects, in that order; every
+% bullet takes the two-argument form: an optional bold label first, then the
+% bullet body. Each section shows one literal entry as the example — the
+% machine gate scans this body as LaTeX source, so do not spell a macro call
+% out inside a comment here, and do not wrap the entries in loops.
+\section{\textbf{Education}}
+\vspace{-0.4mm}
 \resumeSubHeadingListStart
-{{#each education}}
-\resumeSubheading
-{{{institution}}}{{{location}}}
-{{{degree}}}{{{date}}}
-{{/each}}
+  \resumeSubheading
+    {institution}
+    {date}
+    {degree}
+    {location}
 \resumeSubHeadingListEnd
 
-\section{Experience}
+\vspace{-4mm}
+\section{\textbf{Skills}}
+\resumeHeadingSkillStart
+\resumeSubItem{Programming Languages:}
+  {languages-from-skills}
+\vspace{-1mm}
+\resumeSubItem{Tools \& Technologies:}
+  {frameworks-and-tools-from-skills}
+\resumeHeadingSkillEnd
+
+\vspace{-4mm}
+\section{\textbf{Working Experience}}
 \resumeSubHeadingListStart
-{{#each experience}}
-\resumeSubheading
-{{{title}}}{{{location}}}
-{{{company}}}{{{date}}}
-\resumeItemListStart
-{{#each description}}
-\resumeItem{{{text}}}
-{{/each}}
-\resumeItemListEnd
-{{/each}}
+  \resumeSubheading
+    {company}
+    {date}
+    {title}
+    {location}
+    \resumeItemListStart
+      \resumeItem{}{experience-bullet}
+    \resumeItemListEnd
 \resumeSubHeadingListEnd
 
-\section{Projects}
+\resumeSectionTransition
+\section{\textbf{Projects}}
+\vspace{-1mm}
 \resumeSubHeadingListStart
-{{#each projects}}
-\resumeProjectHeading
-{\textbf{{{name}}} $|$ \emph{{{technologies}}}}{\small\textit{{{dateRange}}}}
-\resumeItemListStart
-{{#each description}}
-\resumeItem{{{text}}}
-{{/each}}
-\resumeItemListEnd
-{{/each}}
+  \resumeSubheading
+    {project-name}
+    {technologies}
+    {}
+    {date-range}
+    \resumeItemListStart
+      \resumeItem{}{project-bullet}
+    \resumeItemListEnd
 \resumeSubHeadingListEnd
-
-\section{Skills}
-\begin{itemize}[leftmargin=0.15in, label={}]
-\small{\item{
-\textbf{Languages}: {languages-from-skills} \quad \\
-\textbf{Frameworks/Tools}: {frameworks-and-tools-from-skills}
-}}
-\end{itemize}
+\vspace{-4mm}
+\resumeSubHeadingListStart
+  \resumeSubheading
+    {second-project-name}
+    {technologies}
+    {}
+    {date-range}
+    \resumeItemListStart
+      \resumeItem{}{project-bullet}
+    \resumeItemListEnd
+\resumeSubHeadingListEnd
+\vspace{-4mm}
 
 \end{document}
