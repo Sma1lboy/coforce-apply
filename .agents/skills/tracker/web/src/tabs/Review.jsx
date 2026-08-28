@@ -22,6 +22,23 @@ const statusFor = (value, approvalMode) => {
   if (value === 'approved' && approvalMode === 'automatic') return ['Auto-approved', 'text-ok border-ok/50'];
   return STATUS[value] || [value || 'Unknown', 'text-faint border-rule2'];
 };
+
+// The sidebar is ordered by what needs you, not by queue position: a resume
+// waiting on your review outranks one still rendering, however late it queued.
+const BUCKETS = [
+  ['review', 'Needs your review', 'text-accentsoft', 'review'],
+  ['blocked', 'Blocked', 'text-warn', 'blocked'],
+  ['progress', 'In progress', 'text-info', 'in progress'],
+  ['approved', 'Approved', 'text-ok', 'approved'],
+];
+const BUCKET_RANK = Object.fromEntries(BUCKETS.map(([key], index) => [key, index]));
+const BUCKET_LABEL = Object.fromEntries(BUCKETS.map(([key, label]) => [key, label]));
+const bucketOf = job => {
+  if (job.status === 'approved') return 'approved';
+  if (job.status === 'rendered') return 'review';
+  if (['needs_browser_jd', 'render_failed'].includes(job.status)) return 'blocked';
+  return 'progress';
+};
 const experienceLabel = experience => {
   if (experience.status === 'ready') return `${experience.counts?.entries || 0} experiences · ${experience.counts?.tags || 0} tags`;
   if (experience.status === 'profile_changed') return 'profile changed · run /experience build';
@@ -117,24 +134,45 @@ export default function Review({ state, onChanged }) {
   const campaign = state.campaign || { jobs: [], allApproved: false };
   const experience = state.experience || { status: 'missing', counts: {} };
   const reviewRequired = campaign.reviewRequired !== false;
-  const [selectedId, setSelectedId] = useState(campaign.jobs[0]?.id || null);
+  const [selectedId, setSelectedId] = useState(null);
+  const [filter, setFilter] = useState('all');
   const [feedback, setFeedback] = useState('');
   const [zoom, setZoom] = useState(100);
   const [busy, setBusy] = useState('');
   const [message, setMessage] = useState('');
   const [applying, setApplying] = useState(null);
-  const selected = campaign.jobs.find(job => job.id === selectedId) || campaign.jobs[0] || null;
+
+  // Keep the queue number on the card so the reorder stays legible: the list is
+  // sorted by bucket, the number still says where the job sits in the queue.
+  const ordered = useMemo(() => campaign.jobs
+    .map((job, index) => ({ job, bucket: bucketOf(job), queueIndex: index }))
+    .sort((a, b) => BUCKET_RANK[a.bucket] - BUCKET_RANK[b.bucket] || a.queueIndex - b.queueIndex),
+    [campaign.jobs]);
+  const counts = useMemo(() => {
+    const tally = Object.fromEntries(BUCKETS.map(([key]) => [key, 0]));
+    for (const item of ordered) tally[item.bucket] += 1;
+    return tally;
+  }, [ordered]);
+  const visible = useMemo(
+    () => (filter === 'all' ? ordered : ordered.filter(item => item.bucket === filter)),
+    [ordered, filter]
+  );
+
+  // A filter that hides the current selection moves the selection with it.
+  const selected =
+    visible.find(item => item.job.id === selectedId)?.job ||
+    visible[0]?.job ||
+    campaign.jobs.find(job => job.id === selectedId) ||
+    ordered[0]?.job ||
+    null;
 
   useEffect(() => {
     if (selected && selected.id !== selectedId) setSelectedId(selected.id);
   }, [selected, selectedId]);
   useEffect(() => { setFeedback(''); setZoom(100); }, [selected?.id]);
-
-  const counts = useMemo(() => ({
-    approved: campaign.jobs.filter(job => job.status === 'approved').length,
-    review: campaign.jobs.filter(job => job.status === 'rendered').length,
-    blocked: campaign.jobs.filter(job => ['needs_browser_jd', 'render_failed'].includes(job.status)).length,
-  }), [campaign.jobs]);
+  useEffect(() => {
+    if (filter !== 'all' && !counts[filter]) setFilter('all');
+  }, [filter, counts]);
 
   const run = async (label, action) => {
     setBusy(label);
@@ -190,27 +228,52 @@ export default function Review({ state, onChanged }) {
           <div className={`text-[10px] mt-1.5 ${experience.status === 'ready' ? 'text-ok' : 'text-warn'}`}>
             Tier 0 · {experienceLabel(experience)}
           </div>
-          <div className="flex gap-3 text-[10px] text-faint mt-2">
-            <span><b className="text-ok">{counts.approved}</b> approved</span>
-            <span><b className="text-accentsoft">{counts.review}</b> review</span>
-            <span><b className="text-warn">{counts.blocked}</b> blocked</span>
+          <div className="flex flex-wrap gap-1.5 mt-2.5">
+            <button
+              onClick={() => setFilter('all')}
+              className={`rounded-full border px-2 py-0.5 text-[10px] cursor-pointer transition-colors ${
+                filter === 'all' ? 'text-accentsoft bg-accent/12 border-accent' : 'text-muted bg-well border-rule2 hover:border-accent'
+              }`}
+            >
+              All {ordered.length}
+            </button>
+            {BUCKETS.filter(([key]) => counts[key] > 0).map(([key, , tone, short]) => (
+              <button
+                key={key}
+                onClick={() => setFilter(current => (current === key ? 'all' : key))}
+                className={`rounded-full border px-2 py-0.5 text-[10px] cursor-pointer transition-colors ${
+                  filter === key ? 'text-accentsoft bg-accent/12 border-accent' : 'text-muted bg-well border-rule2 hover:border-accent'
+                }`}
+              >
+                <b className={filter === key ? '' : tone}>{counts[key]}</b> {short}
+              </button>
+            ))}
           </div>
           <div className="text-[9px] text-dim mt-2">{reviewRequired ? 'Manual review required' : 'Auto-approve + auto-export enabled'}</div>
         </div>
         <div className="flex-1 min-h-0 overflow-y-auto p-2.5">
-          {campaign.jobs.map((job, index) => {
+          {!visible.length && <div className="text-[11px] text-dim text-center py-4">No resumes in this view.</div>}
+          {visible.map(({ job, bucket, queueIndex }, index) => {
             const [label, klass] = statusFor(job.status, job.approvalMode);
             const [qaLabel, qaClass] = qaStatus(job.llmJudge);
+            const heading = filter === 'all' && bucket !== visible[index - 1]?.bucket
+              ? BUCKET_LABEL[bucket]
+              : null;
             return (
+              <React.Fragment key={job.id}>
+              {heading && (
+                <div className="font-display text-[9px] uppercase tracking-[0.18em] text-faint px-1 pt-1.5 pb-1.5 first:pt-0">
+                  {heading} · {counts[bucket]}
+                </div>
+              )}
               <button
-                key={job.id}
                 onClick={() => setSelectedId(job.id)}
                 className={`w-full text-left border rounded-lg px-3 py-2.5 mb-2 cursor-pointer transition-colors ${
                   selected.id === job.id ? 'bg-accent/10 border-accent' : 'bg-paper3 border-rule hover:border-rule2'
                 }`}
               >
                 <div className="flex gap-2 items-start">
-                  <span className="text-[10px] text-dim mt-0.5">{String(index + 1).padStart(2, '0')}</span>
+                  <span className="text-[10px] text-dim mt-0.5">{String(queueIndex + 1).padStart(2, '0')}</span>
                   <span className="min-w-0">
                     <span className="font-display text-[12.5px] text-ink block truncate">{job.company}</span>
                     <span className="text-[11px] text-muted block mt-0.5 line-clamp-2">{job.role}</span>
@@ -225,6 +288,7 @@ export default function Review({ state, onChanged }) {
                   </span>
                 </div>
               </button>
+              </React.Fragment>
             );
           })}
         </div>
