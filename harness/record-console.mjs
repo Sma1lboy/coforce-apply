@@ -31,6 +31,22 @@ const framesDir = join(outDir, 'frames');
 const stillsDir = join(outDir, 'stills');
 const PORT = Number(process.env.COFORCE_DEMO_PORT || 4521);
 const VIEWPORT = { width: 1240, height: 780 };
+// Two beats that paint the same pixels read as a frozen GIF, and it is not
+// obvious from the script that they will: every beat here does *something*, it
+// is just that some of those somethings leave the view unchanged. So the
+// recording measures itself and fails rather than shipping a stall.
+const MIN_FRAME_DELTA = 0.02;
+
+const frameDelta = (before, after) => {
+  let changed = 0;
+  for (let px = 0; px < before.data.length; px += 4) {
+    const drift = Math.abs(before.data[px] - after.data[px])
+      + Math.abs(before.data[px + 1] - after.data[px + 1])
+      + Math.abs(before.data[px + 2] - after.data[px + 2]);
+    if (drift > 24) changed += 1;
+  }
+  return changed / (before.data.length / 4);
+};
 
 const skill = (...parts) => join(repoRoot, '.agents/skills', ...parts);
 const node = (script, args) => execFileSync(process.execPath, [script, ...args], { encoding: 'utf8' });
@@ -108,7 +124,7 @@ function seedDemoHome() {
 const storyboard = ({ job }) => [
   {
     name: 'discover',
-    hold: 2600,
+    hold: 2400,
     async act(page) {
       await page.goto(`http://127.0.0.1:${PORT}/`);
       await page.waitForSelector('text=Refresh sources', { timeout: 20000 });
@@ -117,7 +133,7 @@ const storyboard = ({ job }) => [
   },
   {
     name: 'queue',
-    hold: 2000,
+    hold: 1800,
     async act(page) {
       const build = page.locator('text=Build resume').first();
       if (await build.count()) {
@@ -129,30 +145,45 @@ const storyboard = ({ job }) => [
   },
   {
     name: 'review-pdf',
-    hold: 3000,
+    hold: 2200,
     async act(page) {
-      await page.click('text=Review');
-      await page.waitForTimeout(900);
-      await page.locator(`text=${job.role}`).first().click();
+      // Queueing already landed on Review with this job selected, so the beat
+      // that earns its own frame is reading DOWN the proof, not re-selecting it.
       await page.waitForSelector('text=PDF proof', { timeout: 20000 });
-      await page.waitForTimeout(2600); // pdf.js has to paint the page
+      await page.locator(`text=${job.role}`).first().click();
+      await page.waitForTimeout(2200); // pdf.js has to paint the page
+      await page.mouse.move(620, 480);
+      await page.mouse.wheel(0, 620);
+      await page.waitForTimeout(900);
+    },
+  },
+  {
+    name: 'review-zoom',
+    hold: 2000,
+    async act(page) {
+      const zoomIn = page.locator('button', { hasText: /^\+$/ }).first();
+      if (await zoomIn.count()) {
+        await zoomIn.click();
+        await zoomIn.click();
+      }
+      await page.waitForTimeout(1200);
     },
   },
   {
     name: 'review-evidence',
-    hold: 3000,
+    hold: 2600,
     async act(page) {
-      await page.evaluate(() => {
-        const heading = [...document.querySelectorAll('*')]
-          .find(node => node.textContent.trim().startsWith('SELECTED BULLETS') && node.children.length < 4);
-        heading?.scrollIntoView({ block: 'center' });
-      });
-      await page.waitForTimeout(1000);
+      // The right rail is the argument: every line on that PDF, verbatim, with
+      // the profile entry it came from. Scroll it, do not just point at it —
+      // but stop on the evidence, before the review controls.
+      await page.mouse.move(1080, 480);
+      await page.mouse.wheel(0, 380);
+      await page.waitForTimeout(900);
     },
   },
   {
     name: 'board',
-    hold: 2800,
+    hold: 2400,
     async act(page) {
       await page.click('text=Board');
       await page.waitForTimeout(1400);
@@ -160,7 +191,7 @@ const storyboard = ({ job }) => [
   },
   {
     name: 'profile-policy',
-    hold: 3000,
+    hold: 2600,
     async act(page) {
       await page.click('text=Profile');
       await page.waitForTimeout(1400);
@@ -174,7 +205,7 @@ const storyboard = ({ job }) => [
   },
   {
     name: 'instructions',
-    hold: 3400,
+    hold: 2800,
     async act(page) {
       await page.click('text=Instructions');
       await page.waitForTimeout(1400);
@@ -221,16 +252,27 @@ async function main() {
     // Pass 1 — the animation. 1x keeps the GIF small; a terminal-sized hero
     // does not need retina pixels.
     const page = await browser.newPage({ viewport: VIEWPORT, colorScheme: 'dark' });
-    for (const beat of storyboard({ job })) {
+    const beats = storyboard({ job });
+    const stalls = [];
+    for (const [index, beat] of beats.entries()) {
       await beat.act(page);
       const png = await page.screenshot();
       writeFileSync(join(framesDir, `${beat.name}.png`), png);
       const decoded = PNG.sync.read(png);
+      const previous = frames.at(-1);
+      const delta = previous ? frameDelta(previous, decoded) : 1;
       frames.push({ data: new Uint8Array(decoded.data), width: decoded.width, height: decoded.height });
       delays.push(beat.hold);
-      console.log(`  beat: ${beat.name}`);
+      console.log(`  beat: ${beat.name}  (${(delta * 100).toFixed(1)}% of the view changed)`);
+      if (delta < MIN_FRAME_DELTA) {
+        stalls.push(`${beats[index - 1].name} → ${beat.name}: ${(delta * 100).toFixed(1)}%`);
+      }
     }
     await page.close();
+    if (stalls.length) {
+      throw new Error('beats that leave the view unchanged would read as a frozen GIF:\n  '
+        + stalls.join('\n  '));
+    }
 
     // Pass 2 — the same beats at 2x, as the stills the docs embed. Same script,
     // same seeded state, so a screenshot in the docs can never show a console
