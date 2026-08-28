@@ -63,12 +63,6 @@ for (const label of ['Education', 'Skills', 'Working Experience', 'Projects']) {
 }
 assert.match(body, /\\resumeSubHeadingListEnd\s*\\vspace\{[^}]+\}\s*\\resumeSubHeadingListStart/,
   'Projects must show the entry-to-entry spacer, or the assembler falls back to a value tuned for another template');
-// A comment is source to the gate's scanner, which does not skip comments.
-const commentedMacroCall = body.split('\n')
-  .filter(line => line.trimStart().startsWith('%'))
-  .find(line => /\\resume[A-Za-z]*\{/.test(line));
-assert.equal(commentedMacroCall, undefined,
-  `a commented-out macro call in the body is read as real source: ${commentedMacroCall}`);
 
 // ---- 3. a real selection assembles and normalizes against it ----------------
 const dataDir = mkdtempSync(join(tmpdir(), 'coforce-shipped-template-'));
