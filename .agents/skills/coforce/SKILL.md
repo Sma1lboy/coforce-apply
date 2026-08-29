@@ -28,6 +28,7 @@ hoc or improvise the workflow inline.
 | Trying the product out, "does this work for me", first taste with nothing set up | `tailor` — deliver a PDF first, offer `setup` after |
 | Submitting an application to a posting URL | `apply` |
 | "Where are my applications", board, statuses, notes, archives | `tracker` |
+| A scheduled interview: prep pack, mock interview, "帮我准备面试" | `interview` |
 | "Is this working", which bullets/resumes actually get callbacks | `campaign` (`outcomes` — counts, not evidence; pass its caveat on) |
 
 ## Route by state (when the intent is vague)
@@ -49,7 +50,9 @@ pick the FIRST stage that is incomplete:
    Review tab (tracker skill) and tell the user resumes are waiting.
 5. Approved jobs not yet applied → offer `apply` per job (submit still gated
    on the user's explicit Confirm — never skip it).
-6. Everything flowing → `start` for another cycle, or `tracker` to check
+6. An entry sitting in `interviewing` with no `interview-prep.md` in its
+   archive → offer `interview`.
+7. Everything flowing → `start` for another cycle, or `tracker` to check
    statuses; suggest a scheduler (`/loop 30m /start`) if the user wants it
    recurring.
 

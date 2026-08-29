@@ -12,8 +12,10 @@ names, no drift.
   one flat object, `.agents/lib/config.mjs`; it replaced the overlapping
   preferences.json + apply-config.json pair and migrates them on first read),
   instructions.md, applications.json, accounts.json, campaigns/,
-  applications/<id>/ archives. `experience/` and `out/` are regenerable
-  caches, not contract files.
+  applications/<id>/ archives, email-sync.json (mailbox-scan state, tracker
+  skill). `experience/`, `out/`, and `research/` (company-research cache,
+  30-day TTL, schema in the `interview` skill) are regenerable caches, not
+  contract files.
   Resolution rule (shared via `.agents/lib/data-home.mjs`): `$COFORCE_HOME`
   env -> `<checkout>/.coforce/` if present (private-fork mode — user's PRIVATE
   fork syncs data in-repo; setup verifies privacy first) -> `~/.coforce`.
@@ -67,6 +69,7 @@ stay in sync with it:
 - one specific JD -> one resume -> `tailor`
 - submit an application URL -> `apply`
 - application statuses / board / archives -> `tracker`
+- interview prep / mock interview / "帮我准备面试" -> `interview`
 - vague job-hunt intent, "where do I start", "what next" -> `coforce` (routes by pipeline state)
 
 - Brand theme: kobe "Hallmark" tokens (`/Users/jacksonc/i/kobe/packages/

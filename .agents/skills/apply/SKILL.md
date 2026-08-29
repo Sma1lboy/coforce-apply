@@ -63,7 +63,11 @@ instructions.md overrides everything) bind every run.
    this JD first and upload its `~/.coforce/out/resume-<company>-<role>.pdf`.
    The static `resumePdf` in config.json is the last resort, not the default.
 4. Free-text questions ("why us", cover letter): draft 2–4 sentences from the
-   profile tailored to the posting — factual, no invented experience. Show
+   profile tailored to the posting — factual, no invented experience. Check
+   `~/.coforce/research/<company>.json` first (company-research cache; schema
+   in the `interview` skill, 30-day TTL) for a verified company angle to
+   ground the "why us" in; a cache hit is a lead, so re-check any specific
+   claim against its recorded source URL before it lands in an answer. Show
    drafts to the user before submitting if they're required fields.
 5. **Stop before the final submit** and show a summary of what was entered.
    Submit only after the user confirms. Submission is irreversible.
