@@ -146,6 +146,14 @@ Fix coverage with reviewed content, never typography or spacing.
 Render the latest PDF to PNG and inspect it for collisions, clipping, awkward
 wraps, and inconsistent spacing. Machine checks do not replace visual review.
 
+After extraction passes, check **keyword coverage**: match the JD's headline
+requirements against the extracted text layer and note, in the match report's
+terms — covered / synonym-only / missing. Prefer the posting's exact term over
+a synonym when a selected bullet or skill truthfully carries it (ATS matching
+is often literal; reselect if the pool offers the verbatim term). A missing
+requirement is the gap report's territory — Module 1 work, never a reason to
+stuff keywords or stretch a bullet.
+
 Run the context-free LLM judge from `references/resume-judge.md` in a fresh
 agent using only the JD and resume. The generator must not read the rubric. Run
 it once — median-of-3 only before acting on a fail or an automatic approval.
