@@ -63,6 +63,14 @@ every later step and any sub-agent prompt.
 ## Steps
 
 1. Read the JD; extract company, role, and the ranked key requirements/skills.
+   **Eligibility check**: if the posting names a citizenship / permanent-
+   residency / security-clearance requirement and `~/.coforce/config.json`
+   says `needsSponsorship: true` (or work authorization contradicts it), quote
+   the exact requirement wording to the user before rendering — they may know
+   something about their status the config doesn't record. Silence in the
+   posting is not permission, but it's also not a blocker: proceed normally.
+   Same for a language the posting requires as a job condition that the
+   profile doesn't carry — flag with the quoted line, don't silently drop.
 2. Select from the profile — never invent:
    - Skills: intersect profile skills with JD requirements first, then the
      strongest remainder. Order by JD relevance.
@@ -102,7 +110,30 @@ every later step and any sub-agent prompt.
    exactly 1 page. Never shrink font size or margins to force a fit. Report
    what was cut. For docx, sanity-check length the same way (≈45 lines of
    content) before delivering.
-5. Report: file path(s) + a one-paragraph note on what was emphasized and why.
+5. **ATS text-layer check (tex/pdf)**: an ATS parses the PDF's embedded text,
+   not the rendered page — a visually fine resume can still extract as
+   garbage. If `pdftotext` is on PATH (poppler; optional dep), run
+   `pdftotext -layout -enc UTF-8 <resume>.pdf` and check the extraction:
+   - no `(cid:NNN)` markers, no `�` replacement characters, no text visible
+     in the PDF but missing from the extraction;
+   - email and phone survive as literal text (an icon glyph or a hyperlink
+     target is invisible to a parser);
+   - reading order matches visual order (the shipped template is
+     single-column and safe; user-provided sidebar/multi-column templates are
+     where this breaks — tell the user prominently if theirs scrambles);
+   - each role/degree has its dates in the extraction.
+   Failures are template problems: fix the `.tex` source and recompile.
+   Then check **keyword coverage**: match the ranked JD requirements from
+   step 1 against the extracted text and report a table — covered /
+   synonym-only / missing (profile has it — add it where it fits naturally,
+   preferring bullets over the summary, and recompile) / missing (genuine
+   gap — leave it; never stuff keywords). Prefer the posting's exact term
+   over a synonym when it's truthfully applicable — ATS matching is often
+   literal. Delete the extracted `.txt` afterwards (it carries the resume's
+   full text). No `pdftotext` → say the mechanical check is skipped and do
+   the keyword check against your Read of the PDF instead.
+6. Report: file path(s) + a one-paragraph note on what was emphasized and why,
+   plus the keyword-coverage table.
 
 ## Rules
 
