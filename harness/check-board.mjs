@@ -13,6 +13,7 @@ import {
   mkdtempSync,
   readFileSync,
   readdirSync,
+  rmSync,
   writeFileSync,
 } from 'node:fs';
 import { strict as assert } from 'node:assert';
@@ -48,6 +49,9 @@ mkdirSync(outDir, { recursive: true });
 // --- 1. serve mode: the console API is the only board renderer now ---
 const live = join(outDir, 'apps-live.json');
 copyFileSync(join(here, 'fixtures/applications.json'), live);
+// the screening ledger is a sibling of the apps file — start from an empty one
+// so a leftover from another check cannot silently hide postings here
+rmSync(join(outDir, 'screened.json'), { force: true });
 // mirror the archive folder + profile + instructions next to the live JSON so
 // the console's /files/ and profile/instructions panes are testable
 cpSync(join(here, 'fixtures/applications'), join(outDir, 'applications'), {
@@ -401,6 +405,61 @@ try {
     'never-apply company never reaches the tracker'
   );
   console.log('board: discover + apply queue + never-apply gate ✓');
+
+  // --- the screening ledger, and the user's right to overrule it ------------
+  // Screening happens in /start, never here. The console's job is to show what
+  // was ruled out, with the reason, and let the user put it back.
+  const discBefore = await (await fetch(`${base}/api/discover`)).json();
+  const victim = discBefore.new[0];
+  assert.ok(victim, 'a posting left to screen');
+  execFileSync(
+    process.execPath,
+    [
+      '.agents/skills/start/scripts/hunt.mjs', 'screen', victim.url,
+      '--reason', 'onsite-only, workMode=remote',
+      '--company', victim.company, '--role', victim.role,
+      '--apps', live,
+    ],
+    { cwd: root, encoding: 'utf8' }
+  );
+
+  const ledger = await (await fetch(`${base}/api/screened`)).json();
+  const ruledOut = ledger.entries.find(e => e.url === victim.url);
+  assert.ok(ruledOut, 'the console can read the screening ledger');
+  assert.equal(ruledOut.reason, 'onsite-only, workMode=remote', 'the reason is shown to the user');
+  assert.ok(
+    !JSON.parse(readFileSync(live, 'utf8')).some(a => a.url === victim.url),
+    'a screened posting holds no pipeline status — it is not on the board at all'
+  );
+  const discScreened = await (await fetch(`${base}/api/discover`)).json();
+  assert.ok(
+    !discScreened.new.some(j => j.url === victim.url),
+    'and stops being offered in Discover'
+  );
+
+  const unscreen = await fetch(`${base}/api/screened/unscreen`, {
+    method: 'POST',
+    headers: { 'content-type': 'application/json' },
+    body: JSON.stringify({ url: victim.url }),
+  });
+  assert.equal(unscreen.status, 200, 'unscreen accepted');
+  assert.equal(
+    (await (await fetch(`${base}/api/screened`)).json()).entries.length,
+    0,
+    'the entry is gone from the ledger'
+  );
+  const discBack = await (await fetch(`${base}/api/discover`)).json();
+  assert.ok(
+    discBack.new.some(j => j.url === victim.url),
+    'the user can apply to a job the filter did not want — it comes straight back'
+  );
+  const badUnscreen = await fetch(`${base}/api/screened/unscreen`, {
+    method: 'POST',
+    headers: { 'content-type': 'application/json' },
+    body: '{}',
+  });
+  assert.equal(badUnscreen.status, 400, 'unscreen needs a url');
+  console.log('board: screening ledger visible + reversible from the console ✓');
 
   // resume campaign API: queue → feedback → approve → export/download
   const campaign = await (await fetch(`${base}/api/campaign`)).json();

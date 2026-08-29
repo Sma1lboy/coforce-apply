@@ -22,16 +22,26 @@ first in line for resume generation.
    node "<skill-dir>/scripts/hunt.mjs" --track
    ```
    Fetches all configured sources, skips anything already tracked (URL or
-   company+role match — never double-apply) and every `never-apply` company,
-   tracks the rest as `pending` with a discovery history event. Report the
-   summary (new / already-tracked / blocked).
+   company+role match — never double-apply), anything already screened out
+   (see step 2) and every `never-apply` company, tracks the rest as `pending`
+   with a discovery history event. Report the summary (new / already-tracked /
+   screened / blocked).
 2. **Filter for fit**: read `~/.coforce/config.json` (canonical user intent —
    level, directions, `needsSponsorship`, `workMode`, `locations`,
    `salaryFloor`; schema in the setup skill) plus `instructions.md`. From the
    new `pending` entries, drop ones that clearly contradict either (wrong
    level, no-sponsorship posting when `needsSponsorship` is true, onsite-only
-   when `workMode` is remote, excluded location) — mark those `rejected` with
-   a history note "filtered: <reason>" so they don't resurface.
+   when `workMode` is remote, excluded location):
+   ```sh
+   node "<skill-dir>/scripts/hunt.mjs" screen <url> --reason "<why>"
+   ```
+   That takes the posting out of `applications.json` and records it in the
+   screening ledger instead. **Never give a screened job a status** — least of
+   all `rejected`, which means a company turned the user down; a board that
+   mixes the two lies about how the search is going. Discovery dedups against
+   both ledgers, so a screened posting never comes back on its own, and
+   `hunt.mjs unscreen <url>` reverses the call. Report how many were screened
+   and why.
 
    Two **hard gates** run before soft fit judgment, and both quote the
    posting rather than paraphrasing it:
@@ -72,6 +82,36 @@ first in line for resume generation.
    the ZIP path without forcing Review open. Do not run the `apply` skill in
    this cycle. Final application submission is always a separate confirmation
    gate, regardless of the resume-review setting.
+
+## Screening ledger — `~/.coforce/screened.json`
+
+Schema canonical here; owned by this skill. "Seen, and not for me." It carries
+no pipeline state, which is the point: `applications.json` stays a list of
+applications the user is actually chasing, and every consumer of it
+(campaign sync, the board's columns, bullet-outcome tallies, the stale report)
+stays correct without learning about screening at all.
+
+```json
+{ "version": 1, "entries": [
+  { "url": "https://…", "company": "Initech", "role": "SWE Intern",
+    "source": "2027-SWE-College-Jobs",
+    "reason": "onsite-only, workMode=remote",
+    "by": "start-filter", "screenedAt": "2026-08-28T09:00:00.000Z" } ] }
+```
+
+- `reason` is required — an unexplained screen-out is unauditable, and
+  `hunt.mjs screen` refuses without it.
+- `by` is `start-filter` (this cycle's fit filter) or `user` (the user said no
+  themselves). Same ledger, so one `unscreen` undoes either.
+- Dedup uses `url`, plus `company`+`role` when both are present — pass
+  `--company` / `--role` when screening a posting that was never tracked.
+- Writes go through `hunt.mjs` only; skills never edit this file by hand. The
+  console reads the ledger for its Discover footer and calls `unscreen`
+  through the same script — one writer, no second implementation.
+- Legacy repair: an older version of step 2 marked fit-filtered jobs
+  `rejected` in the tracker with a `filtered: <reason>` history event. Every
+  `hunt.mjs` run moves those into this ledger once and reports the count as
+  `migrated`. Real rejections carry no such event and are never touched.
 
 ## Recurring
 

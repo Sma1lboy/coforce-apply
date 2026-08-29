@@ -11,7 +11,7 @@ names, no drift.
   in the `profile` skill), config.json (intent + runtime config + consents,
   one flat object, `.agents/lib/config.mjs`; it replaced the overlapping
   preferences.json + apply-config.json pair and migrates them on first read),
-  instructions.md, applications.json, accounts.json, campaigns/,
+  instructions.md, applications.json, screened.json, accounts.json, campaigns/,
   applications/<id>/ archives, email-sync.json (mailbox-scan state, tracker
   skill). `experience/`, `out/`, and `research/` (company-research cache,
   30-day TTL, schema in the `interview` skill) are regenerable caches, not
@@ -30,8 +30,14 @@ names, no drift.
   repo-dev-only and exempt).
 - Data files are the contract BETWEEN skills: each schema is canonical in its
   owning SKILL.md (profile → profile skill, config → setup,
-  applications.json → tracker, campaign manifest → campaign, experience index
-  → experience) and carries a schema version. Skill playbooks program against
+  applications.json → tracker, screened.json → start, campaign manifest →
+  campaign, experience index → experience) and carries a schema version.
+  **applications.json holds applications the user is actually chasing, and
+  `status` is the pipeline stage only** — `rejected` means a company said no.
+  A posting ruled out for fit never entered the pipeline and goes to
+  screened.json (`hunt.mjs screen`/`unscreen`), so every consumer of
+  applications.json stays correct without knowing screening exists.
+  Skill playbooks program against
   schemas, never against another skill's code; `.agents/lib/` holds shared
   low-level script utilities (e.g. the atomic JSON writer), and the console
   server may import sibling skill libs as glue.

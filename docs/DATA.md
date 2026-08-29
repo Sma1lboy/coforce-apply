@@ -22,11 +22,20 @@ other skill programs against the schema, never against another skill's code.
 | `profile.json` | `profile` | Your background, and **the verified pool**: every bullet you have reviewed, with `source` and `verifiedAt` provenance. Also holds `resumeSkillPolicy` (baseline skills + role packs) and any `textZh` bilingual bullets. |
 | `config.json` | `setup` | One flat object: job-search intent (level, directions, sponsorship, work mode, locations, salary floor), runtime config (LaTeX template, page-coverage minimum, resume PDF, job sources), and consents (`autoRegister`, `mailboxAccess`, `headlessApply`, `requireResumeReview`). Version 2; the older `preferences.json` + `apply-config.json` pair is migrated on first read. |
 | `instructions.md` | you | Standing instructions in plain prose, including the `## never-apply` company list. Every skill and script reads this first and treats it as overriding metadata. |
-| `applications.json` | `tracker` | Every tracked application: status (`pending` → `applied` → `interviewing` → `offer`/`rejected`), `needsFallback`, and a `history[]` of events. |
+| `applications.json` | `tracker` | Every application you are actually chasing: status (`pending` → `applied` → `interviewing` → `offer`/`rejected`), `needsFallback`, and a `history[]` of events. |
+| `screened.json` | `start` | Postings you have seen and ruled out — `{url, company, role, reason, by, screenedAt}` per entry. Discovery dedups against this as well as the tracker, so they never resurface. |
 | `accounts.json` | `apply` | ATS accounts you registered — `{host, email, keychain, createdAt}` **metadata only**. Passwords are in the macOS Keychain, never here. |
 | `campaigns/current/manifest.json` | `campaign` | The current batch: per job, the selected `evidenceIds`, skills, render state, review notes, and approval. |
 | `experience/sources.json` | `experience` | The allowlist of GitHub repositories and the authors whose history counts. Nothing is scanned that is not listed here. |
 | `experience/experience-index.json` | `experience` | The Tier 0 index — compact, tagged, source-backed — that JD matching reads locally. |
+
+> [!IMPORTANT]
+> **`rejected` means a company said no.** It is a pipeline stage, not a verdict
+> the tool reached. A posting ruled out for fit — wrong level, no sponsorship,
+> onsite when you want remote — never entered the pipeline, so it goes to
+> `screened.json` and leaves `applications.json` entirely
+> (`hunt.mjs screen <url> --reason "…"`, undone with `unscreen`). That is what
+> keeps every count the board shows you true: the rejections are real ones.
 
 > [!IMPORTANT]
 > **Bullet ids are content hashes** — `sha256(text)[:8]`, computed when a bullet

@@ -22,6 +22,7 @@ machine.
 sources (GitHub job lists)          ~/.coforce/ (your data, local only)
         │                            profile.json       your background
    hunt.mjs ──dedup──▶               applications.json  tracker truth
+        │                            screened.json      seen, not for you
         │                            instructions.md    your standing rules
         ▼                            experience/       sources.json (repo + authors)
                                      └─ compact Tier 0 tagged index

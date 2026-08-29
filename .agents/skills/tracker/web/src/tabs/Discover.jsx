@@ -76,6 +76,11 @@ export default function Discover({ state, onChanged, goReview }) {
   );
   useEffect(() => { sessionStorage.removeItem('coforce-wizard'); }, []);
   const [queueing, setQueueing] = useState(null);
+  // Jobs the fit filter ruled out. They never entered the pipeline (that is
+  // why they are not on the board), but the user is allowed to disagree.
+  const [screened, setScreened] = useState([]);
+  const [showScreened, setShowScreened] = useState(false);
+  const [unscreening, setUnscreening] = useState(null);
 
   const queueForResume = async job => {
     setQueueing(job.url);
@@ -91,9 +96,24 @@ export default function Discover({ state, onChanged, goReview }) {
     }
   };
 
+  const reconsider = async url => {
+    setUnscreening(url);
+    setErr(null);
+    try {
+      await api.unscreen(url);
+      await load();
+    } catch (error) {
+      setErr(String(error.message));
+    } finally {
+      setUnscreening(null);
+    }
+  };
+
   const load = async () => {
     setBusy(true);
     setErr(null);
+    // the ledger is a side panel — a failure to read it must not break discovery
+    api.screened().then(r => setScreened(r.entries || [])).catch(() => setScreened([]));
     try {
       const d = await api.discover();
       d.new = d.new.map(j => ({ ...j, _level: levelOf(j), _dirs: dirsOf(j) }));
@@ -138,7 +158,62 @@ export default function Discover({ state, onChanged, goReview }) {
             {busy ? 'Fetching job sources…' : err ? `Discovery failed: ${err}` :
               data ? `${shown.length} shown of ${jobs.length} new · ${data.skipped.tracked} tracked · ${data.skipped.blocked} never-apply` : ''}
           </span>
+          {/* The one number that means something here is how many postings the
+              fit filter is currently holding back — and it has to be reachable
+              without scrolling, so it lives in the header, not the footer. */}
+          {!busy && screened.length > 0 && (
+            <button
+              className={`shrink-0 ml-auto rounded-full border px-2.5 py-0.5 text-[11px] cursor-pointer transition-colors ${
+                showScreened
+                  ? 'text-accentsoft bg-accent/12 border-accent'
+                  : 'text-muted bg-well border-rule2 hover:border-accent hover:text-accentsoft'
+              }`}
+              onClick={() => setShowScreened(v => !v)}
+            >
+              {screened.length} screened out {showScreened ? '▾' : '▸'}
+            </button>
+          )}
         </div>
+
+        <AnimatePresence initial={false}>
+          {showScreened && (
+            <motion.div
+              initial={{ opacity: 0, height: 0 }}
+              animate={{ opacity: 1, height: 'auto' }}
+              exit={{ opacity: 0, height: 0 }}
+              transition={{ duration: 0.18 }}
+              className="overflow-hidden shrink-0"
+            >
+              <div className="bg-paper2 border border-rule rounded-xl p-3">
+                <div className="text-[11px] text-dim mb-2">
+                  Ruled out for fit, never applied to — they hold no status on the board.
+                  Reconsider puts one back in the list below.
+                </div>
+                <div className="max-h-[190px] overflow-y-auto pr-1">
+                  {screened.map(e => (
+                    <div key={e.url} className="flex items-center gap-3 bg-well border border-rule rounded-lg px-3 py-2 mb-1.5 last:mb-0">
+                      <div className="flex-1 min-w-0">
+                        <a href={e.url} target="_blank" rel="noreferrer" className="text-muted text-xs hover:text-accentsoft hover:underline break-words">
+                          {e.role || e.url}{e.company ? ` — ${e.company}` : ''}
+                        </a>
+                        <div className="text-[11px] text-dim mt-0.5">
+                          {e.reason}{e.by === 'user' ? ' · your call' : ''}
+                        </div>
+                      </div>
+                      <button
+                        className="btn-ghost shrink-0"
+                        disabled={unscreening === e.url}
+                        onClick={() => reconsider(e.url)}
+                      >
+                        {unscreening === e.url ? 'Restoring…' : 'Reconsider'}
+                      </button>
+                    </div>
+                  ))}
+                </div>
+              </div>
+            </motion.div>
+          )}
+        </AnimatePresence>
         <div className="flex-1 min-h-0 overflow-y-auto pr-1">
           <AnimatePresence initial={false}>
             {shown.map(j => (
@@ -186,6 +261,7 @@ export default function Discover({ state, onChanged, goReview }) {
             <div className="text-dim text-center py-10">Nothing matches these filters — loosen them or ↻ refresh.</div>
           )}
         </div>
+
       </div>
 
       {/* filters */}
