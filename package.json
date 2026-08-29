@@ -13,7 +13,7 @@
   },
   "scripts": {
     "board": "node .agents/skills/tracker/scripts/board.mjs --serve",
-    "harness": "sh harness/check-formats.sh && python3 harness/check-github-evidence.py && node harness/check-config.mjs && node harness/check-experience.mjs && node harness/check-template.mjs && node harness/check-judge.mjs && node harness/check-campaign.mjs && node harness/check-board.mjs && node harness/check-hunt.mjs",
+    "harness": "sh harness/check-formats.sh && python3 harness/check-github-evidence.py && node harness/check-config.mjs && node harness/check-experience.mjs && node harness/check-template.mjs && node harness/check-judge.mjs && node harness/check-campaign.mjs && node harness/check-board.mjs && node harness/check-hunt.mjs && node harness/check-guards.mjs",
     "hunt": "node .agents/skills/start/scripts/hunt.mjs",
     "sandbox": "node harness/sandbox.mjs",
     "record:setup": "node harness/record-setup.mjs",
