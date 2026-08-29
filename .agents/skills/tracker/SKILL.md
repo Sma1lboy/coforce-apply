@@ -10,8 +10,10 @@ Read `~/.coforce/instructions.md` first if present — standing user instruction
 
 Local truth: `~/.coforce/applications.json` — a JSON array of applications:
 `{id, url, title, status, createdAt, updatedAt, company?, position?, notes?,
-needsFallback?, description?, history?: [{date, event}]}`. Missing file →
-start with `[]`.
+needsFallback?, description?, deadline?, history?: [{date, event}]}`. Missing
+file → start with `[]`. `deadline` is the posting's stated application
+deadline as `YYYY-MM-DD` — only when the posting states one; never guess it
+from "apply soon" or the posting date.
 
 ## Operations
 
@@ -117,6 +119,36 @@ siblings are global:
 
 **Report**: when asked "what's the state of my search", summarize counts per
 status and list stale `pending`/`applied` entries (no update in 14+ days).
+Two clocks apply, and they never mix:
+- **Days quiet** (applied/interviewing only): days since the entry's latest
+  dated `history` event (fall back to `updatedAt`). An `applied` entry 10+
+  days quiet with fewer than two `followed up YYYY-MM-DD` history events →
+  offer a follow-up: draft a brief, non-pushy note in the user's voice
+  (reference the role, one line of continued interest, no new claims), let
+  the user send it themselves, then record `followed up <date>` in history.
+  Never chase a `pending` entry — nothing was sent, nobody is late replying.
+- **Deadline urgency** (the one clock that DOES apply to `pending`): a
+  `deadline` within 7 days → 🔥, already passed → ⚠. A passed deadline on a
+  `pending` entry with a rendered resume is the failure this field exists to
+  catch — documents built, never sent, now unsendable — name it in one line
+  rather than leaving the user to compare dates.
+
+**Retro (复盘)**: when asked "why am I not getting callbacks" / "what should I
+learn" / "该学什么", close the loop from outcomes back to Module 1:
+1. Read every tracker entry with an outcome signal (`rejected`, stale
+   `applied` 21+ days = silent rejection) plus the campaign gap reports still
+   on disk (`~/.coforce/campaigns/*/jobs/*/match-report.md` — the "pool
+   cannot cover" lists).
+2. Aggregate the gaps into a frequency list, weighting entries that died
+   earlier in the pipeline higher (rejected-without-interview > rejected
+   after interviewing).
+3. Report a ranked gap list, each with the CoForce-native next step: which
+   repo or experience could evidence it through Module 1 (`experience` →
+   review into the pool) — and only when nothing in the user's history could,
+   suggest it as a genuine learning item. Include `campaign.mjs outcomes`
+   (bullet-level callback counts) with its correlation-is-not-causation
+   caveat. Never edit the profile or config from a retro — report, route,
+   stop.
 
 ## Email sync (separate flow, same data)
 

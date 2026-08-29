@@ -120,7 +120,7 @@ Full walkthrough, command reference, troubleshooting and FAQ:
 | `profile` | Maintain your background (`~/.coforce/profile.json`) |
 | `tailor` | JD → tailored one-page resume (LaTeX/PDF/docx, template or reference-guided) |
 | `apply` | Chrome-backed application: fills forms, registers ATS accounts (Workday & co., passwords in macOS Keychain), stops before submit for your confirmation |
-| `tracker` | Application tracker + kanban board + per-application file archive |
+| `tracker` | Application tracker + kanban board + per-application file archive, follow-up nudges, and outcome retro (skill-gap aggregation) |
 | `interview` | Stage-specific interview prep from the archived JD, the actually-submitted resume, and prior-stage feedback; optional mock interview |
 | `harness` | Mock-environment E2E test of the whole pipeline (repo-dev only) |
 

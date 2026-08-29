@@ -29,6 +29,7 @@ hoc or improvise the workflow inline.
 | Submitting an application to a posting URL | `apply` |
 | "Where are my applications", board, statuses, notes, archives | `tracker` |
 | A scheduled interview: prep pack, mock interview, "帮我准备面试" | `interview` |
+| "Why am I not getting callbacks", "该学什么", skill-gap retro | `tracker` (Retro — aggregates outcomes + campaign gap reports) |
 | "Is this working", which bullets/resumes actually get callbacks | `campaign` (`outcomes` — counts, not evidence; pass its caveat on) |
 
 ## Route by state (when the intent is vague)
