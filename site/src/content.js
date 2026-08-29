@@ -136,7 +136,7 @@ export const tracking = [
   {
     heading: 'A lane, and an honest failure state',
     body:
-      'pending → applied → interviewing → offer or rejected, on a board you open locally. Plus one status the polite tools leave out: needsFallback — the operator gave up and a human has to take this one. It clears when someone does.',
+      'pending → applied → interviewing → offer or rejected, on a board you open locally. Plus one status the polite tools leave out: needsFallback — the operator gave up and a human has to take this one. It clears when someone does. Nothing else is allowed in the lane: a posting the tool rules out for fit is written to screened.json with its reason, so rejected always means a company said no.',
   },
   {
     heading: 'Every application keeps its own folder',
@@ -155,6 +155,7 @@ export const tracking = [
 export const dataHome = [
   { path: '~/.coforce/profile.json', note: 'your verified pool' },
   { path: 'applications.json', note: 'the tracker, source of truth' },
+  { path: 'screened.json', note: 'seen and ruled out, with the reason' },
   { path: 'instructions.md', note: 'your standing rules, they outrank the agent' },
   { path: 'config.json', note: 'level · sponsorship · work mode · locations' },
   { path: 'campaigns/current/', note: 'this cycle, per job' },

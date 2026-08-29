@@ -399,6 +399,38 @@ function loadApps() {
       res.end(out);
       return;
     }
+    // The screening ledger belongs to the start skill (schema in its
+    // SKILL.md) — reading it here is console glue, but every WRITE goes back
+    // through hunt.mjs so the ledger keeps exactly one writer.
+    if (req.url === '/api/screened' && req.method === 'GET') {
+      const ledger = readJsonSafe(join(dataDir, 'screened.json'));
+      res.writeHead(200, { 'content-type': 'application/json' });
+      res.end(JSON.stringify({
+        entries: Array.isArray(ledger?.entries) ? ledger.entries : [],
+      }));
+      return;
+    }
+    if (req.url === '/api/screened/unscreen' && req.method === 'POST') {
+      readBody(req, res, body => {
+        try {
+          const { url } = JSON.parse(body);
+          if (!url) throw new Error('need url');
+          if (!existsSync(huntScript))
+            throw new Error('start skill not installed next to tracker');
+          const out = execFileSync(
+            process.execPath,
+            [huntScript, 'unscreen', url, '--apps', input],
+            { encoding: 'utf8', timeout: 30_000 }
+          );
+          res.writeHead(200, { 'content-type': 'application/json' });
+          res.end(out);
+        } catch (err) {
+          res.writeHead(400, { 'content-type': 'text/plain' });
+          res.end(String(err.message));
+        }
+      });
+      return;
+    }
     if (req.url === '/api/queue' && req.method === 'POST') {
       readBody(req, res, body => {
         try {

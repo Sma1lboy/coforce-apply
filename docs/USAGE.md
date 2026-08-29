@@ -150,7 +150,10 @@ system light/dark preference.
 (speedyapply, vanshb03, jobright-ai out of the box), classified by level and
 direction, filterable, with one-click **Build resume →**. Never-apply companies
 and already-tracked jobs are filtered out server-side — the counter line tells
-you exactly how many were dropped for each reason.
+you exactly how many were dropped for each reason. Below the list, **N screened
+out** expands into everything `/start` ruled out for fit, each with its reason;
+**Reconsider** puts one back in circulation. The filter is a suggestion, not a
+gate — you always get to apply to a job it did not want.
 
 <img src="assets/console-discover.png" alt="The Discover tab: postings filtered by level and direction, each with a Build resume button" width="900">
 
@@ -181,7 +184,10 @@ written to disk until you press *Save profile*.
 **Board** — five columns, To Apply → Applied → Interviewing → Offer / Rejected.
 Drag a card to change its status; open one for the JD link, notes, the delivery
 timeline, and archived files. A card marked **⚑ needs you** is one the operator
-could not finish alone.
+could not finish alone. Every card here is an application you are actually
+chasing, and **Rejected means a company said no** — postings ruled out for fit
+never reach the board at all; they go to `~/.coforce/screened.json` with the
+reason, so the counts you read are real ones.
 
 <img src="assets/console-board.png" alt="The Board tab: five kanban columns of tracked applications" width="900">
 
@@ -208,6 +214,8 @@ skills call, and they are useful for debugging.
 ```sh
 # discovery
 node .agents/skills/start/scripts/hunt.mjs [--track] [--apps <path>] [--instructions <path>]
+node .agents/skills/start/scripts/hunt.mjs screen <url> --reason "<why>"   # seen, not for me
+node .agents/skills/start/scripts/hunt.mjs unscreen <url>                  # let it come back
 
 # evidence
 node .agents/skills/experience/scripts/experience.mjs source add <url> [--author <login>] [--project <name>]
@@ -259,8 +267,15 @@ The template targets a full page with content reaching ≥93% down it. Fewer
 bullets, or a lower minimum page coverage in Settings, are both valid answers.
 
 **Job sources return nothing new**
-Everything they list is already tracked, or was filtered by your never-apply
-list and intent. `hunt.mjs` prints exactly that breakdown: `{new, skipped:{tracked, blocked}, sources}`.
+Everything they list is already tracked, already screened out, or was filtered
+by your never-apply list. `hunt.mjs` prints exactly that breakdown:
+`{new, skipped:{tracked, screened, blocked}, sources}`.
+
+**A job I wanted disappeared from Discover**
+It was ruled out for fit — wrong level, no sponsorship, onsite when you asked
+for remote. Open **N screened out** at the bottom of Discover to see it with
+its reason and press **Reconsider**; `hunt.mjs unscreen <url>` does the same
+from a shell. Either way it is back on the next refresh.
 
 ---
 

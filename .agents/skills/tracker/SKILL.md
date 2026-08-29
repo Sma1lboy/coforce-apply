@@ -1,6 +1,6 @@
 ---
 name: tracker
-description: Maintain the local job-application tracker (~/.coforce/applications.json) and its kanban board — add applications, update pipeline statuses (pending/applied/interviewing/offer/rejected), record delivery events and the needsFallback flag (= the operator gave up; a human has to take this one), attach notes, and serve the board. Use for "记录一下投了 X", "更新申请状态", "看板/board", "application tracker", or "/tracker".
+description: Maintain the local job-application tracker (~/.coforce/applications.json) and its kanban board — add applications, update pipeline statuses (pending/applied/interviewing/offer/rejected — `rejected` = the company said no, never "screened out for fit"), record delivery events and the needsFallback flag (= the operator gave up; a human has to take this one), attach notes, and serve the board. Use for "记录一下投了 X", "更新申请状态", "看板/board", "application tracker", or "/tracker".
 ---
 
 # Tracker — local application board
@@ -19,10 +19,16 @@ from "apply soon" or the posting date.
 
 **Add / update**: read the JSON, apply the change, write back. `id` = epoch ms
 string; always bump `updatedAt` (ISO). `status` is the pipeline stage ONLY:
-`pending → applied → interviewing → offer | rejected`. How delivery went is
+`pending → applied → interviewing → offer | rejected`, and `rejected` means
+one thing only: **a company turned the user down.** How delivery went is
 never a status — an operator giving up is a `history` event plus
 `needsFallback: true` (= a human has to take this one; cleared when the
-application eventually goes out). Put recruiter emails, interview dates, and
+application eventually goes out). Nor is fit: a posting screened out because
+it contradicts the user's intent never entered the pipeline, so it does not
+belong in this file at all — it goes to the start skill's screening ledger
+(`hunt.mjs screen <url> --reason "…"`, ledger at `~/.coforce/screened.json`,
+reversible with `unscreen`). Mixing the two makes the board claim rejections
+that never happened. Put recruiter emails, interview dates, and
 contacts in `notes`. When adding an application, save the JD text into
 `description` if you have it. Every status change appends to `history`:
 `{date, event}` (e.g. `"status: applied → interviewing — recruiter email"`);
@@ -59,7 +65,12 @@ One kobe-Hallmark-themed local site with these primary tabs:
   config.json, falling back to the Google favicon service, then to an initials
   tile when the source list carried no homepage link. A left filter panel
   (search, level, direction with keyword classification, source) narrows the
-  list. Each row's **Build resume** button queues the posting into both the
+  list, and a collapsible footer lists what the start skill's fit filter
+  screened out — read from `~/.coforce/screened.json`, that skill's ledger —
+  each with its reason, where **Reconsider** un-screens one (POST
+  /api/screened/unscreen, which shells out to `hunt.mjs unscreen`) so it
+  returns to discovery. The filter is never the last word. Each row's
+  **Build resume** button queues the posting into both the
   tracker and current resume campaign. The next start/campaign cycle hydrates
   the JD and renders its matched resume; application submission remains a
   separate action.
