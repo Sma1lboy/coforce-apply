@@ -70,6 +70,7 @@ stay in sync with it:
 - submit an application URL -> `apply`
 - application statuses / board / archives -> `tracker`
 - interview prep / mock interview / "帮我准备面试" -> `interview`
+- "why no callbacks" / skill-gap retro / 该学什么 -> `tracker` (Retro)
 - vague job-hunt intent, "where do I start", "what next" -> `coforce` (routes by pipeline state)
 
 - Brand theme: kobe "Hallmark" tokens (`/Users/jacksonc/i/kobe/packages/

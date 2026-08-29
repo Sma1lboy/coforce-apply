@@ -26,6 +26,7 @@ import { homedir } from 'node:os';
 import { dataHome } from '../../../lib/data-home.mjs';
 import { intentOf, loadConfig, saveConfig } from '../../../lib/config.mjs';
 import { isNeverApply, neverApplyFor } from '../../../lib/never-apply.mjs';
+import { attentionFor } from '../../../lib/attention.mjs';
 import { dirname, extname, join, resolve, sep } from 'node:path';
 import { fileURLToPath } from 'node:url';
 import {
@@ -316,9 +317,14 @@ function loadApps() {
       return;
     }
     if (req.url === '/api/state' && req.method === 'GET') {
+      // Computed server-side so every reader (console, agent, future CLI)
+      // sees the same answer to "what wants me now" instead of each
+      // re-deriving it from raw dates.
+      const now = Date.now();
       const apps = loadApps().map(a => ({
         ...a,
         _files: listFiles(join(filesRoot, a.id)),
+        _attention: attentionFor(a, now),
       }));
       const config = loadConfig(dataDir);
       res.writeHead(200, { 'content-type': 'application/json' });

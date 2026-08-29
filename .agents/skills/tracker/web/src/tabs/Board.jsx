@@ -3,6 +3,13 @@ import { AnimatePresence, motion } from 'framer-motion';
 import { api } from '../lib/api.js';
 import { STATUS_COLUMNS } from '../lib/classify.js';
 
+const ATTENTION_ICON = {
+  'deadline-passed': '⚠',
+  'deadline-soon': '🔥',
+  'silent-rejection': '⌛',
+  'follow-up': '✉',
+};
+
 const spring = { type: 'spring', stiffness: 260, damping: 24 };
 
 function Detail({ app, globalFiles, onClose }) {
@@ -129,6 +136,14 @@ export default function Board({ state, onChanged }) {
                   {a.needsFallback && a.status === 'pending' && (
                     <div className="inline-block mt-1.5 text-[11px] text-accentsoft bg-accent/12 border border-accent rounded-full px-2 py-px">⚑ needs you</div>
                   )}
+                  {/* Server-computed (`_attention`): a closing window or an
+                      unanswered application is only visible if the card says
+                      so — the dates alone make the reader do the arithmetic. */}
+                  {a._attention?.length ? (
+                    <div className="text-[11px] text-accentsoft bg-accent/12 border border-accent rounded-md px-2 py-1 mt-1.5" title={a._attention[0].reason}>
+                      {ATTENTION_ICON[a._attention[0].kind] || '⚑'} {a._attention[0].reason}
+                    </div>
+                  ) : null}
                   {a.notes && <div className="text-xs text-faint border-l-2 border-rule2 pl-2 mt-1.5 line-clamp-3 whitespace-pre-wrap">{a.notes}</div>}
                   <div className="text-[11px] text-dim mt-2">{(a.updatedAt || '').slice(0, 10)}</div>
                 </motion.div>
