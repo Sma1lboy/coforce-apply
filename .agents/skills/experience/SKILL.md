@@ -242,6 +242,9 @@ the README's marketing copy.
      "responsible for" / "helped with" / "worked on", and no two bullets in one
      entry opening with the same verb. Graders check all four mechanically and a
      reader feels them instantly.
+   - **Punctuation is authorship.** Avoid the em dash. It is the most
+     recognizable tell of machine-written text, and one of them is enough for a
+     screener to read the whole entry as generated. A comma, or two sentences.
 5. **Merge on confirmation**: append to `~/.coforce/profile.json` `projects[]`
    as `{name, url, repo, description: [{text, source, verifiedAt}...],
    technologies, dateRange}` (dateRange from first/last commit dates). Schema
