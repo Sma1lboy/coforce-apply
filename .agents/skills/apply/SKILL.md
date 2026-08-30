@@ -67,7 +67,8 @@ instructions.md overrides everything) bind every run.
    `~/.coforce/research/<company>.json` first (company-research cache; schema
    in the `interview` skill, 30-day TTL) for a verified company angle to
    ground the "why us" in; a cache hit is a lead, so re-check any specific
-   claim against its recorded source URL before it lands in an answer. Show
+   claim against its recorded source URL before it lands in an answer. Avoid
+   the em dash, the most recognizable tell of machine-written text. Show
    drafts to the user before submitting if they're required fields.
 5. **Stop before the final submit** and show a summary of what was entered.
    Submit only after the user confirms. Submission is irreversible.
