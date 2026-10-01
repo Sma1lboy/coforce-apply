@@ -17,12 +17,12 @@ const browser=await chromium.launch(), servers=[];
 const fixture=`<!doctype html><html><head><meta name="viewport" content="width=device-width,initial-scale=1"></head><body><div id="root"></div><script type="module" src="/ux-fixture.jsx"></script></body></html>`;
 const component=`import React,{useState} from 'react';import{createRoot}from'react-dom/client';import ApplyDialog from './src/components/ApplyDialog.jsx';import './src/index.css';
 function Fixture(){const[job,setJob]=useState(null);return <><main className="p-6"><h1>CoForce application fixture</h1><p>Synthetic job. No agent or employer is contacted.</p><button onClick={()=>setJob({role:'Backend engineer',company:'Fixture Labs',url:'https://example.invalid/jobs/fixture'})}>Prepare fixture application</button></main><ApplyDialog job={job} mode={new URLSearchParams(location.search).get('mode')||'headless'} onClose={()=>setJob(null)} onQueued={()=>{}}/></>};createRoot(document.getElementById('root')).render(<Fixture/>);`;
-async function open(port,{mode='headless',status='running',copyFails=true,queueDelay=0,confirmFails=false,cancelFails=false,pollFails=false}={}){
+async function open(port,{mode='headless',status='running',copyFails=true,holdQueue=false,confirmFails=false,cancelFails=false,pollFails=false}={}){
  const page=await browser.newPage({viewport:{width:1100,height:850},reducedMotion:'reduce'});
  const calls=[];const control={status,confirmFails,cancelFails,pollFails};
  await page.addInitScript(fail=>Object.defineProperty(navigator,'clipboard',{value:{writeText:()=>fail?Promise.reject(new Error('Fixture clipboard denied')):Promise.resolve()}}),copyFails);
  await page.route('**/api/**',async route=>{const req=route.request(),path=new URL(req.url()).pathname;calls.push([req.method(),path]);
-  if(path==='/api/queue'){if(queueDelay)await new Promise(r=>setTimeout(r,queueDelay));return route.fulfill({status:200,contentType:'application/json',body:'{}'});}
+  if(path==='/api/queue'){if(holdQueue)await new Promise(resolve=>{control.releaseQueue=resolve;});return route.fulfill({status:200,contentType:'application/json',body:'{}'});}
   if(path==='/api/apply')return route.fulfill({status:200,contentType:'application/json',body:'{"id":"fixture-run"}'});
   if(path.endsWith('/confirm')){if(!control.confirmFails)control.status='submitted';return route.fulfill({status:control.confirmFails?500:204,body:''});}
   if(path.endsWith('/cancel'))return route.fulfill({status:control.cancelFails?500:204,body:''});
@@ -32,7 +32,7 @@ async function open(port,{mode='headless',status='running',copyFails=true,queueD
  await page.getByRole('button',{name:'Prepare fixture application'}).click();
  return {page,calls,control};
 }
-async function shot(page,label,name){await page.screenshot({path:join(out,`${label}-${name}.png`)});}
+async function shot(page,label,name){await page.waitForFunction(() => [...document.querySelectorAll('[style]')].every(el => !el.style.opacity || Number(el.style.opacity) >= 0.999), null, {timeout:10000});await page.screenshot({path:join(out,`${label}-${name}.png`)});}
 try{
  for(const[label,path,port]of[['before',before,4537],['after',root,4538]]){
   writeFileSync(join(path,web,'ux-fixture.html'),fixture);writeFileSync(join(path,web,'ux-fixture.jsx'),component);
@@ -83,8 +83,8 @@ try{
     await shot(page,label,'stop-failed');control.cancelFails=false;await page.getByRole('button',{name:'Stop preparation',exact:true}).click();await page.getByRole('dialog').waitFor({state:'hidden'});await page.close();
    }
    {
-    const{page,calls}=await open(port,{queueDelay:600});await page.getByRole('button',{name:'Stop preparation',exact:true}).click();
-    await page.waitForTimeout(900);assert.equal(calls.filter(([,p])=>p==='/api/apply').length,0,'closing queued dialog never starts hidden application');await page.close();
+    const{page,calls,control}=await open(port,{holdQueue:true});await page.getByRole('button',{name:'Stop preparation',exact:true}).click();
+    const queuedResponse=page.waitForResponse('**/api/queue');control.releaseQueue();await queuedResponse;await page.waitForLoadState('networkidle');assert.equal(calls.filter(([,p])=>p==='/api/apply').length,0,'closing queued dialog never starts hidden application');await page.close();
    }
    {
     const{page,control}=await open(port,{pollFails:true});await page.getByRole('alert').filter({hasText:'Cannot check application status'}).waitFor({timeout:10000});
