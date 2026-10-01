@@ -25,6 +25,7 @@ export default function App() {
   const reload = useCallback(async () => {
     try {
       setState(await api.state());
+      setError(null);
     } catch (e) {
       setError(String(e.message));
     }
@@ -33,9 +34,16 @@ export default function App() {
   useEffect(() => { location.hash = tab; }, [tab]);
 
   if (error)
-    return <div className="h-full grid place-items-center text-bad">console API unreachable: {error}</div>;
+    return <div className="h-full grid place-items-center p-6">
+      <div className="max-w-md text-center">
+        <h1 className="font-display text-lg">Could not load your console</h1>
+        <p role="alert" className="text-bad text-sm mt-3">Check that the local CoForce server is running, then try again.</p>
+        <p className="text-dim text-xs mt-2">{error}</p>
+        <button className="btn mt-4" onClick={reload}>Try loading again</button>
+      </div>
+    </div>;
   if (!state)
-    return <div className="h-full grid place-items-center text-dim">loading…</div>;
+    return <div className="h-full grid place-items-center text-dim">Loading your console…</div>;
 
   return (
     <div className="h-full flex flex-col overflow-hidden">

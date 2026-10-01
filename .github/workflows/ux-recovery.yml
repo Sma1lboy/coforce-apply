@@ -1,0 +1,41 @@
+name: UX recovery acceptance
+on:
+  pull_request:
+    paths:
+      - '.agents/skills/tracker/web/**'
+      - 'harness/ux-recovery.mjs'
+      - '.github/workflows/ux-recovery.yml'
+permissions:
+  contents: read
+jobs:
+  ux-recovery:
+    runs-on: ubuntu-latest
+    timeout-minutes: 15
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          fetch-depth: 0
+      - uses: actions/setup-node@v4
+        with:
+          node-version: 22
+      - run: npm install --no-package-lock --prefix .agents/skills/tracker/web
+      - run: npm run build --prefix .agents/skills/tracker/web
+      - run: npm install --prefix /tmp/coforce-ux-tools --no-package-lock playwright@1.58.2
+      - run: /tmp/coforce-ux-tools/node_modules/.bin/playwright install --with-deps chromium
+      - name: Compare exact baseline with this commit using synthetic fixtures
+        env:
+          COFORCE_HEAD_SHA: ${{ github.event.pull_request.head.sha }}
+          PLAYWRIGHT_MODULE: /tmp/coforce-ux-tools/node_modules/playwright/index.mjs
+        run: |
+          set -o pipefail
+          mkdir -p harness/out/ux-recovery
+          node harness/ux-recovery.mjs 2>&1 | tee harness/out/ux-recovery/acceptance.log
+      - uses: actions/upload-artifact@v4
+        if: always()
+        with:
+          name: ux-recovery-${{ github.event.pull_request.head.sha }}
+          path: |
+            harness/out/ux-recovery/*.png
+            harness/out/ux-recovery/*.json
+            harness/out/ux-recovery/*.log
+          if-no-files-found: error
