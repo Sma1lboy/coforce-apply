@@ -34,7 +34,7 @@ function Detail({ app, globalFiles, onClose }) {
         <div className="flex items-start gap-3 px-5 py-4 border-b border-rule">
           <h3 className="font-display font-semibold text-base flex-1">{app.title}</h3>
           <span className="text-[11px] uppercase tracking-wide border border-rule2 text-muted rounded-full px-2.5 py-0.5">{app.status}</span>
-          <button className="text-dim hover:text-ink cursor-pointer" onClick={onClose}>✕</button>
+          <button className="text-dim hover:text-ink cursor-pointer" onClick={onClose} aria-label="Close application details">✕</button>
         </div>
         <div className="p-5 overflow-y-auto text-[12.5px]">
           <div className="h3 !mt-0">JD Link</div>
@@ -81,10 +81,15 @@ export default function Board({ state, onChanged }) {
   const [dragId, setDragId] = useState(null);
   const [over, setOver] = useState(null);
   const [detail, setDetail] = useState(null);
+  const [saveError, setSaveError] = useState('');
+  const [saving, setSaving] = useState(false);
   const apps = state.apps;
 
   const drop = async status => {
     setOver(null);
+    if (saving) return;
+    setSaveError('');
+    setDragId(null);
     const app = apps.find(a => a.id === dragId);
     if (!app || app.status === status) return;
     const now = new Date().toISOString();
@@ -93,12 +98,18 @@ export default function Board({ state, onChanged }) {
         ? { ...a, status, updatedAt: now, history: [...(a.history || []), { date: now, event: `status: ${a.status} → ${status} (board)` }] }
         : a
     );
-    await api.saveApps(updated.map(({ _files, ...rest }) => rest)).catch(() => {});
-    onChanged();
+    setSaving(true);
+    try {
+      await api.saveApps(updated.map(({ _files, ...rest }) => rest));
+      await onChanged();
+    } catch {
+      setSaveError(`Could not save the status for ${app.title}. The card has not moved. Try dragging it again.`);
+    } finally { setSaving(false); }
   };
 
   return (
     <div className="flex-1 min-h-0 flex gap-3.5 p-5 overflow-x-auto items-stretch">
+      {saveError && <div role="alert" className="fixed bottom-5 left-5 z-40 max-w-md bg-paper2 border border-bad rounded-lg p-4 text-xs text-bad">{saveError}</div>}
       {STATUS_COLUMNS.map(([status, label, color]) => (
         <section
           key={status}
@@ -122,7 +133,8 @@ export default function Board({ state, onChanged }) {
                   initial={{ opacity: 0, y: 6 }}
                   animate={{ opacity: 1, y: 0 }}
                   exit={{ opacity: 0 }}
-                  draggable
+                  draggable={!saving}
+                  onDragEnd={() => { setDragId(null); setOver(null); }}
                   onDragStart={() => setDragId(a.id)}
                   onClick={() => setDetail(a)}
                   className={`bg-paper3 border border-rule rounded-lg px-3 py-2.5 mb-2.5 cursor-grab hover:border-accent transition-colors ${
@@ -134,7 +146,7 @@ export default function Board({ state, onChanged }) {
                     <div className="text-xs text-muted mt-0.5">{[a.company, a.position].filter(Boolean).join(' · ')}</div>
                   )}
                   {a.needsFallback && a.status === 'pending' && (
-                    <div className="inline-block mt-1.5 text-[11px] text-accentsoft bg-accent/12 border border-accent rounded-full px-2 py-px">⚑ needs you</div>
+                    <div className="inline-block mt-1.5 text-[11px] text-accentsoft bg-accent/12 border border-accent rounded-full px-2 py-px">⚑ Needs your help</div>
                   )}
                   {/* Server-computed (`_attention`): a closing window or an
                       unanswered application is only visible if the card says

@@ -5,7 +5,7 @@ import { LEVELS, DIRS, levelOf, dirsOf, faviconFor, faviconFallback, tileHue } f
 
 const spring = { type: 'spring', stiffness: 260, damping: 24 };
 
-function PrefsWizard({ onSave }) {
+function PrefsWizard({ onSave, saving, error }) {
   const [level, setLevel] = useState('any');
   const [dirs, setDirs] = useState([]);
   const toggle = k => setDirs(d => (d.includes(k) ? d.filter(x => x !== k) : [...d, k]));
@@ -17,7 +17,7 @@ function PrefsWizard({ onSave }) {
         transition={spring}
         className="w-[560px] max-w-[calc(100vw-48px)] bg-paper2 border border-rule2 rounded-2xl p-6"
       >
-        <h3 className="font-display font-semibold text-lg">Welcome 👋 — tune your discovery</h3>
+        <h3 className="font-display font-semibold text-lg">Choose the jobs you want to see</h3>
         <div className="h3">What are you looking for?</div>
         <div className="flex gap-2">
           {LEVELS.map(([k, label], i) => (
@@ -35,7 +35,7 @@ function PrefsWizard({ onSave }) {
             </motion.button>
           ))}
         </div>
-        <div className="h3">Directions — pick any that fit</div>
+        <div className="h3">Job areas — choose any that fit</div>
         <div className="flex flex-wrap gap-2">
           {DIRS.filter(([k]) => k !== 'general').map(([k, label], i) => (
             <motion.button
@@ -52,10 +52,11 @@ function PrefsWizard({ onSave }) {
             </motion.button>
           ))}
         </div>
+        {error && <p role="alert" className="text-bad text-xs mt-4">{error}</p>}
         <div className="flex items-center justify-between mt-6 gap-4">
-          <span className="text-[11px] text-dim">Saved locally to ~/.coforce/config.json — change anytime in the filter panel</span>
-          <button className="btn" onClick={() => onSave({ level, directions: dirs.length ? [...dirs, 'general'] : [] })}>
-            Start discovering →
+          <span className="text-[11px] text-dim">Save your choices on this machine. You can change them later.</span>
+          <button className="btn" disabled={saving} onClick={() => onSave({ level, directions: dirs.length ? [...dirs, 'general'] : [] })}>
+            {saving ? 'Saving choices…' : 'Save and discover'}
           </button>
         </div>
       </motion.div>
@@ -76,6 +77,8 @@ export default function Discover({ state, onChanged, goReview }) {
   );
   useEffect(() => { sessionStorage.removeItem('coforce-wizard'); }, []);
   const [queueing, setQueueing] = useState(null);
+  const [savingPrefs, setSavingPrefs] = useState(false);
+  const [prefsError, setPrefsError] = useState('');
   // Jobs the fit filter ruled out. They never entered the pipeline (that is
   // why they are not on the board), but the user is allowed to disagree.
   const [screened, setScreened] = useState([]);
@@ -126,7 +129,11 @@ export default function Discover({ state, onChanged, goReview }) {
   };
   useEffect(() => { load(); }, []);
 
-  const persistPrefs = (lv, ds) => api.savePrefs({ level: lv, directions: [...ds] }).catch(() => {});
+  const persistPrefs = async (lv, ds) => {
+    setPrefsError('');
+    try { await api.savePrefs({ level: lv, directions: [...ds] }); }
+    catch { setPrefsError('These filters only apply to this view. Could not save your choices. Try saving filters again.'); }
+  };
 
   const jobs = data?.new || [];
   const dirCounts = useMemo(() => {
@@ -150,6 +157,10 @@ export default function Discover({ state, onChanged, goReview }) {
 
   return (
     <div className="flex-1 min-h-0 flex gap-4 p-5 max-w-[1240px] w-full mx-auto">
+      {prefsError && !wizard && <div role="alert" className="fixed bottom-5 left-5 z-40 max-w-md bg-paper2 border border-bad rounded-lg p-4 text-xs text-bad">
+        {prefsError}
+        <button className="btn-ghost ml-3" onClick={() => persistPrefs(level, dirs)}>Save filters again</button>
+      </div>}
       {/* list */}
       <div className="flex-1 min-w-0 flex flex-col gap-2.5">
         <div className="flex items-center gap-3">
@@ -309,11 +320,20 @@ export default function Discover({ state, onChanged, goReview }) {
 
       {wizard && (
         <PrefsWizard
-          onSave={p => {
-            setLevel(p.level);
-            setDirs(new Set(p.directions));
-            api.savePrefs(p).catch(() => {});
-            setWizard(false);
+          saving={savingPrefs}
+          error={prefsError}
+          onSave={async p => {
+            if (savingPrefs) return;
+            setSavingPrefs(true);
+            setPrefsError('');
+            try {
+              await api.savePrefs(p);
+              setLevel(p.level);
+              setDirs(new Set(p.directions));
+              setWizard(false);
+            } catch {
+              setPrefsError('Could not save your choices. Your selections are still here. Try Save and discover again.');
+            } finally { setSavingPrefs(false); }
           }}
         />
       )}
