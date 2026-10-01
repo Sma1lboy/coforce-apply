@@ -1,0 +1,41 @@
+name: UX application acceptance
+on:
+  pull_request:
+    paths:
+      - '.agents/skills/tracker/web/**'
+      - 'harness/ux-application.mjs'
+      - '.github/workflows/ux-application.yml'
+permissions:
+  contents: read
+jobs:
+  ux-application:
+    runs-on: ubuntu-latest
+    timeout-minutes: 15
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          fetch-depth: 0
+      - uses: actions/setup-node@v4
+        with:
+          node-version: 22
+      - run: npm install --no-package-lock --prefix .agents/skills/tracker/web
+      - run: npm run build --prefix .agents/skills/tracker/web
+      - run: npm install --prefix /tmp/coforce-ux-tools --no-package-lock playwright@1.58.2
+      - run: /tmp/coforce-ux-tools/node_modules/.bin/playwright install --with-deps chromium
+      - name: Compare exact baseline with this commit using synthetic fixtures
+        env:
+          COFORCE_HEAD_SHA: ${{ github.event.pull_request.head.sha }}
+          PLAYWRIGHT_MODULE: /tmp/coforce-ux-tools/node_modules/playwright/index.mjs
+        run: |
+          set -o pipefail
+          mkdir -p harness/out/ux-application
+          node harness/ux-application.mjs 2>&1 | tee harness/out/ux-application/acceptance.log
+      - uses: actions/upload-artifact@v4
+        if: always()
+        with:
+          name: ux-application-${{ github.event.pull_request.head.sha }}
+          path: |
+            harness/out/ux-application/*.png
+            harness/out/ux-application/*.json
+            harness/out/ux-application/*.log
+          if-no-files-found: error
