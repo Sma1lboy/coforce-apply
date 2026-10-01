@@ -26,7 +26,7 @@ async function open(port,{stateFails=false,prefsFail=false,appsFail=false,hash='
  });
  await page.goto(`http://127.0.0.1:${port}/ux-fixture.html#${hash}`);return{page,control};
 }
-async function shot(page,label,name){await page.screenshot({path:join(out,`${label}-${name}.png`)});}
+async function shot(page,label,name){await page.waitForFunction(() => [...document.querySelectorAll('[style]')].every(el => !el.style.opacity || Number(el.style.opacity) >= 0.999), null, {timeout:10000});await page.screenshot({path:join(out,`${label}-${name}.png`)});}
 async function dragCard(page){const card=page.getByText('Backend engineer',{exact:true});const target=page.locator('section').filter({has:page.getByRole('heading',{name:/Applied/})});await card.dragTo(target);}
 try{
  for(const[label,path,port]of[['before',before,4539],['after',root,4540]]){
