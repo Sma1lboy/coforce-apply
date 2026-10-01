@@ -1,0 +1,37 @@
+name: UX landing acceptance
+on:
+  pull_request:
+    paths:
+      - 'site/**'
+      - 'harness/ux-landing.mjs'
+      - '.github/workflows/ux-landing.yml'
+permissions:
+  contents: read
+jobs:
+  ux-landing:
+    runs-on: ubuntu-latest
+    timeout-minutes: 15
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          fetch-depth: 0
+      - uses: actions/setup-node@v4
+        with:
+          node-version: 22
+      - run: npm ci --prefix site
+      - run: npm run build --prefix site
+      - run: npm install --prefix /tmp/coforce-ux-tools --no-package-lock playwright@1.58.2
+      - run: /tmp/coforce-ux-tools/node_modules/.bin/playwright install --with-deps chromium
+      - name: Compare exact baseline with this commit using synthetic fixtures
+        env:
+          PLAYWRIGHT_MODULE: /tmp/coforce-ux-tools/node_modules/playwright/index.mjs
+        run: |
+          set -o pipefail
+          mkdir -p harness/out/ux-landing
+          node harness/ux-landing.mjs 2>&1 | tee harness/out/ux-landing/acceptance.log
+      - uses: actions/upload-artifact@v4
+        if: always()
+        with:
+          name: ux-landing-${{ github.event.pull_request.head.sha }}
+          path: harness/out/ux-landing
+          if-no-files-found: error
