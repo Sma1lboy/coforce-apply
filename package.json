@@ -1,7 +1,7 @@
 {
   "name": "coforce-apply",
   "version": "3.0.0",
-  "description": "CoForce Apply \u2014 skill-first job application agent: discover, tailor, apply, track. Your job hunt on autopilot.",
+  "description": "CoForce Apply \u2014 skill-first job application agent: discover, tailor, apply, track. Your job hunt. You approve.",
   "private": true,
   "repository": "https://github.com/Sma1lboy/coforce-apply.git",
   "author": {

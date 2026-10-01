@@ -172,8 +172,8 @@ export default function MapDiagram() {
                 className="mt-[var(--space-md)] text-hero leading-[0.92]"
                 style={{ letterSpacing: '-0.035em' }}
               >
-                <span className="line"><span style={{ '--i': 1 }}>Your job hunt</span></span>
-                <span className="line"><span className="stroked" style={{ '--i': 2 }}>on autopilot.</span></span>
+                <span className="line"><span style={{ '--i': 1 }}>Your job hunt.</span></span>
+                <span className="line"><span className="stroked" style={{ '--i': 2 }}>You approve.</span></span>
               </h1>
               <p
                 className="intro mt-[var(--space-md)] mb-0 max-w-[46ch] font-text text-read-lg leading-[1.5]"
@@ -438,7 +438,7 @@ export default function MapDiagram() {
             ))}
           </div>
           <p className="track__fallback m-0">
-            needsFallback — the agent gave up; a human has to take this one
+            Needs your help — open the application and check its history
           </p>
         </div>
 

@@ -1,8 +1,8 @@
 # Privacy
 
 CoForce Apply is a local tool, not a service. There is no CoForce server, no
-account, and no telemetry. Nothing in this repository transmits your data
-anywhere.
+account, and no telemetry. Your tracker and generated files are stored locally. The agent runtime and
+services you use still receive data as described below.
 
 ## Where your data lives
 
@@ -40,17 +40,19 @@ Three things, all of them at your direction:
    job boards) and job description pages. Those sites see an ordinary request.
    The explicit Tier 0 refresh calls the GitHub API with your `gh` credentials
    to read your own commits and PRs.
-3. **The applications you approve.** `/apply` fills a form in your own visible,
-   logged-in Chrome and stops before the final submit. Nothing is submitted
-   without your explicit confirmation for that specific application.
+3. **Application sites.** `/apply` fills a form in your own visible,
+   logged-in Chrome. Form entries and resume uploads can reach the site before
+   the final submit. The agent stops at that final step and submits only after
+   your explicit confirmation for that specific application.
 
 The console (http://localhost:4517) binds to localhost and serves only your
 own data home.
 
 ## Deleting your data
 
-Delete the data home. There is nowhere else to look, and nothing to request
-from anyone.
+Delete the data home to remove your local records. This does not delete
+copies already processed by Claude Code, sent to application sites, or synced
+to your private fork. Manage those copies with the relevant service.
 
 ## Changes
 

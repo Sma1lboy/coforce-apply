@@ -4,11 +4,13 @@
 
 # CoForce Apply
 
-**Your job hunt on autopilot.** CoForce Apply is a skill-first job application
+**Your job hunt. You approve.** CoForce Apply is a skill-first job application
 agent: Claude Code discovers postings, matches them against your real GitHub
 work, builds reviewable resumes, fills and submits approved applications in
-your own Chrome, and tracks everything locally. All of your data stays on your
-machine.
+your own Chrome, and tracks everything locally. You confirm every final
+submission. Your tracker is stored on your machine; Claude Code processes the
+files it reads, and application sites receive form entries and uploads. See
+[Privacy](PRIVACY.md) for the data flow.
 
 <p align="center">
   <img src="docs/assets/console-demo.gif" alt="The local console: Discover lists fresh postings, Review shows the rendered resume beside the verbatim bullets it selected, Board tracks every application, Profile holds your reviewed record" width="900">

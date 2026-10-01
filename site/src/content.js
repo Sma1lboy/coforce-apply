@@ -7,9 +7,9 @@
 
 export const product = {
   name: 'CoForce Apply',
-  tagline: 'Your job hunt on autopilot.',
+  tagline: 'Your job hunt. You approve.',
   summary:
-    'A skill-first job application agent. Claude Code finds postings, matches them against your real GitHub work, builds resumes you review, fills applications in your own Chrome, and tracks all of it on your machine.',
+    'Find jobs, build resumes from your real work, and prepare applications in Chrome. You approve each submission. Your tracker is stored locally; Claude Code processes the files you use, and application sites receive the details you enter.',
   repo: 'https://github.com/Sma1lboy/coforce-apply',
   license: 'MIT',
 };
@@ -23,9 +23,9 @@ export const install = 'git clone https://github.com/Sma1lboy/coforce-apply && c
 // one command is the README's "Try it in two minutes", 94.2% is the demo
 // render gate's measured coverage, zero/zero is PRIVACY.md verbatim.
 export const heroFacts = [
-  { figure: '1 command', note: 'from clone to a tailored PDF' },
+  { figure: '1 command', note: 'to open the project in Claude Code' },
   { figure: '94.2%', note: 'page coverage on the demo, measured' },
-  { figure: '0 · 0', note: 'accounts · telemetry' },
+  { figure: '0 · 0', note: 'CoForce accounts · CoForce telemetry' },
 ];
 
 // The operating cycle, verbatim from the README banner: discover → tailor →
@@ -57,7 +57,7 @@ export const firstRun = {
   command: '/tailor https://job-posting-url',
   promise: 'One job description in, a one-page PDF out.',
   detail:
-    'Paste a posting and point at the resume you already have. Nothing to configure first — no account, no onboarding, no profile to fill in.',
+    'Paste a posting and point at the resume you already have. No CoForce account or setup wizard. Install the requirements below first; Claude Code may ask you to sign in.',
 };
 
 // ── The diagram ──────────────────────────────────────────────────────────────
@@ -100,7 +100,7 @@ export const crossing = {
 export const gate = {
   word: 'you',
   body:
-    'Nothing crosses this line without you saying so — not with review turned off, not with headless apply turned on. An unanswerable screening question stops the run instead of guessing.',
+    'You confirm each application before it is submitted. Resume approval and background form filling do not replace this step. If a required answer is missing, the agent stops and asks for help.',
 };
 
 // ── The submission half ─────────────────────────────────────────────────────
@@ -124,9 +124,9 @@ export const ironLaws = [
       'Including a job already queued. A never-apply company stops the run and reports, at every tier, no matter what else said go.',
   },
   {
-    law: 'All state lands in your files',
+    law: 'Your tracker is stored locally',
     body:
-      'An operator’s only outputs are its status events and writes under ~/.coforce — the tracker entry, the history event, the logs. There are no side channels.',
+      'Your tracker, resumes, and logs are saved on your machine. Claude Code processes the files it reads. Application sites receive form entries and uploads before final submission; you still approve the final submit.',
   },
 ];
 
@@ -134,9 +134,9 @@ export const lane = ['pending', 'applied', 'interviewing', 'offer', 'rejected'];
 
 export const tracking = [
   {
-    heading: 'A lane, and an honest failure state',
+    heading: 'See which applications need you',
     body:
-      'pending → applied → interviewing → offer or rejected, on a board you open locally. Plus one status the polite tools leave out: needsFallback — the operator gave up and a human has to take this one. It clears when someone does. Nothing else is allowed in the lane: a posting the tool rules out for fit is written to screened.json with its reason, so rejected always means a company said no.',
+      'Follow each application from To apply to Applied, Interviewing, Offer, or Rejected. A “Needs your help” flag means the agent could not finish; open the application and check its history for the next step. Rejected means an employer said no. Jobs ruled out for fit stay in Discover, where you can reconsider them.',
   },
   {
     heading: 'Every application keeps its own folder',
